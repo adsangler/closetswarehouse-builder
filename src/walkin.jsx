@@ -303,8 +303,8 @@ function CornerToggle({ label, value, onChange, sideLabel, sideValue }) {
 
 function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, onContinue }) {
   return (
-    <main className="h-screen bg-brand-ui text-brand-black">
-      <header className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4">
+    <main className="app-shell bg-brand-ui text-brand-black">
+      <header className="app-header flex items-center justify-between border-b border-stone-200 bg-white px-4">
         <div>
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Step 1: room dimensions</p>
@@ -1505,7 +1505,7 @@ function WalkInPlanner() {
           Reach-in app
         </a>
       </header>
-      <section className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_340px]" style={{ height: 'calc(100vh - 4rem)' }}>
+      <section className="app-workspace grid gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="min-h-0 overflow-y-auto bg-white p-4">
           <div className="mb-3 flex items-center justify-end gap-2">
             {[
