@@ -4,3 +4,12 @@ dist/
 *.job
 *.pid
 .env
+vite-dev.pid
+Closets Warehouse Planner.cmd
+assets/drafts/
+assets/exports/
+shopify-exports/
+built/
+
+.vercel
+.env*

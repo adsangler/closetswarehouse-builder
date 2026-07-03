@@ -1,0 +1,13 @@
+assets/drafts/
+assets/exports/
+shopify-exports/
+built/
+references/
+dbstructure/
+airtable-html-desc-update/
+scripts/
+*.docx
+*.xlsx
+*.log
+*.job
+Closets Warehouse Planner.cmd
