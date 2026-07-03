@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+}
+
+.drawing-title {
+  fill: #1A1A1A;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.drawing-subtitle,
+.drawing-label,
+.drawing-dim,
+.drawing-bay {
+  fill: #1A1A1A;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.drawing-subtitle {
+  fill: #D95A2B;
+}
+
+.drawing-dim {
+  fill: #9A3412;
+}
+
+.drawing-bay {
+  font-size: 12px;
+}

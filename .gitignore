@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+*.job
+.env
+vite-dev.pid
+Closets Warehouse Planner.cmd
+assets/drafts/
+assets/exports/
+shopify-exports/
+built/
