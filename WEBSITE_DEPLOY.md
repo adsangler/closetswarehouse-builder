@@ -49,11 +49,30 @@ These are implemented in the `api/` folder for Vercel serverless functions.
 After deployment, create a Shopify page and embed the hosted planner URL:
 
 ```html
-<iframe
-  src="https://YOUR-DEPLOYED-PLANNER-URL/"
-  style="width:100%;min-height:900px;border:0;"
-  loading="lazy"
-></iframe>
+<div
+  style="
+    position: relative;
+    left: 50%;
+    right: 50%;
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: -50vw;
+    margin-right: -50vw;
+  "
+>
+  <iframe
+    src="https://YOUR-DEPLOYED-PLANNER-URL/"
+    title="Closets Warehouse Planner"
+    style="
+      display: block;
+      width: 100vw;
+      max-width: 100vw;
+      height: max(900px, calc(100dvh - 80px));
+      border: 0;
+    "
+    loading="eager"
+  ></iframe>
+</div>
 ```
 
 For a full-page experience, link a menu item directly to the hosted planner URL instead of embedding.

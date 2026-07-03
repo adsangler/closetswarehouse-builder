@@ -2653,8 +2653,8 @@ export default function App() {
   }
 
   return (
-    <main className="h-screen bg-brand-ui text-brand-black">
-      <header className="flex h-16 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4">
+    <main className="app-shell bg-brand-ui text-brand-black">
+      <header className="app-header flex items-center justify-between gap-3 border-b border-stone-200 bg-white px-4">
         <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">Closets Warehouse Renderer</h1>
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -2676,7 +2676,7 @@ export default function App() {
         </div>
       </header>
       {appMode === 'planner' ? (
-        <section className="grid grid-cols-[minmax(260px,330px)_minmax(0,1fr)_minmax(280px,340px)] gap-0" style={{ height: 'calc(100vh - 4rem)' }}>
+        <section className="app-workspace grid grid-cols-1 gap-0 xl:grid-cols-[minmax(260px,330px)_minmax(0,1fr)_minmax(280px,340px)]">
           <aside className="min-h-0 overflow-y-auto border-r border-stone-200 bg-stone-100 p-3">
             <div className="space-y-3">
               <ReachInRoomSetup {...reachInSetupProps} planDetails={plannerPlanDetails} />
@@ -2796,8 +2796,7 @@ export default function App() {
         </section>
       ) : (
         <section
-          className={photoMode ? '' : 'grid grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]'}
-          style={{ height: 'calc(100vh - 4rem)' }}
+          className={`app-workspace ${photoMode ? '' : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]'}`}
         >
           <section className="h-full min-h-0 bg-white">
             <Canvas

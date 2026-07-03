@@ -10,11 +10,46 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
   margin: 0;
 }
 
 body {
   font-family: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+  overflow: hidden;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-header {
+  min-height: 4rem;
+  flex-shrink: 0;
+}
+
+.app-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@media (max-width: 1023px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell {
+    overflow: auto;
+  }
+
+  .app-workspace {
+    min-height: calc(100dvh - 4rem);
+  }
 }
 
 .drawing-title {
