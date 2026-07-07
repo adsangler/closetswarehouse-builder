@@ -6,6 +6,7 @@ import './styles.css';
 
 const panelThickness = 0.75;
 const closetDepth = 14;
+const storefrontBaseUrl = 'https://www.closetswarehouse.com';
 const cornerReachGap = 12;
 const cornerStopDistance = closetDepth + cornerReachGap;
 const closetHeights = [84, 96];
@@ -94,6 +95,11 @@ function getShopifyHandle(fields, sku) {
   return String(fields.shopify_handle || sku || '')
     .trim()
     .toLowerCase();
+}
+
+function getProductUrl(handle) {
+  const shopifyHandle = String(handle || '').trim().toLowerCase();
+  return shopifyHandle ? `${storefrontBaseUrl}/products/${shopifyHandle}` : '';
 }
 
 function normalizeTowerCode(code) {
@@ -201,7 +207,7 @@ function kitRecordToProduct(record) {
     assembledWidth,
     requiredWidth: Number(fields['Width Requirement']) || assembledWidth + 2,
     price: normalizePrice(fields.retail_price),
-    productUrl: shopifyHandle ? `/products/${shopifyHandle}` : '',
+    productUrl: getProductUrl(shopifyHandle),
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: String(fields.Status || 'active').toLowerCase(),
     towerSpecs,

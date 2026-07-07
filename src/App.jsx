@@ -3,6 +3,13 @@ import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/drei';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
 
+const storefrontBaseUrl = 'https://www.closetswarehouse.com';
+
+function getProductUrl(handle) {
+  const shopifyHandle = String(handle || '').trim().toLowerCase();
+  return shopifyHandle ? `${storefrontBaseUrl}/products/${shopifyHandle}` : '';
+}
+
 const fallbackKit = {
   handle: 'H3D-S8-51-96-14-W',
   title: 'K12-K14 Hang & Drawers + 8-Shelf',
@@ -11,7 +18,7 @@ const fallbackKit = {
   assembledWidth: 50.25,
   requiredWidth: 52.25,
   price: 0,
-  productUrl: '/products/h3d-s8-51-96-14-w',
+  productUrl: getProductUrl('h3d-s8-51-96-14-w'),
   towerSpecs: [
     { code: 'H3D', width: 24, label: 'K12 H3D' },
     { code: 'S8', width: 24, label: 'K14 S8' },
@@ -276,7 +283,7 @@ function kitRecordToDrawing(record) {
     assembledWidth,
     requiredWidth: Number(fields['Width Requirement']) || getRequiredWidth(assembledWidth),
     price: normalizePrice(fields.retail_price),
-    productUrl: shopifyHandle ? `/products/${shopifyHandle}` : '',
+    productUrl: getProductUrl(shopifyHandle),
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: String(fields.Status || 'active').toLowerCase(),
     towerSpecs,
@@ -302,7 +309,7 @@ function kitHandleToDrawing(handle) {
     assembledWidth,
     requiredWidth: getRequiredWidth(assembledWidth),
     price: 0,
-    productUrl: `/products/${sku.toLowerCase()}`,
+    productUrl: getProductUrl(sku),
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: 'active',
     towerSpecs,
