@@ -867,12 +867,17 @@ function ModulePalette({ onAdd, selectedWall, compact = false }) {
   );
 }
 
-function WallRunEditor({ wall, wallHeight, modules, selected, onSelect, onDropModule, onRemove, onMove, onWidthChange }) {
+function WallRunEditor({ wall, wallHeight, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
+  const [showPicker, setShowPicker] = useState(false);
   const moveLabels =
     wall === 'back'
       ? { previous: '<', next: '>', previousTitle: 'Move left', nextTitle: 'Move right' }
       : { previous: 'Up', next: 'Dn', previousTitle: 'Move up', nextTitle: 'Move down' };
   const runLength = getRunLength(modules);
+  const addConfiguration = (code) => {
+    onAdd(code, wall);
+    setShowPicker(false);
+  };
 
   return (
     <section
@@ -884,20 +889,59 @@ function WallRunEditor({ wall, wallHeight, modules, selected, onSelect, onDropMo
           onDropModule(code, wall);
         }
       }}
-      className={`rounded border p-3 ${selected ? 'border-brand-orange bg-orange-50' : 'border-stone-200 bg-white'}`}
+      className="rounded border border-stone-200 bg-white p-3"
     >
-      <button type="button" onClick={() => onSelect(wall)} className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 text-left">
+      <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2">
         <span>
           <span className="block text-base font-bold text-stone-950">{wallLabels[wall]}</span>
-          <span className="text-xs font-semibold text-stone-500">{selected ? 'Selected wall' : 'Tap to select'}</span>
+          <span className="text-xs font-semibold text-stone-500">{modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : 'No towers yet'}</span>
         </span>
-        <span className="rounded bg-white px-2 py-1 text-xs font-bold text-stone-500">{formatInches(runLength)}</span>
-      </button>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-stone-50 px-2 py-1 text-xs font-bold text-stone-500">{formatInches(runLength)}</span>
+          <button
+            type="button"
+            onClick={() => setShowPicker((current) => !current)}
+            aria-expanded={showPicker}
+            title={`Add configuration to ${wallLabels[wall]}`}
+            className="grid h-9 w-9 place-items-center rounded bg-brand-orange text-xl font-bold leading-none text-white transition hover:bg-orange-700"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {showPicker && (
+        <div className="mb-3 grid gap-2 rounded border border-orange-200 bg-orange-50 p-2 sm:grid-cols-2 xl:grid-cols-3">
+          {moduleConfigs.map((config) => (
+            <button
+              key={config.code}
+              type="button"
+              onClick={() => addConfiguration(config.code)}
+              className="rounded border border-stone-200 bg-white px-3 py-2 text-left transition hover:border-brand-orange hover:bg-white"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  <span className="block text-sm font-bold text-stone-950">{config.label}</span>
+                  <span className="text-xs font-semibold text-stone-500">{config.defaultWidth}" default bay</span>
+                </span>
+                <span className="grid h-7 min-w-7 place-items-center rounded bg-orange-50 px-2 text-sm font-bold text-brand-orange">+</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="min-h-[128px] rounded border border-dashed border-stone-300 bg-stone-50 p-2">
         {modules.length === 0 ? (
-          <div className="grid h-[108px] place-items-center text-center text-sm font-semibold text-stone-400">
-            No towers on this wall
+          <div className="grid h-[108px] place-items-center text-center">
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              className="inline-flex items-center gap-2 rounded border border-stone-300 bg-white px-3 py-2 text-sm font-bold text-stone-700 transition hover:border-brand-orange hover:text-brand-orange"
+            >
+              <span className="grid h-6 w-6 place-items-center rounded bg-orange-50 text-base leading-none text-brand-orange">+</span>
+              Add configuration
+            </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -2079,7 +2123,6 @@ function WalkInPlanner() {
   };
   const [room, setRoom] = useState({ ...defaultRoom, ...(requestedPlan?.room || {}) });
   const [corners, setCorners] = useState(requestedPlan?.corners || { backLeft: 'back', backRight: 'back' });
-  const [selectedWall, setSelectedWall] = useState('back');
   const [viewMode, setViewMode] = useState('plan');
   const [roomCaptured, setRoomCaptured] = useState(Boolean(requestedPlan));
   const [runs, setRuns] = useState(requestedPlan?.runs || {
@@ -2166,7 +2209,7 @@ function WalkInPlanner() {
     };
   }, []);
 
-  const addModule = (code, wall = selectedWall) => {
+  const addModule = (code, wall = 'back') => {
     setRuns((current) => ({
       ...current,
       [wall]: [...current[wall], createModule(code)],
@@ -2257,34 +2300,26 @@ function WalkInPlanner() {
           ) : (
             <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
           )}
-          <div className="mt-4 grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
-            <div className="grid content-start gap-3">
-              <WallSelector selectedWall={selectedWall} onSelect={setSelectedWall} />
-              <ModulePalette selectedWall={selectedWall} onAdd={(code) => addModule(code)} />
+          <section className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-base font-bold text-stone-950">Wall Configurations</h2>
             </div>
-            <section className="rounded border border-stone-200 bg-stone-50 p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-base font-bold text-stone-950">Wall Locations</h2>
-                <span className="text-xs font-bold text-stone-500">Selected: {wallLabels[selectedWall]}</span>
-              </div>
-              <div className="grid gap-3">
-                {['back', 'left', 'right'].map((wall) => (
-                  <WallRunEditor
-                    key={wall}
-                    wall={wall}
-                    wallHeight={getWallHeight(room, wall)}
-                    modules={runs[wall]}
-                    selected={selectedWall === wall}
-                    onSelect={setSelectedWall}
-                    onDropModule={addModule}
-                    onRemove={removeModule}
-                    onMove={moveModule}
-                    onWidthChange={updateWidth}
-                  />
-                ))}
-              </div>
-            </section>
-          </div>
+            <div className="grid gap-3">
+              {['back', 'left', 'right'].map((wall) => (
+                <WallRunEditor
+                  key={wall}
+                  wall={wall}
+                  wallHeight={getWallHeight(room, wall)}
+                  modules={runs[wall]}
+                  onAdd={addModule}
+                  onDropModule={addModule}
+                  onRemove={removeModule}
+                  onMove={moveModule}
+                  onWidthChange={updateWidth}
+                />
+              ))}
+            </div>
+          </section>
         </section>
         <aside className="min-h-0 overflow-y-auto border-l border-stone-200 bg-stone-50 p-3">
           <div className="space-y-3">
