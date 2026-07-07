@@ -989,9 +989,9 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
                       style={{ width: `${visualWidth}px` }}
                       title={module.label}
                     >
-                      <div>
-                        <div className="truncate text-sm font-bold text-stone-900">{module.label}</div>
-                        <div className="text-xs font-semibold text-stone-500">{module.code} / {formatInches(module.width)}</div>
+                      <div className="grid justify-items-center gap-1">
+                        <TowerConfigIcon code={module.code} />
+                        <div className="text-xs font-bold text-stone-600">{formatInches(module.width)}</div>
                       </div>
                       <label className="mt-3 flex items-center gap-1">
                         <select
@@ -1269,7 +1269,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
           <g key={`back-segment-${module.id}`}>
             <rect x={toX(start)} y={toY(1.6)} width={length * scale} height={(closetDepth - 3.2) * scale} className={index % 2 ? 'fill-orange-200/75 stroke-orange-800' : 'fill-orange-100/75 stroke-orange-800'} />
             <text x={toX(center)} y={toY(closetDepth / 2) + 3} textAnchor="middle" className="fill-stone-900 text-[10px] font-bold">
-              {module.code} {formatInches(module.width)}
+              {formatInches(module.width)}
             </text>
           </g>
         ))}
@@ -1277,7 +1277,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
           <g key={`left-segment-${module.id}`}>
             <rect x={toX(1.6)} y={toY(start)} width={(closetDepth - 3.2) * scale} height={length * scale} className={index % 2 ? 'fill-stone-200 stroke-stone-700' : 'fill-white stroke-stone-700'} />
             <text x={toX(closetDepth / 2)} y={toY(center) + 3} textAnchor="middle" className="fill-stone-900 text-[9px] font-bold" transform={`rotate(-90 ${toX(closetDepth / 2)} ${toY(center)})`}>
-              {module.code} {formatInches(module.width)}
+              {formatInches(module.width)}
             </text>
           </g>
         ))}
@@ -1285,7 +1285,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
           <g key={`right-segment-${module.id}`}>
             <rect x={toX(backWidth - closetDepth + 1.6)} y={toY(start)} width={(closetDepth - 3.2) * scale} height={length * scale} className={index % 2 ? 'fill-stone-200 stroke-stone-700' : 'fill-white stroke-stone-700'} />
             <text x={toX(backWidth - closetDepth / 2)} y={toY(center) + 3} textAnchor="middle" className="fill-stone-900 text-[9px] font-bold" transform={`rotate(90 ${toX(backWidth - closetDepth / 2)} ${toY(center)})`}>
-              {module.code} {formatInches(module.width)}
+              {formatInches(module.width)}
             </text>
           </g>
         ))}
@@ -1870,7 +1870,7 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
             actualHeight: getWallHeight(room, 'left'),
             module,
             wall: 'left',
-            label: `${getWalkInLayoutCode(module, getWallHeight(room, 'left'))} ${formatInches(module.width)}`,
+            label: `${module.label} ${formatInches(module.width)}`,
             color: 'stone',
           }),
         )}
@@ -1885,7 +1885,7 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
             actualHeight: getWallHeight(room, 'right'),
             module,
             wall: 'right',
-            label: `${getWalkInLayoutCode(module, getWallHeight(room, 'right'))} ${formatInches(module.width)}`,
+            label: `${module.label} ${formatInches(module.width)}`,
             color: 'stone',
           }),
         )}
@@ -1900,7 +1900,7 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
             actualHeight: getWallHeight(room, 'back'),
             module,
             wall: 'back',
-            label: `${getWalkInLayoutCode(module, getWallHeight(room, 'back'))} ${formatInches(module.width)}`,
+            label: `${module.label} ${formatInches(module.width)}`,
           }),
         )}
       </svg>
