@@ -812,68 +812,15 @@ function ClosetTypeStart({ onWalkIn }) {
   );
 }
 
-function WallSelector({ selectedWall, onSelect }) {
-  return (
-    <section className="rounded border border-stone-200 bg-white p-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-stone-950">Wall</h2>
-        <span className="rounded bg-orange-50 px-2 py-1 text-xs font-bold text-brand-orange">{wallLabels[selectedWall]}</span>
-      </div>
-      <div className="grid grid-cols-3 rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
-        {['back', 'left', 'right'].map((wall) => (
-          <button
-            key={wall}
-            type="button"
-            onClick={() => onSelect(wall)}
-            aria-pressed={selectedWall === wall}
-            className={`rounded px-2 py-2 ${selectedWall === wall ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}
-          >
-            {wallLabels[wall].replace(' wall', '')}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ModulePalette({ onAdd, selectedWall, compact = false }) {
-  return (
-    <section className="rounded border border-stone-200 bg-white p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-stone-950">Add Configuration</h2>
-        <span className="rounded bg-stone-100 px-2 py-1 text-xs font-bold text-stone-600">{wallLabels[selectedWall]}</span>
-      </div>
-      <div className={`mt-3 grid gap-2 ${compact ? 'sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7' : ''}`}>
-        {moduleConfigs.map((config) => (
-          <button
-            key={config.code}
-            type="button"
-            draggable
-            onDragStart={(event) => event.dataTransfer.setData('text/plain', config.code)}
-            onClick={() => onAdd(config.code)}
-            className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-left transition hover:border-brand-orange hover:bg-orange-50"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-bold text-stone-950">{config.label}</div>
-                <div className="text-xs font-semibold text-stone-500">{config.defaultWidth}" default bay</div>
-              </div>
-              <span className="grid h-7 min-w-7 place-items-center rounded bg-white px-2 text-sm font-bold text-brand-orange">+</span>
-            </div>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function WallRunEditor({ wall, wallHeight, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
+function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
   const [showPicker, setShowPicker] = useState(false);
   const moveLabels =
     wall === 'back'
       ? { previous: '<', next: '>', previousTitle: 'Move left', nextTitle: 'Move right' }
       : { previous: 'Up', next: 'Dn', previousTitle: 'Move up', nextTitle: 'Move down' };
   const runLength = getRunLength(modules);
+  const availableLength = Math.max(0, numberValue(usableLength));
+  const usageText = `${formatInches(runLength)} of ${formatInches(availableLength)}`;
   const addConfiguration = (code) => {
     onAdd(code, wall);
     setShowPicker(false);
@@ -889,15 +836,17 @@ function WallRunEditor({ wall, wallHeight, modules, onAdd, onDropModule, onRemov
           onDropModule(code, wall);
         }
       }}
-      className="rounded border border-stone-200 bg-white p-3"
+      className="min-w-0 rounded border border-stone-200 bg-white p-3"
     >
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2">
         <span>
           <span className="block text-base font-bold text-stone-950">{wallLabels[wall]}</span>
-          <span className="text-xs font-semibold text-stone-500">{modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : 'No towers yet'}</span>
+          <span className="text-xs font-semibold text-stone-500">
+            {modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : '0 towers'} · {usageText}
+          </span>
         </span>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-stone-50 px-2 py-1 text-xs font-bold text-stone-500">{formatInches(runLength)}</span>
+          <span className="rounded bg-stone-50 px-2 py-1 text-xs font-bold text-stone-500">Used {formatInches(runLength)}</span>
           <button
             type="button"
             onClick={() => setShowPicker((current) => !current)}
@@ -931,7 +880,7 @@ function WallRunEditor({ wall, wallHeight, modules, onAdd, onDropModule, onRemov
         </div>
       )}
 
-      <div className="min-h-[128px] rounded border border-dashed border-stone-300 bg-stone-50 p-2">
+      <div className="min-h-[128px] min-w-0 rounded border border-dashed border-stone-300 bg-stone-50 p-2 pr-4 sm:pr-2">
         {modules.length === 0 ? (
           <div className="grid h-[108px] place-items-center text-center">
             <button
@@ -944,7 +893,7 @@ function WallRunEditor({ wall, wallHeight, modules, onAdd, onDropModule, onRemov
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="min-w-0 overflow-x-auto pr-2">
             <div className="relative mb-2 flex items-center pt-5">
               <div className="absolute left-0 top-0 text-xs font-bold uppercase text-stone-500">Move</div>
               {modules.map((module, index) => {
@@ -1024,10 +973,14 @@ function WallRunEditor({ wall, wallHeight, modules, onAdd, onDropModule, onRemov
         )}
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+      <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-4">
         <div className="rounded bg-white px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Run length</div>
+          <div className="font-semibold text-stone-500">Space used</div>
           <div className="text-sm font-bold text-stone-950">{modules.length ? formatInches(runLength) : '-'}</div>
+        </div>
+        <div className="rounded bg-white px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Available</div>
+          <div className="text-sm font-bold text-stone-950">{formatInches(availableLength)}</div>
         </div>
         <div className="rounded bg-white px-2 py-1.5">
           <div className="font-semibold text-stone-500">Towers</div>
@@ -2265,8 +2218,8 @@ function WalkInPlanner() {
   }
 
   return (
-    <main className="h-screen bg-brand-ui text-brand-black">
-      <header className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4">
+    <main className="min-h-screen bg-brand-ui text-brand-black lg:h-screen">
+      <header className="flex min-h-16 items-center justify-between gap-3 border-b border-stone-200 bg-white px-3 py-2 sm:px-4">
         <div>
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Left, back, and right wall layout</p>
@@ -2275,8 +2228,8 @@ function WalkInPlanner() {
           Reach-in app
         </a>
       </header>
-      <section className="app-workspace grid gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="min-h-0 overflow-y-auto bg-white p-4">
+      <section className="app-workspace grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="min-h-0 min-w-0 overflow-y-auto bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:pr-4">
           <div className="mb-3 flex items-center justify-end gap-2">
             {[
               ['plan', 'Plan view'],
@@ -2300,7 +2253,7 @@ function WalkInPlanner() {
           ) : (
             <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
           )}
-          <section className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+          <section className="mt-4 min-w-0 rounded border border-stone-200 bg-stone-50 p-3 pr-4 sm:p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-base font-bold text-stone-950">Wall Configurations</h2>
             </div>
@@ -2310,6 +2263,7 @@ function WalkInPlanner() {
                   key={wall}
                   wall={wall}
                   wallHeight={getWallHeight(room, wall)}
+                  usableLength={evaluation.usable[wall]}
                   modules={runs[wall]}
                   onAdd={addModule}
                   onDropModule={addModule}
@@ -2321,7 +2275,7 @@ function WalkInPlanner() {
             </div>
           </section>
         </section>
-        <aside className="min-h-0 overflow-y-auto border-l border-stone-200 bg-stone-50 p-3">
+        <aside className="min-h-0 min-w-0 overflow-y-auto border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:border-l lg:border-t-0 lg:pr-3">
           <div className="space-y-3">
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <ValidationPanel evaluation={evaluation} />
