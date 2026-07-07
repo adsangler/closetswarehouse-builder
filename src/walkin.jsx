@@ -868,6 +868,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
   const availableLength = Math.max(0, numberValue(usableLength));
   const graySpaceLength = Math.max(0, numberValue(rawLength) - availableLength);
   const usageText = `${formatInches(runLength)} of ${formatInches(availableLength)} closet space`;
+  const exceedsLength = runLength > availableLength + 0.01;
   const addConfiguration = (code) => {
     onAdd(code, wall);
     setShowPicker(false);
@@ -883,18 +884,16 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
           onDropModule(code, wall);
         }
       }}
-      className="min-w-0 rounded border border-stone-200 bg-white p-3"
+      className={`min-w-0 rounded border bg-white p-3 ${exceedsLength ? 'border-red-300' : 'border-stone-200'}`}
     >
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2">
         <span>
           <span className="block text-base font-bold text-stone-950">{wallLabels[wall]}</span>
-          <span className="text-xs font-semibold text-stone-500">
+          <span className={`text-xs font-semibold ${exceedsLength ? 'text-red-700' : 'text-stone-500'}`}>
             {modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : '0 towers'} / {usageText}
           </span>
-          {graySpaceLength > 0 && <span className="mt-0.5 block text-xs font-bold text-stone-400">excludes {formatInches(graySpaceLength)} gray corner space</span>}
         </span>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-stone-50 px-2 py-1 text-xs font-bold text-stone-500">Used {formatInches(runLength)}</span>
           <button
             type="button"
             onClick={() => setShowPicker((current) => !current)}
@@ -906,6 +905,11 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
           </button>
         </div>
       </div>
+      {exceedsLength && (
+        <div className="mb-3 rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+          This wall exceeds the allowable closet space by {formatInches(runLength - availableLength)}.
+        </div>
+      )}
 
       {showPicker && (
         <div className="mb-3 grid grid-cols-4 gap-2 rounded border border-orange-200 bg-orange-50 p-2 sm:grid-cols-7">
@@ -1022,7 +1026,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
       <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-4">
         <div className="rounded bg-white px-2 py-1.5">
           <div className="font-semibold text-stone-500">Space used</div>
-          <div className="text-sm font-bold text-stone-950">{modules.length ? formatInches(runLength) : '-'}</div>
+          <div className={`text-sm font-bold ${exceedsLength ? 'text-red-700' : 'text-stone-950'}`}>{modules.length ? formatInches(runLength) : '-'}</div>
         </div>
         <div className="rounded bg-white px-2 py-1.5">
           <div className="font-semibold text-stone-500">Closet space</div>
