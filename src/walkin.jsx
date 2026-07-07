@@ -812,6 +812,52 @@ function ClosetTypeStart({ onWalkIn }) {
   );
 }
 
+function TowerConfigIcon({ code }) {
+  const shelves = {
+    LH: [64],
+    DH: [38, 72],
+    HS: [42, 58, 74],
+    S3D: [24, 38, 52],
+    H3D: [28],
+    S2D: [24, 38, 52],
+    SHELF: [22, 34, 46, 58, 70, 82],
+  }[code] || [34, 58, 82];
+  const drawers = {
+    S3D: [64, 76, 88],
+    H3D: [58, 72, 86],
+    S2D: [70, 84],
+  }[code] || [];
+  const rods = {
+    LH: [26],
+    DH: [26, 60],
+    HS: [28],
+    H3D: [30],
+  }[code] || [];
+
+  return (
+    <svg viewBox="0 0 72 108" aria-hidden="true" className="h-16 w-12 text-stone-800">
+      <rect x="10" y="8" width="52" height="92" rx="2" className="fill-white stroke-stone-700" strokeWidth="3" />
+      <line x1="18" y1="8" x2="18" y2="100" className="stroke-stone-200" strokeWidth="2" />
+      <line x1="54" y1="8" x2="54" y2="100" className="stroke-stone-200" strokeWidth="2" />
+      {shelves.map((y) => (
+        <line key={`shelf-${code}-${y}`} x1="13" y1={y} x2="59" y2={y} className="stroke-stone-500" strokeWidth="2" />
+      ))}
+      {rods.map((y) => (
+        <g key={`rod-${code}-${y}`}>
+          <line x1="22" y1={y} x2="50" y2={y} className="stroke-brand-orange" strokeWidth="4" strokeLinecap="round" />
+          <path d={`M25 ${y + 4}c2 7 8 11 11 11s9-4 11-11`} fill="none" className="stroke-stone-500" strokeWidth="2" strokeLinecap="round" />
+        </g>
+      ))}
+      {drawers.map((y) => (
+        <g key={`drawer-${code}-${y}`}>
+          <rect x="17" y={y - 7} width="38" height="12" rx="1.5" className="fill-orange-50 stroke-orange-700" strokeWidth="2" />
+          <line x1="30" y1={y - 1} x2="42" y2={y - 1} className="stroke-orange-700" strokeWidth="2" strokeLinecap="round" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
   const [showPicker, setShowPicker] = useState(false);
   const moveLabels =
@@ -842,7 +888,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropM
         <span>
           <span className="block text-base font-bold text-stone-950">{wallLabels[wall]}</span>
           <span className="text-xs font-semibold text-stone-500">
-            {modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : '0 towers'} · {usageText}
+            {modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : '0 towers'} / {usageText}
           </span>
         </span>
         <div className="flex items-center gap-2">
@@ -860,21 +906,19 @@ function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropM
       </div>
 
       {showPicker && (
-        <div className="mb-3 grid gap-2 rounded border border-orange-200 bg-orange-50 p-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mb-3 grid grid-cols-4 gap-2 rounded border border-orange-200 bg-orange-50 p-2 sm:grid-cols-7">
           {moduleConfigs.map((config) => (
             <button
               key={config.code}
               type="button"
               onClick={() => addConfiguration(config.code)}
-              className="rounded border border-stone-200 bg-white px-3 py-2 text-left transition hover:border-brand-orange hover:bg-white"
+              aria-label={`Add ${config.label} to ${wallLabels[wall]}`}
+              title={`${config.label} - ${config.defaultWidth}" default bay`}
+              className="relative grid min-h-[88px] place-items-center rounded border border-stone-200 bg-white px-2 py-2 transition hover:border-brand-orange hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span>
-                  <span className="block text-sm font-bold text-stone-950">{config.label}</span>
-                  <span className="text-xs font-semibold text-stone-500">{config.defaultWidth}" default bay</span>
-                </span>
-                <span className="grid h-7 min-w-7 place-items-center rounded bg-orange-50 px-2 text-sm font-bold text-brand-orange">+</span>
-              </div>
+              <TowerConfigIcon code={config.code} />
+              <span className="sr-only">{config.label}</span>
+              <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded bg-orange-50 text-xs font-bold leading-none text-brand-orange">+</span>
             </button>
           ))}
         </div>
