@@ -858,7 +858,7 @@ function TowerConfigIcon({ code }) {
   );
 }
 
-function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
+function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
   const [showPicker, setShowPicker] = useState(false);
   const moveLabels =
     wall === 'back'
@@ -866,7 +866,8 @@ function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropM
       : { previous: 'Up', next: 'Dn', previousTitle: 'Move up', nextTitle: 'Move down' };
   const runLength = getRunLength(modules);
   const availableLength = Math.max(0, numberValue(usableLength));
-  const usageText = `${formatInches(runLength)} of ${formatInches(availableLength)}`;
+  const graySpaceLength = Math.max(0, numberValue(rawLength) - availableLength);
+  const usageText = `${formatInches(runLength)} of ${formatInches(availableLength)} closet space`;
   const addConfiguration = (code) => {
     onAdd(code, wall);
     setShowPicker(false);
@@ -890,6 +891,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropM
           <span className="text-xs font-semibold text-stone-500">
             {modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : '0 towers'} / {usageText}
           </span>
+          {graySpaceLength > 0 && <span className="mt-0.5 block text-xs font-bold text-stone-400">excludes {formatInches(graySpaceLength)} gray corner space</span>}
         </span>
         <div className="flex items-center gap-2">
           <span className="rounded bg-stone-50 px-2 py-1 text-xs font-bold text-stone-500">Used {formatInches(runLength)}</span>
@@ -1023,7 +1025,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropM
           <div className="text-sm font-bold text-stone-950">{modules.length ? formatInches(runLength) : '-'}</div>
         </div>
         <div className="rounded bg-white px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Available</div>
+          <div className="font-semibold text-stone-500">Closet space</div>
           <div className="text-sm font-bold text-stone-950">{formatInches(availableLength)}</div>
         </div>
         <div className="rounded bg-white px-2 py-1.5">
@@ -1031,8 +1033,8 @@ function WallRunEditor({ wall, wallHeight, usableLength, modules, onAdd, onDropM
           <div className="text-sm font-bold text-stone-950">{modules.length || '-'}</div>
         </div>
         <div className="rounded bg-white px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Height</div>
-          <div className="text-sm font-bold text-stone-950">{formatInches(wallHeight)}</div>
+          <div className="font-semibold text-stone-500">{graySpaceLength > 0 ? 'Gray space' : 'Height'}</div>
+          <div className="text-sm font-bold text-stone-950">{graySpaceLength > 0 ? formatInches(graySpaceLength) : formatInches(wallHeight)}</div>
         </div>
       </div>
     </section>
@@ -2308,6 +2310,7 @@ function WalkInPlanner() {
                   wall={wall}
                   wallHeight={getWallHeight(room, wall)}
                   usableLength={evaluation.usable[wall]}
+                  rawLength={wall === 'back' ? room.backWidth : wall === 'left' ? room.leftDepth : room.rightDepth}
                   modules={runs[wall]}
                   onAdd={addModule}
                   onDropModule={addModule}
