@@ -139,20 +139,12 @@ function getPlannerCode(configCode, height) {
 }
 
 function getWidthOptions(configCode) {
-  if (configCode === 'SHELF') {
-    return [18, 24, 30];
-  }
-
-  if (['LH', 'DH', 'HS'].includes(configCode)) {
-    return [24, 30];
-  }
-
-  return [24];
+  return [18, 24, 30];
 }
 
 function createPlannerModule(configCode, height, width = null) {
   const options = getWidthOptions(configCode);
-  const nextWidth = width && options.includes(Number(width)) ? Number(width) : options[0];
+  const nextWidth = width && options.includes(Number(width)) ? Number(width) : 24;
   const code = getPlannerCode(configCode, height);
 
   return {
@@ -339,6 +331,35 @@ function getRequestedMode() {
   }
 
   return new URLSearchParams(window.location.search).get('mode') === 'renderer' ? 'renderer' : 'planner';
+}
+
+function getRequestedReachInPlan() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const encodedPlan = new URLSearchParams(window.location.search).get('plan');
+
+  if (!encodedPlan) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(atob(encodedPlan));
+  } catch {
+    return null;
+  }
+}
+
+function buildReachInPlanUrl(planDetails, modules) {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('kit');
+  url.searchParams.set('plan', btoa(JSON.stringify({ planDetails, modules })));
+  return url.toString();
 }
 
 function createDrawing(baseDrawing) {
@@ -1713,6 +1734,10 @@ function buildMaterialSummary(modules) {
   return [...counts.entries()].filter(([, quantity]) => quantity > 0).map(([label, quantity]) => ({ label, quantity }));
 }
 
+function isDrawerTower(module) {
+  return ['S3D', 'H3D', 'S2D'].includes(module.code);
+}
+
 function SystemMetrics({ planDetails, moduleCount, layout = 'horizontal' }) {
   const metricClass = layout === 'rail' ? 'grid grid-cols-2 gap-2 text-xs' : 'grid grid-cols-4 gap-1.5 text-xs';
 
@@ -1737,6 +1762,10 @@ function SystemMetrics({ planDetails, moduleCount, layout = 'horizontal' }) {
       <div className="rounded bg-stone-50 px-2 py-1.5">
         <div className="font-semibold text-stone-500">Room depth</div>
         <div className="text-sm font-bold text-stone-950">{formatInches(planDetails.roomDepth || depth)}</div>
+      </div>
+      <div className="rounded bg-stone-50 px-2 py-1.5">
+        <div className="font-semibold text-stone-500">Ceiling</div>
+        <div className={`text-sm font-bold ${planDetails.ceilingClear ? 'text-emerald-700' : 'text-red-700'}`}>{formatInches(planDetails.ceilingHeight || 0)}</div>
       </div>
       <div className="rounded bg-stone-50 px-2 py-1.5">
         <div className="font-semibold text-stone-500">Clear depth</div>
@@ -1836,8 +1865,9 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange }
   );
 }
 
-function MatchPanel({ evaluation, modules, onContinue, isCatalogReady }) {
+function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogReady }) {
   const hasModules = modules.length > 0;
+  const drawerWarnings = planDetails?.drawerWarnings || [];
 
   if (!hasModules) {
     return (
@@ -1880,6 +1910,15 @@ function MatchPanel({ evaluation, modules, onContinue, isCatalogReady }) {
             </a>
           )}
         </div>
+        {drawerWarnings.length > 0 && (
+          <div className="mt-3 grid gap-2">
+            {drawerWarnings.map((warning) => (
+              <div key={warning} className="rounded bg-amber-100 px-3 py-2 text-sm font-bold text-amber-800">
+                {warning}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     );
   }
@@ -1891,9 +1930,18 @@ function MatchPanel({ evaluation, modules, onContinue, isCatalogReady }) {
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-lg font-bold text-stone-950">{money(evaluation.estimatedPrice)} estimated</span>
         <button type="button" onClick={onContinue} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">
-          Review order details
+          Verify estimate
         </button>
       </div>
+      {drawerWarnings.length > 0 && (
+        <div className="mt-3 grid gap-2">
+          {drawerWarnings.map((warning) => (
+            <div key={warning} className="rounded bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+              {warning}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1917,6 +1965,8 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
           ...planDetails,
           customer,
           materials,
+          planType: 'reach-in',
+          planUrl: buildReachInPlanUrl(planDetails, modules),
           modules: modules.map((module, index) => ({
             index,
             code: module.code,
@@ -1925,7 +1975,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
           })),
           estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
           signature: evaluation.signature,
-          internalType: 'quote',
+          internalType: 'reach-in estimate verification',
         }),
       });
       const payload = await response.json();
@@ -2018,7 +2068,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
             <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
           </div>
           <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-            Submit my order for verification
+            Verify estimate
           </button>
           {submitStatus.message && (
             <p className={`mt-2 rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -2051,6 +2101,8 @@ function ReachInRoomSetup({
   title = 'Setup',
   plannerHeight,
   onHeightChange,
+  ceilingHeight,
+  onCeilingHeightChange,
   wallWidth,
   onWallWidthChange,
   reachInDepth,
@@ -2071,12 +2123,32 @@ function ReachInRoomSetup({
       <h2 className="text-sm font-bold text-stone-950">{title}</h2>
       <div className="mt-2 grid grid-cols-[1fr_1fr] gap-2">
         <div>
-          <div className="mb-1 text-xs font-semibold text-stone-500">Height</div>
+          <div className="mb-1 text-xs font-semibold text-stone-500">Closet system height</div>
           <HeightSelector height={plannerHeight} onChange={onHeightChange} />
         </div>
         <div>
+          <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="ceiling-height">
+            Room ceiling height
+          </label>
+          <div className="flex items-center gap-1">
+            <input
+              id="ceiling-height"
+              type="number"
+              min="0"
+              step="0.25"
+              value={ceilingHeight}
+              onChange={(event) => onCeilingHeightChange(event.target.value)}
+              className="min-w-0 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
+            />
+            <span className="text-xs font-bold text-stone-500">in</span>
+          </div>
+          {Number(ceilingHeight) <= Number(plannerHeight) && (
+            <div className="mt-1 text-xs font-bold text-red-700">Ceiling must be higher than the closet system.</div>
+          )}
+        </div>
+        <div>
           <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="wall-width">
-            Back wall
+            Room back wall
           </label>
           <div className="flex items-center gap-1">
             <input
@@ -2240,6 +2312,10 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
     blocking.push(`Opening wall math should equal the back wall: ${formatInches(planDetails.openingTotal)} entered vs ${formatInches(planDetails.wallWidth)} back wall.`);
   }
 
+  if (!planDetails.ceilingClear) {
+    blocking.push(`Room ceiling height ${formatInches(planDetails.ceilingHeight)} must be higher than the ${formatInches(planDetails.height)} closet system height.`);
+  }
+
   return (
     <main className="min-h-screen bg-brand-ui text-brand-black">
       <header className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4">
@@ -2297,25 +2373,29 @@ export default function App() {
   const requestedFallbackKit = useMemo(() => kitHandleToDrawing(requestedKitHandle) || fallbackKit, [requestedKitHandle]);
   const exposeCaptureData = useMemo(shouldExposeCaptureData, []);
   const requestedMode = useMemo(getRequestedMode, []);
+  const requestedReachInPlan = useMemo(getRequestedReachInPlan, []);
+  const requestedPlanDetails = requestedReachInPlan?.planDetails || {};
+  const requestedPlanModules = Array.isArray(requestedReachInPlan?.modules) ? requestedReachInPlan.modules : null;
   const [appMode, setAppMode] = useState(requestedMode);
   const [airtableStatus, setAirtableStatus] = useState({
     state: 'loading',
     message: 'Checking Airtable...',
   });
-  const [closetType, setClosetType] = useState(requestedMode === 'renderer' ? 'reach-in' : '');
-  const [reachInRoomCaptured, setReachInRoomCaptured] = useState(requestedMode === 'renderer');
+  const [closetType, setClosetType] = useState(requestedMode === 'renderer' || requestedReachInPlan ? 'reach-in' : '');
+  const [reachInRoomCaptured, setReachInRoomCaptured] = useState(requestedMode === 'renderer' || Boolean(requestedReachInPlan));
   const [kitOptions, setKitOptions] = useState([requestedFallbackKit]);
   const [selectedHandle, setSelectedHandle] = useState(requestedFallbackKit.handle);
   const [viewMode, setViewMode] = useState('photo');
-  const [plannerHeight, setPlannerHeight] = useState(84);
-  const [wallWidth, setWallWidth] = useState(96);
-  const [reachInDepth, setReachInDepth] = useState(24);
-  const [reachInOpeningWidth, setReachInOpeningWidth] = useState(30);
-  const [reachInOpeningLeft, setReachInOpeningLeft] = useState(33);
-  const [reachInOpeningRight, setReachInOpeningRight] = useState(33);
-  const [reachInDoorType, setReachInDoorType] = useState('regular');
+  const [plannerHeight, setPlannerHeight] = useState(requestedPlanDetails.height || 84);
+  const [ceilingHeight, setCeilingHeight] = useState(requestedPlanDetails.ceilingHeight || 108);
+  const [wallWidth, setWallWidth] = useState(requestedPlanDetails.wallWidth || 96);
+  const [reachInDepth, setReachInDepth] = useState(requestedPlanDetails.roomDepthInput || requestedPlanDetails.roomDepth || 24);
+  const [reachInOpeningWidth, setReachInOpeningWidth] = useState(requestedPlanDetails.openingWidth || 30);
+  const [reachInOpeningLeft, setReachInOpeningLeft] = useState(requestedPlanDetails.openingLeft || 33);
+  const [reachInOpeningRight, setReachInOpeningRight] = useState(requestedPlanDetails.openingRight || 33);
+  const [reachInDoorType, setReachInDoorType] = useState(requestedPlanDetails.doorType || 'regular');
   const [plannerPreviewMode, setPlannerPreviewMode] = useState('plan');
-  const [plannerModules, setPlannerModules] = useState(() => [createPlannerModule('SHELF', 84, 24), createPlannerModule('SHELF', 84, 24)]);
+  const [plannerModules, setPlannerModules] = useState(() => requestedPlanModules || [createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24), createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24)]);
   const [plannerStep, setPlannerStep] = useState('design');
 
   useEffect(() => {
@@ -2431,12 +2511,28 @@ export default function App() {
     const openingMatchesWall = Math.abs(openingTotal - wallNumber) < 0.01;
     const openingClear = openingWidth >= 24;
     const runStart = Math.max(0, (wallNumber - assembledWidth) / 2);
+    const moduleSegments = getModuleSegments(plannerModules, runStart);
     const sharedDividerCenters = plannerModules.length > 1 ? getSharedDividerCenters(plannerModules, runStart) : [];
     const wallCenter = wallNumber / 2;
     const slidingDividerAligned = reachInDoorType !== 'sliding' || sharedDividerCenters.some((dividerCenter) => Math.abs(dividerCenter - wallCenter) <= 0.5);
+    const slidingRevealZones = [
+      [openingLeft, openingLeft + openingWidth / 2],
+      [openingLeft + openingWidth / 2, openingLeft + openingWidth],
+    ];
+    const drawerWarnings =
+      reachInDoorType === 'sliding'
+        ? moduleSegments
+            .filter(({ module }) => isDrawerTower(module))
+            .filter(({ start, length }) => {
+              const end = start + length;
+              return !slidingRevealZones.some(([zoneStart, zoneEnd]) => start >= zoneStart - 0.01 && end <= zoneEnd + 0.01);
+            })
+            .map(({ module }) => `${towerNames[module.code] || module.code} drawer front is not fully revealed by either sliding-door opening.`)
+        : [];
 
     return {
       height: plannerHeight,
+      ceilingHeight: Number(ceilingHeight) || 0,
       depth,
       roomDepth,
       roomDepthInput,
@@ -2450,15 +2546,17 @@ export default function App() {
       openingClear,
       doorType: reachInDoorType,
       slidingDividerAligned,
+      drawerWarnings,
       wallCenter,
       sharedDividerCenters,
       assembledWidth,
       requiredWidth,
       remainingWidth: Number((wallNumber - requiredWidth).toFixed(2)),
-      fits: plannerModules.length > 0 && wallNumber >= requiredWidth && openingMatchesWall && openingClear && slidingDividerAligned,
+      ceilingClear: (Number(ceilingHeight) || 0) > Number(plannerHeight),
+      fits: plannerModules.length > 0 && wallNumber >= requiredWidth && openingMatchesWall && openingClear && slidingDividerAligned && (Number(ceilingHeight) || 0) > Number(plannerHeight),
       visualOrder: plannerModules.map((module) => `${module.code}${module.width}`),
     };
-  }, [plannerHeight, plannerModules, reachInDepth, reachInDoorType, reachInOpeningLeft, reachInOpeningRight, reachInOpeningWidth, wallWidth]);
+  }, [ceilingHeight, plannerHeight, plannerModules, reachInDepth, reachInDoorType, reachInOpeningLeft, reachInOpeningRight, reachInOpeningWidth, wallWidth]);
 
   const addPlannerModule = (configCode, targetIndex = null) => {
     setPlannerStep('design');
@@ -2622,6 +2720,8 @@ export default function App() {
   const reachInSetupProps = {
     plannerHeight,
     onHeightChange: changePlannerHeight,
+    ceilingHeight,
+    onCeilingHeightChange: setCeilingHeight,
     wallWidth,
     onWallWidthChange: updateReachInWallWidth,
     reachInDepth,
@@ -2786,6 +2886,7 @@ export default function App() {
                   <MatchPanel
                     evaluation={plannerEvaluation}
                     modules={plannerModules}
+                    planDetails={plannerPlanDetails}
                     onContinue={() => setPlannerStep('review')}
                     isCatalogReady={airtableStatus.state === 'ready'}
                   />

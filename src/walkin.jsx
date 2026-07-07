@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls } from '@react-three/drei';
@@ -9,6 +9,7 @@ const closetDepth = 14;
 const cornerReachGap = 12;
 const cornerStopDistance = closetDepth + cornerReachGap;
 const closetHeights = [84, 96];
+const allowedModuleWidths = [18, 24, 30];
 const toeKickHeight = 5;
 const drawerSideOverlay = panelThickness / 2 - 1 / 16;
 const drawerPullLength = 5;
@@ -29,6 +30,26 @@ const moduleConfigs = [
   { code: 'S2D', label: 'Shelves + 2 Drawers', defaultWidth: 24 },
   { code: 'SHELF', label: 'Shelf Tower', defaultWidth: 24 },
 ];
+
+const towerNames = {
+  LH: 'Long Hang',
+  DH: 'Double Hang',
+  HS: 'Hang & Shelves',
+  S3D: 'Shelves & 3 Drawers',
+  H3D: 'Hang & 3 Drawers',
+  S2D: 'Shelves & 2 Drawers',
+  S7: '7-Shelf',
+  S8: '8-Shelf',
+  S9: '8-Shelf',
+};
+
+const towerCodePattern = /^(LH|DH|HS|S3D|3DS|H3D|3DH|S2D|2DS|S7|S8|S9)$/;
+const widthTokenPattern = /^(18|24|30)$/;
+const singleTowerWidthTokenMap = {
+  20: 18,
+  26: 24,
+  32: 30,
+};
 
 const wallLabels = {
   back: 'Back wall',
@@ -55,6 +76,206 @@ function formatInches(value) {
   return `${Number(value || 0).toFixed(value % 1 ? 2 : 0)}"`;
 }
 
+function money(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `$${number.toFixed(2)}` : '';
+}
+
+function normalizeHandle(value) {
+  return String(value || '').toUpperCase();
+}
+
+function normalizePrice(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getShopifyHandle(fields, sku) {
+  return String(fields.shopify_handle || sku || '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeTowerCode(code) {
+  const normalizedCode = String(code || '').toUpperCase();
+  const aliases = {
+    '3DS': 'S3D',
+    '3DH': 'H3D',
+    '2DS': 'S2D',
+    S9: 'S8',
+  };
+
+  return aliases[normalizedCode] || normalizedCode;
+}
+
+function getShelfCodeForHeight(height) {
+  return Number(height) >= 96 ? 'S8' : 'S7';
+}
+
+function getWalkInProductCode(module, height) {
+  return module.code === 'SHELF' ? getShelfCodeForHeight(height) : module.code;
+}
+
+function getNominalWidthFromSkuToken(token) {
+  if (widthTokenPattern.test(token)) {
+    return Number(token);
+  }
+
+  return singleTowerWidthTokenMap[token] || null;
+}
+
+function buildMatchSignature(height, towerSpecs) {
+  const counts = towerSpecs.reduce((map, tower) => {
+    const code = normalizeTowerCode(tower.code);
+    const token = `${code}${tower.width}`;
+    map.set(token, (map.get(token) || 0) + 1);
+    return map;
+  }, new Map());
+
+  const modules = [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([token, count]) => `${token}x${count}`)
+    .join('+');
+
+  return `${height}|${closetDepth}|${modules}`;
+}
+
+function formatTowerTitle(towerSpecs) {
+  const systemType = towerSpecs.length === 1 ? 'Single Tower' : towerSpecs.length === 2 ? 'Double Tower' : `${towerSpecs.length}-Tower`;
+
+  return `${towerSpecs
+    .map((tower) => `${towerNames[tower.code] || tower.code}${tower.width === 24 ? '' : ` (${tower.width}")`}`)
+    .join(' + ')} ${systemType}`;
+}
+
+function parseTowerSku(sku) {
+  const tokens = normalizeHandle(sku).split('-');
+  const dimensionStart = tokens.findIndex((token, index) => index > 0 && Number(token) >= 45);
+  const configTokens = tokens.slice(0, dimensionStart > -1 ? dimensionStart : tokens.length);
+  const towerSpecs = [];
+
+  for (let index = 0; index < configTokens.length; index += 1) {
+    const token = configTokens[index];
+
+    if (!towerCodePattern.test(token)) {
+      continue;
+    }
+
+    const nextToken = configTokens[index + 1];
+    const parsedWidth = getNominalWidthFromSkuToken(nextToken);
+    const width = parsedWidth || 24;
+
+    if (parsedWidth) {
+      index += 1;
+    }
+
+    towerSpecs.push({
+      code: normalizeTowerCode(token),
+      sourceCode: token,
+      width,
+      label: `${token} ${width}"`,
+    });
+  }
+
+  return towerSpecs.length >= 1 ? towerSpecs : null;
+}
+
+function kitRecordToProduct(record) {
+  const fields = record.fields;
+  const sku = fields.shopify_sku || fields['Kit Name'];
+  const towerSpecs = parseTowerSku(sku);
+
+  if (!towerSpecs) {
+    return null;
+  }
+
+  const height = Number(fields.Height) || (normalizeHandle(sku).includes('-96-') ? 96 : 84);
+  const assembledWidth = Number(fields.Width) || getRunLength(towerSpecs);
+  const shopifyHandle = getShopifyHandle(fields, sku);
+
+  return {
+    handle: sku,
+    title: formatTowerTitle(towerSpecs),
+    kitId: fields.KitID || record.id,
+    height,
+    assembledWidth,
+    requiredWidth: Number(fields['Width Requirement']) || assembledWidth + 2,
+    price: normalizePrice(fields.retail_price),
+    productUrl: shopifyHandle ? `/products/${shopifyHandle}` : '',
+    matchSignature: buildMatchSignature(height, towerSpecs),
+    status: String(fields.Status || 'active').toLowerCase(),
+    towerSpecs,
+  };
+}
+
+function shouldPreferProductCandidate(candidate, existing) {
+  if (!existing) {
+    return true;
+  }
+
+  const candidateActive = candidate.status === 'active';
+  const existingActive = existing.status === 'active';
+
+  if (candidateActive !== existingActive) {
+    return candidateActive;
+  }
+
+  const candidateHasPrice = candidate.price > 0;
+  const existingHasPrice = existing.price > 0;
+
+  if (candidateHasPrice !== existingHasPrice) {
+    return candidateHasPrice;
+  }
+
+  const candidateIsConnected = candidate.towerSpecs.length > 1;
+  const existingIsConnected = existing.towerSpecs.length > 1;
+
+  if (candidateIsConnected !== existingIsConnected) {
+    return candidateIsConnected;
+  }
+
+  return false;
+}
+
+function getWallTowerSpecs(room, wall, modules) {
+  const height = getWallHeight(room, wall);
+
+  return modules.map((module) => ({
+    code: getWalkInProductCode(module, height),
+    width: numberValue(module.width),
+    label: module.label,
+  }));
+}
+
+function calculateWallEstimate(modules, height, productCatalog) {
+  const singleProductsBySignature = new Map(
+    productCatalog
+      .filter((product) => product.towerSpecs.length === 1 && product.price > 0)
+      .map((product) => [product.matchSignature, product]),
+  );
+  const baseTotal = modules.reduce((sum, module) => {
+    const code = getWalkInProductCode(module, height);
+    const width = numberValue(module.width);
+    const singleSignature = buildMatchSignature(height, [{ code, width }]);
+    const singleProduct = singleProductsBySignature.get(singleSignature);
+    const fallbackByCode = {
+      LH: 225,
+      DH: 245,
+      HS: 260,
+      S3D: 545,
+      H3D: 560,
+      S2D: 450,
+      S7: 275,
+      S8: 315,
+    };
+
+    return sum + (singleProduct?.price || fallbackByCode[code] || 275);
+  }, 0);
+  const sharedPanelCredit = Math.max(0, modules.length - 1) * 32;
+
+  return Number(Math.max(0, baseTotal - sharedPanelCredit).toFixed(2));
+}
+
 function getWallHeight(room, wall) {
   const height = numberValue(room[wallHeightKeys[wall]]);
   return closetHeights.includes(height) ? height : closetHeights[1];
@@ -67,7 +288,7 @@ function createModule(code) {
     id: uid(),
     code: config.code,
     label: config.label,
-    width: config.defaultWidth,
+    width: allowedModuleWidths.includes(config.defaultWidth) ? config.defaultWidth : 24,
   };
 }
 
@@ -91,6 +312,50 @@ function getUsableLengths(room, corners) {
   };
 }
 
+function isDrawerTower(module) {
+  return ['S3D', 'H3D', 'S2D'].includes(module.code);
+}
+
+function rangesOverlap(start, end, zoneStart, zoneEnd) {
+  return start < zoneEnd - 0.01 && end > zoneStart + 0.01;
+}
+
+function getWalkInDrawerWarnings(room, corners, runs) {
+  const backWidth = numberValue(room.backWidth);
+  const leftDepth = numberValue(room.leftDepth);
+  const rightDepth = numberValue(room.rightDepth);
+  const warnings = [];
+  const wallZones = {
+    back: [
+      ...(corners.backLeft === 'left' ? [[closetDepth, closetDepth + cornerReachGap, 'back-left corner reach zone']] : []),
+      ...(corners.backRight === 'right' ? [[backWidth - closetDepth - cornerReachGap, backWidth - closetDepth, 'back-right corner reach zone']] : []),
+    ],
+    left: corners.backLeft === 'back' ? [[closetDepth, closetDepth + cornerReachGap, 'back-left corner reach zone']] : [],
+    right: corners.backRight === 'back' ? [[closetDepth, closetDepth + cornerReachGap, 'back-right corner reach zone']] : [],
+  };
+
+  [
+    ['back', corners.backLeft === 'left' ? cornerStopDistance : 0],
+    ['left', corners.backLeft === 'back' ? cornerStopDistance : 0],
+    ['right', corners.backRight === 'back' ? cornerStopDistance : 0],
+  ].forEach(([wall, startOffset]) => {
+    getModuleSegments(runs[wall] || [], startOffset).forEach(({ module, start, length }) => {
+      if (!isDrawerTower(module)) {
+        return;
+      }
+
+      const end = start + length;
+      wallZones[wall].forEach(([zoneStart, zoneEnd, zoneLabel]) => {
+        if (rangesOverlap(start, end, zoneStart, zoneEnd)) {
+          warnings.push(`${wallLabels[wall]} ${module.label} drawers overlap the ${zoneLabel}; drawers may be hard to reach there.`);
+        }
+      });
+    });
+  });
+
+  return warnings;
+}
+
 function evaluatePlan(room, corners, runs) {
   const backWidth = numberValue(room.backWidth);
   const leftDepth = numberValue(room.leftDepth);
@@ -98,6 +363,7 @@ function evaluatePlan(room, corners, runs) {
   const openingWidth = numberValue(room.openingWidth);
   const openingLeft = numberValue(room.openingLeft);
   const openingRight = numberValue(room.openingRight);
+  const ceilingHeight = numberValue(room.ceilingHeight);
   const selectedHeights = ['back', 'left', 'right'].map((wall) => getWallHeight(room, wall));
   const usable = getUsableLengths(room, corners);
   const runLengths = {
@@ -125,6 +391,10 @@ function evaluatePlan(room, corners, runs) {
     blocking.push('Closet height must be 84" or 96" on every wall.');
   }
 
+  if (ceilingHeight <= 0 || selectedHeights.some((height) => ceilingHeight <= height)) {
+    blocking.push(`Room ceiling height ${formatInches(ceilingHeight)} must be higher than every selected closet height.`);
+  }
+
   if (openingLeft > 0 && openingLeft < closetDepth && runs.left.length > 0) {
     blocking.push(`Left opening-side wall is only ${formatInches(openingLeft)}; keep at least ${formatInches(closetDepth)} so left-side units do not project into the entrance.`);
   }
@@ -143,13 +413,12 @@ function evaluatePlan(room, corners, runs) {
     .flat()
     .forEach((module) => {
       const width = numberValue(module.width);
-      if (width < 18 || width > 30) {
-        blocking.push(`${module.label} width must stay between 18" and 30".`);
-      }
-      if (!Number.isInteger(width)) {
-        warnings.push(`${module.label} ${formatInches(width)} is custom and should be reviewed before production.`);
+      if (!allowedModuleWidths.includes(width)) {
+        blocking.push(`${module.label} width must be 18", 24", or 30".`);
       }
     });
+
+  getWalkInDrawerWarnings(room, corners, runs).forEach((warning) => warnings.push(warning));
 
   if (runLengths.back === 0 && runLengths.left === 0 && runLengths.right === 0) {
     blocking.push('Add at least one tower to the design.');
@@ -173,6 +442,7 @@ function evaluateRoomStep(room) {
   const openingWidth = numberValue(room.openingWidth);
   const openingLeft = numberValue(room.openingLeft);
   const openingRight = numberValue(room.openingRight);
+  const ceilingHeight = numberValue(room.ceilingHeight);
   const blocking = [];
 
   if (backWidth <= 0 || leftDepth <= 0 || rightDepth <= 0 || openingWidth <= 0) {
@@ -192,6 +462,10 @@ function evaluateRoomStep(room) {
     blocking.push('Closet height must be 84" or 96" on every wall.');
   }
 
+  if (ceilingHeight <= 0 || ['back', 'left', 'right'].some((wall) => ceilingHeight <= getWallHeight(room, wall))) {
+    blocking.push(`Room ceiling height ${formatInches(ceilingHeight)} must be higher than every selected closet height.`);
+  }
+
   return {
     blocking,
     complete: blocking.length === 0,
@@ -205,15 +479,16 @@ function RoomSetup({ room, setRoom, corners, setCorners }) {
 
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
-      <h2 className="text-base font-bold text-stone-950">Room</h2>
+      <h2 className="text-base font-bold text-stone-950">Room Dimensions</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {[
-          ['backWidth', 'Back wall'],
-          ['leftDepth', 'Left wall'],
-          ['rightDepth', 'Right wall'],
-          ['openingWidth', 'Opening'],
-          ['openingLeft', 'Left of opening'],
-          ['openingRight', 'Right of opening'],
+          ['backWidth', 'Room back wall width'],
+          ['leftDepth', 'Room left wall width'],
+          ['rightDepth', 'Room right wall width'],
+          ['ceilingHeight', 'Room ceiling height'],
+          ['openingWidth', 'Entrance opening'],
+          ['openingLeft', 'Left of entrance'],
+          ['openingRight', 'Right of entrance'],
         ].map(([key, label]) => (
           <label key={key} className="block">
             <span className="mb-1 block text-xs font-bold text-stone-500">{label}</span>
@@ -233,7 +508,12 @@ function RoomSetup({ room, setRoom, corners, setCorners }) {
       </div>
 
       <div className="mt-4 grid gap-2">
-        <h3 className="text-xs font-bold uppercase text-stone-500">Closet Height</h3>
+        <h3 className="text-xs font-bold uppercase text-stone-500">Closet System Height</h3>
+        {numberValue(room.ceilingHeight) <= Math.max(...['back', 'left', 'right'].map((wall) => getWallHeight(room, wall))) && (
+          <div className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+            Room ceiling must be higher than every selected closet system height.
+          </div>
+        )}
         <div className="grid gap-2 sm:grid-cols-3">
           {['back', 'left', 'right'].map((wall) => (
             <div key={wall} className="rounded border border-stone-200 p-2">
@@ -256,19 +536,24 @@ function RoomSetup({ room, setRoom, corners, setCorners }) {
       </div>
 
       <div className="mt-4 grid gap-2">
-        <h3 className="text-xs font-bold uppercase text-stone-500">Corner Priority</h3>
+        <div>
+          <h3 className="text-xs font-bold uppercase text-stone-500">Corner Run Choice</h3>
+          <p className="mt-1 text-sm font-semibold text-stone-600">
+            At each back corner, choose which wall gets the full closet run into the corner. The other wall stops short to leave the gray reach zone.
+          </p>
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <CornerToggle
             label="Back-left corner"
             value={corners.backLeft}
-            sideLabel="Left wall wins"
+            sideLabel="Left wall continues"
             onChange={(value) => updateCorner('backLeft', value)}
             sideValue="left"
           />
           <CornerToggle
             label="Back-right corner"
             value={corners.backRight}
-            sideLabel="Right wall wins"
+            sideLabel="Right wall continues"
             onChange={(value) => updateCorner('backRight', value)}
             sideValue="right"
           />
@@ -279,12 +564,18 @@ function RoomSetup({ room, setRoom, corners, setCorners }) {
 }
 
 function CornerToggle({ label, value, onChange, sideLabel, sideValue }) {
+  const backSelected = value === 'back';
+  const selectedText = backSelected ? 'Back wall continues; side wall stops short.' : `${sideLabel}; back wall stops short.`;
+
   return (
-    <div className="rounded border border-stone-200 p-2">
-      <div className="mb-2 text-xs font-bold text-stone-600">{label}</div>
+    <div className="rounded border border-stone-200 bg-stone-50 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-bold text-stone-700">{label}</div>
+        <span className="rounded bg-white px-2 py-1 text-[11px] font-bold text-stone-500">14" x 12" reach zone</span>
+      </div>
       <div className="grid grid-cols-2 rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
         {[
-          ['back', 'Back wall wins'],
+          ['back', 'Back wall continues'],
           [sideValue, sideLabel],
         ].map(([option, optionLabel]) => (
           <button
@@ -297,7 +588,119 @@ function CornerToggle({ label, value, onChange, sideLabel, sideValue }) {
           </button>
         ))}
       </div>
+      <div className="mt-2 rounded bg-white px-2 py-1.5 text-xs font-semibold text-stone-600">
+        {selectedText}
+      </div>
     </div>
+  );
+}
+
+function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
+  const backWidth = Math.max(1, numberValue(room.backWidth));
+  const leftDepth = Math.max(1, numberValue(room.leftDepth));
+  const rightDepth = Math.max(1, numberValue(room.rightDepth));
+  const maxDepth = Math.max(leftDepth, rightDepth);
+  const openingWidth = Math.max(0, numberValue(room.openingWidth));
+  const openingLeft = Math.max(0, numberValue(room.openingLeft));
+  const openingRight = Math.max(0, numberValue(room.openingRight));
+  const openingStart = Math.min(backWidth, openingLeft);
+  const openingEnd = Math.min(backWidth, openingLeft + openingWidth);
+  const padding = 34;
+  const viewWidth = 640;
+  const viewHeight = 300;
+  const wallPx = 7;
+  const scale = Math.min((viewWidth - padding * 2) / backWidth, (viewHeight - padding * 2) / maxDepth);
+  const toX = (value) => padding + value * scale;
+  const toY = (value) => padding + value * scale;
+  const backLeftReach = corners.backLeft === 'back'
+    ? { x: 0, y: closetDepth, width: closetDepth, depth: cornerReachGap }
+    : { x: closetDepth, y: 0, width: cornerReachGap, depth: closetDepth };
+  const backRightReach = corners.backRight === 'back'
+    ? { x: backWidth - closetDepth, y: closetDepth, width: closetDepth, depth: cornerReachGap }
+    : { x: backWidth - closetDepth - cornerReachGap, y: 0, width: cornerReachGap, depth: closetDepth };
+
+  const renderReachZone = (zone, id) => (
+    <g key={id}>
+      <rect
+        x={toX(zone.x)}
+        y={toY(zone.y)}
+        width={Math.max(0, zone.width * scale)}
+        height={Math.max(0, zone.depth * scale)}
+        className="fill-stone-300/55 stroke-stone-500"
+        strokeDasharray="4 3"
+      />
+    </g>
+  );
+
+  return (
+    <section className="rounded border border-stone-200 bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-stone-950">Walk-in Plan</h2>
+          <p className="text-xs font-semibold text-stone-500">Left, back, right walls, entrance opening, and corner reach zones.</p>
+        </div>
+        <span className={`rounded px-2 py-1 text-xs font-bold ${roomEvaluation.complete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+          {roomEvaluation.complete ? 'Room ready' : 'Needs dimensions'}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-[250px] w-full rounded bg-stone-50">
+        <rect x={toX(0)} y={toY(0)} width={backWidth * scale} height={maxDepth * scale} className="fill-white stroke-stone-200" strokeWidth="1.5" />
+        <rect x={toX(0)} y={toY(0) - wallPx / 2} width={backWidth * scale} height={wallPx} rx="1" className="fill-stone-600" />
+        <rect x={toX(0) - wallPx / 2} y={toY(0)} width={wallPx} height={leftDepth * scale} rx="1" className="fill-stone-500" />
+        <rect x={toX(backWidth) - wallPx / 2} y={toY(0)} width={wallPx} height={rightDepth * scale} rx="1" className="fill-stone-500" />
+        {openingStart > 0 && <rect x={toX(0)} y={toY(maxDepth) - wallPx / 2} width={openingStart * scale} height={wallPx} rx="1" className="fill-stone-500" />}
+        {backWidth - openingEnd > 0 && <rect x={toX(openingEnd)} y={toY(maxDepth) - wallPx / 2} width={(backWidth - openingEnd) * scale} height={wallPx} rx="1" className="fill-stone-500" />}
+        <line x1={toX(openingStart)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
+        {[backLeftReach, backRightReach].map(renderReachZone)}
+        <text x={toX(backWidth / 2)} y={toY(0) - 10} textAnchor="middle" className="fill-stone-700 text-[11px] font-bold">
+          Back wall {formatInches(backWidth)}
+        </text>
+        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[11px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
+          Left {formatInches(leftDepth)}
+        </text>
+        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[11px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
+          Right {formatInches(rightDepth)}
+        </text>
+        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-emerald-700 text-[10px] font-bold">
+          Opening {formatInches(openingWidth)}
+        </text>
+        {openingLeft > 0 && (
+          <text x={toX(openingLeft / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-stone-500 text-[10px] font-bold">
+            L {formatInches(openingLeft)}
+          </text>
+        )}
+        {openingRight > 0 && (
+          <text x={toX(openingEnd + openingRight / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-stone-500 text-[10px] font-bold">
+            R {formatInches(openingRight)}
+          </text>
+        )}
+        <text x={toX(backWidth / 2)} y={toY(Math.min(maxDepth - 8, closetDepth + cornerReachGap + 8))} textAnchor="middle" className="fill-stone-600 text-[10px] font-bold">
+          shaded areas are 14" x 12" corner reach zones
+        </text>
+      </svg>
+      <div className="mt-2 grid gap-2 text-xs sm:grid-cols-4">
+        <div className="rounded bg-stone-50 px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Back wall</div>
+          <div className="text-sm font-bold text-stone-950">{formatInches(backWidth)}</div>
+        </div>
+        <div className="rounded bg-stone-50 px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Left / Right</div>
+          <div className="text-sm font-bold text-stone-950">{formatInches(leftDepth)} / {formatInches(rightDepth)}</div>
+        </div>
+        <div className="rounded bg-stone-50 px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Ceiling</div>
+          <div className={`text-sm font-bold ${roomEvaluation.complete ? 'text-emerald-700' : 'text-red-700'}`}>{formatInches(room.ceilingHeight)}</div>
+        </div>
+        <div className="rounded bg-stone-50 px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Opening</div>
+          <div className="text-sm font-bold text-stone-950">{formatInches(openingWidth)}</div>
+        </div>
+        <div className="rounded bg-stone-50 px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Open math</div>
+          <div className={`text-sm font-bold ${roomEvaluation.complete ? 'text-emerald-700' : 'text-red-700'}`}>{formatInches(openingLeft + openingWidth + openingRight)}</div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -314,7 +717,10 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
         </a>
       </header>
       <section className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} />
+        <div className="grid gap-4">
+          <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} />
+          <WalkInRoomDiagram room={room} corners={corners} roomEvaluation={roomEvaluation} />
+        </div>
         <aside className="rounded border border-stone-200 bg-white p-3">
           <h2 className="text-base font-bold text-stone-950">Step 2</h2>
           <p className="mt-2 text-sm font-semibold text-stone-600">After the room is captured, the planner opens a wider layout for configurations, wall runs, and 3D review.</p>
@@ -400,12 +806,36 @@ function ClosetTypeStart({ onWalkIn }) {
   );
 }
 
-function ModulePalette({ onAdd, compact = false }) {
+function WallSelector({ selectedWall, onSelect }) {
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-stone-950">Configurations</h2>
-        {compact && <span className="text-xs font-bold text-stone-500">Click to add to selected wall or drag into a wall run</span>}
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-base font-bold text-stone-950">Wall</h2>
+        <span className="rounded bg-orange-50 px-2 py-1 text-xs font-bold text-brand-orange">{wallLabels[selectedWall]}</span>
+      </div>
+      <div className="grid grid-cols-3 rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
+        {['back', 'left', 'right'].map((wall) => (
+          <button
+            key={wall}
+            type="button"
+            onClick={() => onSelect(wall)}
+            aria-pressed={selectedWall === wall}
+            className={`rounded px-2 py-2 ${selectedWall === wall ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}
+          >
+            {wallLabels[wall].replace(' wall', '')}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ModulePalette({ onAdd, selectedWall, compact = false }) {
+  return (
+    <section className="rounded border border-stone-200 bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-bold text-stone-950">Add Configuration</h2>
+        <span className="rounded bg-stone-100 px-2 py-1 text-xs font-bold text-stone-600">{wallLabels[selectedWall]}</span>
       </div>
       <div className={`mt-3 grid gap-2 ${compact ? 'sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7' : ''}`}>
         {moduleConfigs.map((config) => (
@@ -417,8 +847,13 @@ function ModulePalette({ onAdd, compact = false }) {
             onClick={() => onAdd(config.code)}
             className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-left transition hover:border-brand-orange hover:bg-orange-50"
           >
-            <div className="text-sm font-bold text-stone-950">{config.label}</div>
-            <div className="text-xs font-semibold text-stone-500">{config.defaultWidth}" default bay</div>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-bold text-stone-950">{config.label}</div>
+                <div className="text-xs font-semibold text-stone-500">{config.defaultWidth}" default bay</div>
+              </div>
+              <span className="grid h-7 min-w-7 place-items-center rounded bg-white px-2 text-sm font-bold text-brand-orange">+</span>
+            </div>
           </button>
         ))}
       </div>
@@ -426,11 +861,12 @@ function ModulePalette({ onAdd, compact = false }) {
   );
 }
 
-function WallRunEditor({ wall, modules, selected, onSelect, onDropModule, onRemove, onMove, onWidthChange }) {
+function WallRunEditor({ wall, wallHeight, modules, selected, onSelect, onDropModule, onRemove, onMove, onWidthChange }) {
   const moveLabels =
     wall === 'back'
       ? { previous: '<', next: '>', previousTitle: 'Move left', nextTitle: 'Move right' }
       : { previous: 'Up', next: 'Dn', previousTitle: 'Move up', nextTitle: 'Move down' };
+  const runLength = getRunLength(modules);
 
   return (
     <section
@@ -444,55 +880,113 @@ function WallRunEditor({ wall, modules, selected, onSelect, onDropModule, onRemo
       }}
       className={`rounded border p-3 ${selected ? 'border-brand-orange bg-orange-50' : 'border-stone-200 bg-white'}`}
     >
-      <button type="button" onClick={() => onSelect(wall)} className="mb-3 flex w-full items-center justify-between text-left">
-        <span className="text-base font-bold text-stone-950">{wallLabels[wall]}</span>
-        <span className="rounded bg-white px-2 py-1 text-xs font-bold text-stone-500">{formatInches(getRunLength(modules))}</span>
+      <button type="button" onClick={() => onSelect(wall)} className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 text-left">
+        <span>
+          <span className="block text-base font-bold text-stone-950">{wallLabels[wall]}</span>
+          <span className="text-xs font-semibold text-stone-500">{selected ? 'Selected wall' : 'Tap to select'}</span>
+        </span>
+        <span className="rounded bg-white px-2 py-1 text-xs font-bold text-stone-500">{formatInches(runLength)}</span>
       </button>
-      <div className="space-y-2">
-        {modules.length === 0 && <div className="rounded border border-dashed border-stone-300 p-4 text-center text-sm font-semibold text-stone-400">Drop towers here</div>}
-        {modules.map((module, index) => (
-          <article key={module.id} className="grid grid-cols-[1fr_84px_62px_32px] items-center gap-2 rounded border border-stone-200 bg-white p-2">
-            <div>
-              <div className="text-sm font-bold text-stone-950">{index + 1}. {module.label}</div>
-              <div className="text-xs font-semibold text-stone-500">{module.code} / {formatInches(module.width)}</div>
+
+      <div className="min-h-[128px] rounded border border-dashed border-stone-300 bg-stone-50 p-2">
+        {modules.length === 0 ? (
+          <div className="grid h-[108px] place-items-center text-center text-sm font-semibold text-stone-400">
+            No towers on this wall
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="relative mb-2 flex items-center pt-5">
+              <div className="absolute left-0 top-0 text-xs font-bold uppercase text-stone-500">Move</div>
+              {modules.map((module, index) => {
+                const visualWidth = Math.max(86, numberValue(module.width) * 4.2);
+
+                return (
+                  <div
+                    key={`walkin-move-${module.id}`}
+                    className="grid shrink-0 grid-cols-2 items-center px-1"
+                    style={{ width: `${visualWidth + (index === 0 ? 16 : 8)}px` }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onMove(wall, index, -1)}
+                      disabled={index === 0}
+                      className="grid h-7 min-w-7 place-items-center justify-self-start rounded border border-stone-300 bg-white px-2 text-xs font-bold text-stone-700 disabled:opacity-25"
+                      title={moveLabels.previousTitle}
+                    >
+                      {moveLabels.previous}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMove(wall, index, 1)}
+                      disabled={index === modules.length - 1}
+                      className="grid h-7 min-w-7 place-items-center justify-self-end rounded border border-stone-300 bg-white px-2 text-xs font-bold text-stone-700 disabled:opacity-25"
+                      title={moveLabels.nextTitle}
+                    >
+                      {moveLabels.next}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            <label className="flex items-center gap-1">
-              <input
-                type="number"
-                min="18"
-                max="30"
-                step="1"
-                value={module.width}
-                onChange={(event) => onWidthChange(wall, module.id, Number(event.target.value))}
-                className="w-full rounded border border-stone-300 px-2 py-1 text-sm font-bold"
-              />
-              <span className="text-xs font-bold text-stone-500">in</span>
-            </label>
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => onMove(wall, index, -1)}
-                disabled={index === 0}
-                className="grid h-8 place-items-center rounded border border-stone-300 text-xs font-bold text-stone-600 disabled:opacity-30"
-                title={moveLabels.previousTitle}
-              >
-                {moveLabels.previous}
-              </button>
-              <button
-                type="button"
-                onClick={() => onMove(wall, index, 1)}
-                disabled={index === modules.length - 1}
-                className="grid h-8 place-items-center rounded border border-stone-300 text-xs font-bold text-stone-600 disabled:opacity-30"
-                title={moveLabels.nextTitle}
-              >
-                {moveLabels.next}
-              </button>
+            <div className="flex min-h-[126px] items-stretch">
+              {modules.map((module, index) => {
+                const visualWidth = Math.max(86, numberValue(module.width) * 4.2);
+
+                return (
+                  <div key={module.id} className="group flex shrink-0 items-stretch">
+                    {index === 0 && <div className="w-2 rounded-l bg-stone-300" title="Side panel" />}
+                    <div
+                      className={`flex flex-col justify-between border-y border-stone-300 p-2 ${index % 2 ? 'bg-orange-50' : 'bg-white'}`}
+                      style={{ width: `${visualWidth}px` }}
+                      title={module.label}
+                    >
+                      <div>
+                        <div className="truncate text-sm font-bold text-stone-900">{module.label}</div>
+                        <div className="text-xs font-semibold text-stone-500">{module.code} / {formatInches(module.width)}</div>
+                      </div>
+                      <label className="mt-3 flex items-center gap-1">
+                        <select
+                          value={module.width}
+                          onChange={(event) => onWidthChange(wall, module.id, Number(event.target.value))}
+                          className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-1.5 py-1 text-xs font-bold text-stone-700"
+                        >
+                          {allowedModuleWidths.map((width) => (
+                            <option key={width} value={width}>
+                              {width}" bay
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => onRemove(wall, module.id)}
+                        className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-bold text-red-700 hover:bg-red-100"
+                      >
+                        Remove tower
+                      </button>
+                    </div>
+                    <div className="w-2 bg-stone-300" title={index === modules.length - 1 ? 'Side panel' : 'Shared divider panel'} />
+                  </div>
+                );
+              })}
             </div>
-            <button type="button" onClick={() => onRemove(wall, module.id)} className="grid h-8 place-items-center rounded border border-stone-300 text-sm font-bold text-stone-500">
-              X
-            </button>
-          </article>
-        ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+        <div className="rounded bg-white px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Run length</div>
+          <div className="text-sm font-bold text-stone-950">{modules.length ? formatInches(runLength) : '-'}</div>
+        </div>
+        <div className="rounded bg-white px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Towers</div>
+          <div className="text-sm font-bold text-stone-950">{modules.length || '-'}</div>
+        </div>
+        <div className="rounded bg-white px-2 py-1.5">
+          <div className="font-semibold text-stone-500">Height</div>
+          <div className="text-sm font-bold text-stone-950">{formatInches(wallHeight)}</div>
+        </div>
       </div>
     </section>
   );
@@ -512,10 +1006,6 @@ function getModuleSegments(modules, start = 0) {
     cursor += numberValue(module.width) + panelThickness;
     return segment;
   });
-}
-
-function getShelfCodeForHeight(height) {
-  return Number(height) >= 96 ? 'S8' : 'S7';
 }
 
 function getWalkInLayoutCode(module, height) {
@@ -1389,12 +1879,113 @@ function ValidationPanel({ evaluation }) {
   );
 }
 
-function SummaryPanel({ room, runs, evaluation }) {
-  const [done, setDone] = useState(false);
+function buildWalkInMaterials(runs) {
+  const allModules = Object.values(runs).flat();
+
+  if (!allModules.length) {
+    return [];
+  }
+
+  return [
+    { label: 'Vertical panels', quantity: allModules.length + Object.values(runs).filter((modules) => modules.length > 0).length },
+    { label: 'Toe kicks', quantity: allModules.length },
+    { label: 'Wall runs', quantity: Object.values(runs).filter((modules) => modules.length > 0).length },
+    { label: 'Towers', quantity: allModules.length },
+  ];
+}
+
+function buildWalkInPlanUrl(room, corners, runs) {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set('type', 'walk-in');
+  url.searchParams.set('plan', btoa(JSON.stringify({ room, corners, runs })));
+  return url.toString();
+}
+
+function getRequestedWalkInPlan() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const encodedPlan = new URLSearchParams(window.location.search).get('plan');
+
+  if (!encodedPlan) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(atob(encodedPlan));
+  } catch {
+    return null;
+  }
+}
+
+function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady }) {
+  const [showForm, setShowForm] = useState(false);
+  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+  const materials = useMemo(() => buildWalkInMaterials(runs), [runs]);
+  const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
+  const shouldShowProductLinks = evaluation.complete && pricing.allThreeWallsMatched;
+
+  const submitForVerification = async (event) => {
+    event.preventDefault();
+    setSubmitStatus({ state: 'loading', message: 'Submitting for verification...' });
+
+    try {
+      const modules = Object.entries(runs).flatMap(([wall, wallModules]) =>
+        wallModules.map((module, index) => ({
+          wall,
+          index,
+          code: getWalkInProductCode(module, getWallHeight(room, wall)),
+          width: module.width,
+          label: module.label,
+        })),
+      );
+      const response = await fetch('/api/quote-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planType: 'walk-in',
+          customer,
+          room,
+          corners,
+          runs,
+          materials,
+          modules,
+          estimatedPrice: pricing.estimatedPrice,
+          signature: pricing.signature,
+          planUrl: buildWalkInPlanUrl(room, corners, runs),
+          wallSummaries: pricing.wallSummaries,
+          internalType: 'walk-in estimate verification',
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to submit verification request');
+      }
+
+      setSubmitStatus({
+        state: 'success',
+        message: `Received. Reference ${payload.quoteId}. We will get back to you within one business day.`,
+      });
+    } catch (error) {
+      setSubmitStatus({
+        state: 'error',
+        message: error.message,
+      });
+    }
+  };
 
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
-      <h2 className="text-base font-bold text-stone-950">Complete</h2>
+      <h2 className="text-base font-bold text-stone-950">Price & Next Step</h2>
       <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
         {Object.entries(evaluation.runLengths).map(([wall, length]) => (
           <React.Fragment key={wall}>
@@ -1403,42 +1994,171 @@ function SummaryPanel({ room, runs, evaluation }) {
           </React.Fragment>
         ))}
       </dl>
-      <button
-        type="button"
-        disabled={!evaluation.complete}
-        onClick={() => setDone(true)}
-        className="mt-4 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:bg-stone-300"
-      >
-        Complete design
-      </button>
-      {done && <p className="mt-2 rounded bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">Walk-in layout is ready for review.</p>}
+
+      {!isCatalogReady && <p className="mt-3 rounded bg-stone-50 px-3 py-2 text-sm font-bold text-stone-600">Checking product catalog...</p>}
+
+      {isCatalogReady && shouldShowProductLinks && (
+        <div className="mt-3 rounded border border-emerald-200 bg-emerald-50 p-3">
+          <div className="text-xs font-bold uppercase text-emerald-700">Existing products found</div>
+          <p className="mt-1 text-sm font-semibold text-stone-700">All three wall runs match products. Use these product pages for checkout.</p>
+          <div className="mt-3 grid gap-2">
+            {wallProductMatches.map((summary) => (
+              <a key={summary.wall} href={summary.match.productUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">
+                {wallLabels[summary.wall]}: {summary.match.title} {summary.match.price > 0 ? `- ${money(summary.match.price)}` : ''}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isCatalogReady && !shouldShowProductLinks && (
+        <div className="mt-3 rounded border border-stone-200 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-bold uppercase text-stone-500">Estimated walk-in price</div>
+              <div className="text-xl font-bold text-stone-950">{money(pricing.estimatedPrice) || '$0.00'}</div>
+            </div>
+            <button
+              type="button"
+              disabled={!evaluation.complete}
+              onClick={() => setShowForm((current) => !current)}
+              className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300"
+            >
+              Verify estimate
+            </button>
+          </div>
+          <div className="mt-3 grid gap-1 text-xs">
+            {pricing.wallSummaries.map((summary) => (
+              <div key={summary.wall} className="flex justify-between rounded bg-stone-50 px-2 py-1.5">
+                <span className="font-semibold text-stone-600">{wallLabels[summary.wall]}</span>
+                <span className="font-bold text-stone-950">{summary.modules.length ? money(summary.estimate) : '-'}</span>
+              </div>
+            ))}
+          </div>
+
+          {showForm && (
+            <form className="mt-3 grid gap-2" onSubmit={submitForVerification}>
+              <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+              <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+              <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+              <button type="submit" disabled={submitStatus.state === 'loading'} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white disabled:opacity-50">
+                Verify estimate
+              </button>
+              {submitStatus.message && (
+                <p className={`rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {submitStatus.message}
+                </p>
+              )}
+            </form>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
 function WalkInPlanner() {
-  const [room, setRoom] = useState({
+  const requestedPlan = useMemo(() => getRequestedWalkInPlan(), []);
+  const defaultRoom = {
     backWidth: 96,
     leftDepth: 72,
     rightDepth: 72,
     openingWidth: 30,
     openingLeft: 33,
     openingRight: 33,
+    ceilingHeight: 108,
     backHeight: 96,
     leftHeight: 96,
     rightHeight: 96,
-  });
-  const [corners, setCorners] = useState({ backLeft: 'back', backRight: 'back' });
+  };
+  const [room, setRoom] = useState({ ...defaultRoom, ...(requestedPlan?.room || {}) });
+  const [corners, setCorners] = useState(requestedPlan?.corners || { backLeft: 'back', backRight: 'back' });
   const [selectedWall, setSelectedWall] = useState('back');
   const [viewMode, setViewMode] = useState('plan');
-  const [roomCaptured, setRoomCaptured] = useState(false);
-  const [runs, setRuns] = useState({
+  const [roomCaptured, setRoomCaptured] = useState(Boolean(requestedPlan));
+  const [runs, setRuns] = useState(requestedPlan?.runs || {
     back: [],
     left: [],
     right: [],
   });
+  const [productCatalog, setProductCatalog] = useState([]);
+  const [catalogReady, setCatalogReady] = useState(false);
   const evaluation = useMemo(() => evaluatePlan(room, corners, runs), [room, corners, runs]);
   const roomEvaluation = useMemo(() => evaluateRoomStep(room), [room]);
+  const productBySignature = useMemo(() => {
+    const map = new Map();
+
+    productCatalog.forEach((product) => {
+      const existing = map.get(product.matchSignature);
+      if (shouldPreferProductCandidate(product, existing)) {
+        map.set(product.matchSignature, product);
+      }
+    });
+
+    return map;
+  }, [productCatalog]);
+  const pricing = useMemo(() => {
+    const wallSummaries = ['back', 'left', 'right'].map((wall) => {
+      const modules = runs[wall] || [];
+      const height = getWallHeight(room, wall);
+      const towerSpecs = getWallTowerSpecs(room, wall, modules);
+      const signature = modules.length ? buildMatchSignature(height, towerSpecs) : '';
+      const match = signature ? productBySignature.get(signature) || null : null;
+      const estimate = match?.price || calculateWallEstimate(modules, height, productCatalog);
+
+      return {
+        wall,
+        height,
+        modules,
+        towerSpecs,
+        signature,
+        match,
+        estimate,
+      };
+    });
+    const allThreeWallsMatched = wallSummaries.every((summary) => summary.modules.length > 0 && summary.match?.productUrl);
+    const estimatedPrice = Number(wallSummaries.reduce((total, summary) => total + (summary.match?.price || summary.estimate || 0), 0).toFixed(2));
+
+    return {
+      wallSummaries,
+      allThreeWallsMatched,
+      estimatedPrice,
+      signature: wallSummaries.map((summary) => `${summary.wall}:${summary.signature || 'empty'}`).join('|'),
+    };
+  }, [productCatalog, productBySignature, room, runs]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCatalog() {
+      try {
+        const response = await fetch('/api/kits');
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Unable to load product catalog');
+        }
+
+        const products = (payload.records || []).map(kitRecordToProduct).filter(Boolean);
+
+        if (!cancelled) {
+          setProductCatalog(products);
+          setCatalogReady(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setProductCatalog([]);
+          setCatalogReady(true);
+        }
+      }
+    }
+
+    loadCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const addModule = (code, wall = selectedWall) => {
     setRuns((current) => ({
@@ -1455,9 +2175,10 @@ function WalkInPlanner() {
   };
 
   const updateWidth = (wall, id, width) => {
+    const nextWidth = allowedModuleWidths.includes(Number(width)) ? Number(width) : 24;
     setRuns((current) => ({
       ...current,
-      [wall]: current[wall].map((module) => (module.id === id ? { ...module, width } : module)),
+      [wall]: current[wall].map((module) => (module.id === id ? { ...module, width: nextWidth } : module)),
     }));
   };
 
@@ -1531,17 +2252,21 @@ function WalkInPlanner() {
             <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
           )}
           <div className="mt-4 grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
-            <ModulePalette onAdd={(code) => addModule(code)} />
+            <div className="grid content-start gap-3">
+              <WallSelector selectedWall={selectedWall} onSelect={setSelectedWall} />
+              <ModulePalette selectedWall={selectedWall} onAdd={(code) => addModule(code)} />
+            </div>
             <section className="rounded border border-stone-200 bg-stone-50 p-3">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-base font-bold text-stone-950">Wall Locations</h2>
-                <span className="text-xs font-bold text-stone-500">Select a wall, then add or drop configurations</span>
+                <span className="text-xs font-bold text-stone-500">Selected: {wallLabels[selectedWall]}</span>
               </div>
               <div className="grid gap-3">
                 {['back', 'left', 'right'].map((wall) => (
                   <WallRunEditor
                     key={wall}
                     wall={wall}
+                    wallHeight={getWallHeight(room, wall)}
                     modules={runs[wall]}
                     selected={selectedWall === wall}
                     onSelect={setSelectedWall}
@@ -1559,7 +2284,7 @@ function WalkInPlanner() {
           <div className="space-y-3">
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <ValidationPanel evaluation={evaluation} />
-            <SummaryPanel room={room} runs={runs} evaluation={evaluation} />
+            <SummaryPanel room={room} corners={corners} runs={runs} evaluation={evaluation} pricing={pricing} isCatalogReady={catalogReady} />
           </div>
         </aside>
       </section>

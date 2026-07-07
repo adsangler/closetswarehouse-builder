@@ -93,30 +93,40 @@ async function createAirtableQuote(env, quote) {
     return null;
   }
 
-  const response = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      fields: {
-        Name: quote.customer?.name || '',
-        Email: quote.customer?.email || '',
-        Phone: quote.customer?.phone || '',
-        Status: 'New',
-        Source: 'Closet planner',
-        'Wall Width': quote.wallWidth,
-        Height: quote.height,
-        'Assembled Width': quote.assembledWidth,
-        'Required Width': quote.requiredWidth,
-        'Estimated Price': quote.estimatedPrice,
-        Signature: quote.signature,
-        Modules: quote.modules?.map((module) => `${module.code}-${module.width}`).join(', '),
-        'Quote JSON': JSON.stringify(quote),
+  let response;
+
+  try {
+    response = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-    }),
-  });
+      body: JSON.stringify({
+        fields: {
+          Name: quote.customer?.name || '',
+          Email: quote.customer?.email || '',
+          Phone: quote.customer?.phone || '',
+          Status: 'New',
+          Source: 'Closet planner',
+          'Wall Width': quote.wallWidth,
+          Height: quote.height,
+          'Assembled Width': quote.assembledWidth,
+          'Required Width': quote.requiredWidth,
+          'Estimated Price': quote.estimatedPrice,
+          Signature: quote.signature,
+          Modules: quote.modules?.map((module) => `${module.code}-${module.width}`).join(', '),
+          'Quote JSON': JSON.stringify(quote),
+        },
+      }),
+    });
+  } catch {
+    return null;
+  }
+
+  if (response.status === 403 || response.status === 404) {
+    return null;
+  }
 
   if (!response.ok) {
     throw new Error(`Airtable quote capture returned ${response.status}`);
@@ -130,15 +140,29 @@ async function sendConfirmationEmail(env, quote) {
     return { sent: false, reason: 'EMAIL_WEBHOOK_URL is not configured' };
   }
 
+  const planLines = [
+    `Reference: ${quote.quoteId || 'pending'}`,
+    `Customer: ${quote.customer?.name || ''}`,
+    `Email: ${quote.customer?.email || ''}`,
+    `Phone: ${quote.customer?.phone || ''}`,
+    `Type: ${quote.planType || quote.internalType || 'closet plan'}`,
+    `Estimated price: ${quote.estimatedPrice || ''}`,
+    `Signature: ${quote.signature || ''}`,
+    quote.planUrl ? `Plan URL: ${quote.planUrl}` : '',
+    '',
+    'Modules:',
+    ...(quote.modules || []).map((module) => `${module.wall ? `${module.wall}: ` : ''}${module.index + 1}. ${module.code}-${module.width}`),
+  ].filter(Boolean);
+
   const response = await fetch(env.EMAIL_WEBHOOK_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      to: quote.customer?.email,
-      subject: 'We received your Closets Warehouse verification request',
-      text: `Thanks ${quote.customer?.name || ''}, we received your closet plan for verification. We will review the layout and get back to you within one business day.`,
+      to: 'office@closetswarehouse.com',
+      subject: `Closets Warehouse estimate verification: ${quote.customer?.name || quote.quoteId || 'new request'}`,
+      text: planLines.join('\n'),
       quote,
     }),
   });
