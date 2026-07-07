@@ -2118,54 +2118,60 @@ function ReachInRoomSetup({
   onCenterOpening,
   planDetails,
 }) {
+  const inputClass = 'min-w-0 flex-1 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950';
+
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
       <h2 className="text-sm font-bold text-stone-950">{title}</h2>
-      <div className="mt-2 grid grid-cols-[1fr_1fr] gap-2">
+      <div className="mt-3 grid gap-3">
         <div>
           <div className="mb-1 text-xs font-semibold text-stone-500">Closet system height</div>
           <HeightSelector height={plannerHeight} onChange={onHeightChange} />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="ceiling-height">
-            Room ceiling height
-          </label>
-          <div className="flex items-center gap-1">
-            <input
-              id="ceiling-height"
-              type="number"
-              min="0"
-              step="0.25"
-              value={ceilingHeight}
-              onChange={(event) => onCeilingHeightChange(event.target.value)}
-              className="min-w-0 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
-            />
-            <span className="text-xs font-bold text-stone-500">in</span>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="ceiling-height">
+              Room ceiling height
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                id="ceiling-height"
+                type="number"
+                min="0"
+                step="0.25"
+                value={ceilingHeight}
+                onChange={(event) => onCeilingHeightChange(event.target.value)}
+                className={inputClass}
+              />
+              <span className="text-xs font-bold text-stone-500">in</span>
+            </div>
+            {Number(ceilingHeight) <= Number(plannerHeight) && (
+              <div className="mt-1 text-xs font-bold text-red-700">Ceiling must be higher than the closet system.</div>
+            )}
           </div>
-          {Number(ceilingHeight) <= Number(plannerHeight) && (
-            <div className="mt-1 text-xs font-bold text-red-700">Ceiling must be higher than the closet system.</div>
-          )}
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="wall-width">
-            Room back wall
-          </label>
-          <div className="flex items-center gap-1">
-            <input
-              id="wall-width"
-              type="number"
-              min="18"
-              step="0.25"
-              value={wallWidth}
-              onChange={(event) => onWallWidthChange(event.target.value)}
-              className="min-w-0 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
-            />
-            <span className="text-xs font-bold text-stone-500">in</span>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="wall-width">
+              Room back wall width
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                id="wall-width"
+                type="number"
+                min="18"
+                step="0.25"
+                value={wallWidth}
+                onChange={(event) => onWallWidthChange(event.target.value)}
+                className={inputClass}
+              />
+              <span className="text-xs font-bold text-stone-500">in</span>
+            </div>
           </div>
         </div>
-        <div className="col-span-2">
+
+        <div>
           <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="reach-in-depth">
-            Reach-in depth
+            Room reach-in depth
           </label>
           <div className="flex items-center gap-1">
             <input
@@ -2175,17 +2181,16 @@ function ReachInRoomSetup({
               step="0.25"
               value={reachInDepth}
               onChange={(event) => onDepthChange(event.target.value)}
-              className="min-w-0 flex-1 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
+              className={inputClass}
             />
             <span className="text-xs font-bold text-stone-500">in</span>
           </div>
-          <div className="mt-1 text-xs font-semibold text-stone-500">
-            {formatInches(planDetails.clearDepth)} clear beyond the 14" unit
-          </div>
+          <div className="mt-1 text-xs font-semibold text-stone-500">{formatInches(planDetails.clearDepth)} clear beyond the 14" unit</div>
         </div>
-        <div className="col-span-2">
+
+        <div>
           <div className="mb-1 text-xs font-semibold text-stone-500">Door type</div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid gap-1.5 sm:grid-cols-3">
             {reachInDoorTypes.map((type) => (
               <button
                 key={type.value}
@@ -2200,10 +2205,11 @@ function ReachInRoomSetup({
             ))}
           </div>
         </div>
-        <div className="col-span-2 grid grid-cols-3 gap-2">
+
+        <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="reach-in-opening">
-              Opening
+              Opening width
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -2213,7 +2219,7 @@ function ReachInRoomSetup({
                 step="0.25"
                 value={openingWidth}
                 onChange={(event) => onOpeningWidthChange(event.target.value)}
-                className="min-w-0 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
+                className={inputClass}
               />
               <span className="text-xs font-bold text-stone-500">in</span>
             </div>
@@ -2230,7 +2236,7 @@ function ReachInRoomSetup({
                 step="0.25"
                 value={openingLeft}
                 onChange={(event) => onOpeningLeftChange(event.target.value)}
-                className="min-w-0 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
+                className={inputClass}
               />
               <span className="text-xs font-bold text-stone-500">in</span>
             </div>
@@ -2247,23 +2253,24 @@ function ReachInRoomSetup({
                 step="0.25"
                 value={openingRight}
                 onChange={(event) => onOpeningRightChange(event.target.value)}
-                className="min-w-0 rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950"
+                className={inputClass}
               />
               <span className="text-xs font-bold text-stone-500">in</span>
             </div>
           </div>
-          <div className="col-span-3 flex flex-wrap items-center justify-between gap-2">
-            <div className={`text-xs font-semibold ${planDetails.openingMatchesWall ? 'text-stone-500' : 'text-red-700'}`}>
-              Opening wall total {formatInches(planDetails.openingTotal)} / back wall {formatInches(planDetails.wallWidth)}
-            </div>
-            <button
-              type="button"
-              onClick={onCenterOpening}
-              className="rounded border border-stone-300 bg-white px-2 py-1 text-xs font-bold text-stone-700 hover:border-brand-orange"
-            >
-              Center opening
-            </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className={`text-xs font-semibold ${planDetails.openingMatchesWall ? 'text-stone-500' : 'text-red-700'}`}>
+            Opening wall total {formatInches(planDetails.openingTotal)} / back wall {formatInches(planDetails.wallWidth)}
           </div>
+          <button
+            type="button"
+            onClick={onCenterOpening}
+            className="rounded border border-stone-300 bg-white px-2 py-1 text-xs font-bold text-stone-700 hover:border-brand-orange"
+          >
+            Center opening
+          </button>
         </div>
       </div>
     </section>
@@ -2327,7 +2334,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
           Change type
         </button>
       </header>
-      <section className="grid gap-4 p-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <section className="grid gap-4 p-4 xl:grid-cols-[460px_minmax(0,1fr)]">
         <div className="space-y-3">
           <ReachInRoomSetup title="Reach-in Dimensions" {...setupProps} planDetails={planDetails} />
           <section className="rounded border border-stone-200 bg-white p-3">
