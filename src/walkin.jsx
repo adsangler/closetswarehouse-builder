@@ -2044,15 +2044,45 @@ function buildDetailedWalkInParts(room, runs) {
   return [...parts.values()].filter((part) => part.quantity > 0);
 }
 
+function aggregatePartsBySku(parts) {
+  const aggregated = new Map();
+
+  parts.forEach((part) => {
+    const key = `${part.category}|${part.sku}`;
+    const current = aggregated.get(key) || {
+      category: part.category,
+      sku: part.sku,
+      name: part.name,
+      quantity: 0,
+      detailSet: new Set(),
+      nameSet: new Set(),
+    };
+
+    current.quantity += part.quantity;
+    if (part.name) current.nameSet.add(part.name);
+    if (part.details) current.detailSet.add(part.details);
+    aggregated.set(key, current);
+  });
+
+  return [...aggregated.values()].map((part) => ({
+    category: part.category,
+    sku: part.sku,
+    name: [...part.nameSet][0] || part.name,
+    quantity: part.quantity,
+    details: [...part.detailSet].join(', '),
+  }));
+}
+
 function PartsList({ parts }) {
   const groups = ['Panels', 'Shelves', 'Kits', 'Hardware'];
+  const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
     <section className="rounded border border-stone-200 bg-white p-4">
       <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
-          const items = parts.filter((part) => part.category === group);
+          const items = aggregatedParts.filter((part) => part.category === group);
 
           if (!items.length) return null;
 
@@ -2204,10 +2234,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
               {previewMode === 'plan' ? (
                 <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluation} />
               ) : (
-                <div className="relative h-[560px] overflow-hidden rounded bg-white">
-                  <OrbitHintBadge />
-                  <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
-                </div>
+                <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
               )}
             </section>
             <PartsList parts={parts} />
