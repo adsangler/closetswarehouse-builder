@@ -52,6 +52,7 @@ body {
   }
 
   .app-workspace {
+    height: auto;
     min-height: calc(100dvh - 4rem);
   }
 }

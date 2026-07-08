@@ -1851,7 +1851,7 @@ function PartsList({ parts }) {
   const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
-    <section className="rounded border border-stone-200 bg-white p-4">
+    <section className="min-w-0 rounded border border-stone-200 bg-white p-4">
       <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
@@ -1860,10 +1860,10 @@ function PartsList({ parts }) {
           if (!items.length) return null;
 
           return (
-            <div key={group}>
+            <div key={group} className="min-w-0">
               <h3 className="text-sm font-bold uppercase text-brand-orange">{group}</h3>
-              <div className="mt-2 overflow-x-auto rounded border border-stone-200">
-                <table className="min-w-[760px] w-full text-left text-sm">
+              <div className="mt-2 w-full max-w-full overflow-x-auto rounded border border-stone-200">
+                <table className="min-w-[620px] w-full text-left text-sm sm:min-w-[760px]">
                   <thead className="bg-stone-50 text-xs uppercase text-stone-500">
                     <tr>
                       <th className="px-3 py-2">Qty</th>
@@ -2294,16 +2294,16 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   };
 
   return (
-    <main className="h-screen overflow-y-auto bg-brand-ui p-3 text-brand-black sm:p-4">
+    <main className="h-screen overflow-y-auto bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <header className="rounded border border-stone-200 bg-white p-4">
+        <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
-              <h1 className="text-2xl font-bold text-stone-950">Reach-in Estimate Detail</h1>
+              <h1 className="text-xl font-bold text-stone-950 sm:text-2xl">Reach-in Estimate Detail</h1>
               <p className="mt-1 text-sm font-semibold text-stone-600">Saved plan, visual review, and exact build parts for verification.</p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
               <div className="text-2xl font-bold text-stone-950">{money(evaluation.displayPrice || evaluation.estimatedPrice) || '$0.00'}</div>
             </div>
@@ -2314,9 +2314,9 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
           </div>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid gap-4">
-            <section className="rounded border border-stone-200 bg-white p-3">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid min-w-0 gap-4">
+            <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-3 flex justify-end">
                 <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
                   {[
@@ -2352,7 +2352,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
             <PartsList parts={parts} />
           </div>
 
-          <aside className="grid gap-3 self-start">
+          <aside className="grid min-w-0 gap-3 self-start">
             <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
               <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>

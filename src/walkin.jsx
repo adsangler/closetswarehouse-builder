@@ -611,7 +611,7 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
   const openingRight = Math.max(0, numberValue(room.openingRight));
   const openingStart = Math.min(backWidth, openingLeft);
   const openingEnd = Math.min(backWidth, openingLeft + openingWidth);
-  const padding = 34;
+  const padding = 58;
   const viewWidth = 640;
   const viewHeight = 300;
   const wallPx = 7;
@@ -658,13 +658,13 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
         {backWidth - openingEnd > 0 && <rect x={toX(openingEnd)} y={toY(maxDepth) - wallPx / 2} width={(backWidth - openingEnd) * scale} height={wallPx} rx="1" className="fill-stone-500" />}
         <line x1={toX(openingStart)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
         {[backLeftReach, backRightReach].map(renderReachZone)}
-        <text x={toX(backWidth / 2)} y={toY(0) - 10} textAnchor="middle" className="fill-stone-700 text-[14px] font-bold">
+        <text x={toX(backWidth / 2)} y={toY(0) - 14} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold">
           Back wall {formatInches(backWidth)}
         </text>
-        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
+        <text x={toX(0) - 24} y={toY(leftDepth / 2)} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold" transform={`rotate(-90 ${toX(0) - 24} ${toY(leftDepth / 2)})`}>
           Left {formatInches(leftDepth)}
         </text>
-        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
+        <text x={toX(backWidth) + 24} y={toY(rightDepth / 2)} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold" transform={`rotate(90 ${toX(backWidth) + 24} ${toY(rightDepth / 2)})`}>
           Right {formatInches(rightDepth)}
         </text>
         <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-emerald-700 text-[13px] font-bold">
@@ -1208,8 +1208,8 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
   const leftDepth = Math.max(1, numberValue(room.leftDepth));
   const rightDepth = Math.max(1, numberValue(room.rightDepth));
   const maxDepth = Math.max(leftDepth, rightDepth);
-  const padding = 28;
-  const viewWidth = 520;
+  const padding = 54;
+  const viewWidth = 560;
   const viewHeight = 300;
   const scale = Math.min((viewWidth - padding * 2) / backWidth, (viewHeight - padding * 2) / maxDepth);
   const toX = (value) => padding + value * scale;
@@ -1308,16 +1308,16 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
           </g>
         ))}
 
-        <text x={toX(backWidth / 2)} y={toY(0) - 9} textAnchor="middle" className="fill-stone-700 text-[14px] font-bold">
+        <text x={toX(backWidth / 2)} y={toY(0) - 12} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold">
           Back {formatInches(backWidth)}
         </text>
         <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-stone-600 text-[14px] font-bold">
           Opening {formatInches(openingWidth)}
         </text>
-        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
+        <text x={toX(0) - 22} y={toY(leftDepth / 2)} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold" transform={`rotate(-90 ${toX(0) - 22} ${toY(leftDepth / 2)})`}>
           Left {formatInches(leftDepth)}
         </text>
-        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
+        <text x={toX(backWidth) + 22} y={toY(rightDepth / 2)} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold" transform={`rotate(90 ${toX(backWidth) + 22} ${toY(rightDepth / 2)})`}>
           Right {formatInches(rightDepth)}
         </text>
       </svg>
@@ -2078,7 +2078,7 @@ function PartsList({ parts }) {
   const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
-    <section className="rounded border border-stone-200 bg-white p-4">
+    <section className="min-w-0 rounded border border-stone-200 bg-white p-4">
       <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
@@ -2087,10 +2087,10 @@ function PartsList({ parts }) {
           if (!items.length) return null;
 
           return (
-            <div key={group}>
+            <div key={group} className="min-w-0">
               <h3 className="text-sm font-bold uppercase text-brand-orange">{group}</h3>
-              <div className="mt-2 overflow-x-auto rounded border border-stone-200">
-                <table className="min-w-[760px] w-full text-left text-sm">
+              <div className="mt-2 w-full max-w-full overflow-x-auto rounded border border-stone-200">
+                <table className="min-w-[620px] w-full text-left text-sm sm:min-w-[760px]">
                   <thead className="bg-stone-50 text-xs uppercase text-stone-500">
                     <tr>
                       <th className="px-3 py-2">Qty</th>
@@ -2196,16 +2196,16 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   };
 
   return (
-    <main className="h-screen overflow-y-auto bg-brand-ui p-3 text-brand-black sm:p-4">
+    <main className="h-screen overflow-y-auto bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <header className="rounded border border-stone-200 bg-white p-4">
+        <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
-              <h1 className="text-2xl font-bold text-stone-950">Walk-in Estimate Detail</h1>
+              <h1 className="text-xl font-bold text-stone-950 sm:text-2xl">Walk-in Estimate Detail</h1>
               <p className="mt-1 text-sm font-semibold text-stone-600">Saved room plan, visual review, and exact build parts for verification.</p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
               <div className="text-2xl font-bold text-stone-950">{money(pricing.estimatedPrice) || '$0.00'}</div>
             </div>
@@ -2216,9 +2216,9 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
           </div>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid gap-4">
-            <section className="rounded border border-stone-200 bg-white p-3">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid min-w-0 gap-4">
+            <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-3 flex justify-end">
                 <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
                   {[
@@ -2240,7 +2240,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
             <PartsList parts={parts} />
           </div>
 
-          <aside className="grid gap-3 self-start">
+          <aside className="grid min-w-0 gap-3 self-start">
             <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
               <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
@@ -2626,7 +2626,7 @@ function WalkInPlanner() {
         </a>
       </header>
       <section className="app-workspace grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="min-h-0 min-w-0 overflow-y-auto bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:pr-4">
+        <section className="min-w-0 bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:min-h-0 lg:overflow-y-auto lg:pr-4">
           <div className="mb-3 flex items-center justify-end gap-2">
             {[
               ['plan', 'Plan view'],
@@ -2673,7 +2673,7 @@ function WalkInPlanner() {
             </div>
           </section>
         </section>
-        <aside className="min-h-0 min-w-0 overflow-y-auto border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:border-l lg:border-t-0 lg:pr-3">
+        <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:min-h-0 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:pr-3">
           <div className="space-y-3">
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <ValidationPanel evaluation={evaluation} />
