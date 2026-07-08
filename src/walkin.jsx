@@ -658,29 +658,29 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
         {backWidth - openingEnd > 0 && <rect x={toX(openingEnd)} y={toY(maxDepth) - wallPx / 2} width={(backWidth - openingEnd) * scale} height={wallPx} rx="1" className="fill-stone-500" />}
         <line x1={toX(openingStart)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
         {[backLeftReach, backRightReach].map(renderReachZone)}
-        <text x={toX(backWidth / 2)} y={toY(0) - 10} textAnchor="middle" className="fill-stone-700 text-[11px] font-bold">
+        <text x={toX(backWidth / 2)} y={toY(0) - 10} textAnchor="middle" className="fill-stone-700 text-[14px] font-bold">
           Back wall {formatInches(backWidth)}
         </text>
-        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[11px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
+        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
           Left {formatInches(leftDepth)}
         </text>
-        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[11px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
+        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
           Right {formatInches(rightDepth)}
         </text>
-        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-emerald-700 text-[10px] font-bold">
+        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-emerald-700 text-[13px] font-bold">
           Opening {formatInches(openingWidth)}
         </text>
         {openingLeft > 0 && (
-          <text x={toX(openingLeft / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-stone-500 text-[10px] font-bold">
+          <text x={toX(openingLeft / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-stone-500 text-[13px] font-bold">
             L {formatInches(openingLeft)}
           </text>
         )}
         {openingRight > 0 && (
-          <text x={toX(openingEnd + openingRight / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-stone-500 text-[10px] font-bold">
+          <text x={toX(openingEnd + openingRight / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-stone-500 text-[13px] font-bold">
             R {formatInches(openingRight)}
           </text>
         )}
-        <text x={toX(backWidth / 2)} y={toY(Math.min(maxDepth - 8, closetDepth + cornerReachGap + 8))} textAnchor="middle" className="fill-stone-600 text-[10px] font-bold">
+        <text x={toX(backWidth / 2)} y={toY(Math.min(maxDepth - 8, closetDepth + cornerReachGap + 8))} textAnchor="middle" className="fill-stone-600 text-[12px] font-bold">
           shaded areas are 14" x 12" corner reach zones
         </text>
       </svg>
@@ -722,34 +722,36 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
           Reach-in app
         </a>
       </header>
-      <section className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid gap-4">
-          <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} />
-          <WalkInRoomDiagram room={room} corners={corners} roomEvaluation={roomEvaluation} />
-        </div>
-        <aside className="rounded border border-stone-200 bg-white p-3">
-          <h2 className="text-base font-bold text-stone-950">Step 2</h2>
-          <p className="mt-2 text-sm font-semibold text-stone-600">After the room is captured, the planner opens a wider layout for configurations, wall runs, and 3D review.</p>
-          <div className="mt-4 grid gap-2 text-sm font-semibold">
-            {roomEvaluation.blocking.length === 0 ? (
-              <div className="rounded bg-emerald-50 px-3 py-2 text-emerald-700">Room dimensions are ready.</div>
-            ) : (
-              roomEvaluation.blocking.map((warning) => (
-                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-red-700">
-                  {warning}
-                </div>
-              ))
-            )}
+      <section className="app-workspace min-h-0 w-full overflow-y-auto">
+        <div className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4">
+            <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} />
+            <WalkInRoomDiagram room={room} corners={corners} roomEvaluation={roomEvaluation} />
           </div>
-          <button
-            type="button"
-            disabled={!roomEvaluation.complete}
-            onClick={onContinue}
-            className="mt-4 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:bg-stone-300"
-          >
-            Continue to configurations
-          </button>
-        </aside>
+          <aside className="rounded border border-stone-200 bg-white p-3">
+            <h2 className="text-base font-bold text-stone-950">Step 2</h2>
+            <p className="mt-2 text-sm font-semibold text-stone-600">After the room is captured, the planner opens a wider layout for configurations, wall runs, and 3D review.</p>
+            <div className="mt-4 grid gap-2 text-sm font-semibold">
+              {roomEvaluation.blocking.length === 0 ? (
+                <div className="rounded bg-emerald-50 px-3 py-2 text-emerald-700">Room dimensions are ready.</div>
+              ) : (
+                roomEvaluation.blocking.map((warning) => (
+                  <div key={warning} className="rounded bg-red-50 px-3 py-2 text-red-700">
+                    {warning}
+                  </div>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={!roomEvaluation.complete}
+              onClick={onContinue}
+              className="mt-4 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:bg-stone-300"
+            >
+              Continue to configurations
+            </button>
+          </aside>
+        </div>
       </section>
     </main>
   );
@@ -1268,7 +1270,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
         {backSegments.map(({ module, start, length, center }, index) => (
           <g key={`back-segment-${module.id}`}>
             <rect x={toX(start)} y={toY(1.6)} width={length * scale} height={(closetDepth - 3.2) * scale} className={index % 2 ? 'fill-orange-200/75 stroke-orange-800' : 'fill-orange-100/75 stroke-orange-800'} />
-            <text x={toX(center)} y={toY(closetDepth / 2) + 3} textAnchor="middle" className="fill-stone-900 text-[10px] font-bold">
+            <text x={toX(center)} y={toY(closetDepth / 2) + 4} textAnchor="middle" className="fill-stone-900 text-[13px] font-bold">
               {formatInches(module.width)}
             </text>
           </g>
@@ -1276,7 +1278,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
         {leftSegments.map(({ module, start, length, center }, index) => (
           <g key={`left-segment-${module.id}`}>
             <rect x={toX(1.6)} y={toY(start)} width={(closetDepth - 3.2) * scale} height={length * scale} className={index % 2 ? 'fill-stone-200 stroke-stone-700' : 'fill-white stroke-stone-700'} />
-            <text x={toX(closetDepth / 2)} y={toY(center) + 3} textAnchor="middle" className="fill-stone-900 text-[9px] font-bold" transform={`rotate(-90 ${toX(closetDepth / 2)} ${toY(center)})`}>
+            <text x={toX(closetDepth / 2)} y={toY(center) + 4} textAnchor="middle" className="fill-stone-900 text-[12px] font-bold" transform={`rotate(-90 ${toX(closetDepth / 2)} ${toY(center)})`}>
               {formatInches(module.width)}
             </text>
           </g>
@@ -1284,7 +1286,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
         {rightSegments.map(({ module, start, length, center }, index) => (
           <g key={`right-segment-${module.id}`}>
             <rect x={toX(backWidth - closetDepth + 1.6)} y={toY(start)} width={(closetDepth - 3.2) * scale} height={length * scale} className={index % 2 ? 'fill-stone-200 stroke-stone-700' : 'fill-white stroke-stone-700'} />
-            <text x={toX(backWidth - closetDepth / 2)} y={toY(center) + 3} textAnchor="middle" className="fill-stone-900 text-[9px] font-bold" transform={`rotate(90 ${toX(backWidth - closetDepth / 2)} ${toY(center)})`}>
+            <text x={toX(backWidth - closetDepth / 2)} y={toY(center) + 4} textAnchor="middle" className="fill-stone-900 text-[12px] font-bold" transform={`rotate(90 ${toX(backWidth - closetDepth / 2)} ${toY(center)})`}>
               {formatInches(module.width)}
             </text>
           </g>
@@ -1300,22 +1302,22 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
               className="fill-stone-400/50 stroke-stone-600"
               strokeDasharray="4 3"
             />
-            <text x={toX(zone.labelX)} y={toY(zone.labelY) + 3} textAnchor="middle" className="fill-stone-700 text-[9px] font-bold">
+            <text x={toX(zone.labelX)} y={toY(zone.labelY) + 4} textAnchor="middle" className="fill-stone-700 text-[11px] font-bold">
               14x12 reach
             </text>
           </g>
         ))}
 
-        <text x={toX(backWidth / 2)} y={toY(0) - 9} textAnchor="middle" className="fill-stone-700 text-[11px] font-bold">
+        <text x={toX(backWidth / 2)} y={toY(0) - 9} textAnchor="middle" className="fill-stone-700 text-[14px] font-bold">
           Back {formatInches(backWidth)}
         </text>
-        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 18} textAnchor="middle" className="fill-stone-600 text-[11px] font-bold">
+        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-stone-600 text-[14px] font-bold">
           Opening {formatInches(openingWidth)}
         </text>
-        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[11px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
+        <text x={toX(8)} y={toY(leftDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(-90 ${toX(8)} ${toY(leftDepth / 2)})`}>
           Left {formatInches(leftDepth)}
         </text>
-        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[11px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
+        <text x={toX(backWidth - 8)} y={toY(rightDepth / 2)} className="fill-stone-700 text-[14px] font-bold" transform={`rotate(90 ${toX(backWidth - 8)} ${toY(rightDepth / 2)})`}>
           Right {formatInches(rightDepth)}
         </text>
       </svg>
@@ -1954,8 +1956,137 @@ function buildWalkInPlanUrl(room, corners, runs) {
 
   const url = new URL(window.location.href);
   url.searchParams.set('type', 'walk-in');
+  url.searchParams.delete('estimate');
   url.searchParams.set('plan', btoa(JSON.stringify({ room, corners, runs })));
   return url.toString();
+}
+
+function buildWalkInEstimateUrl(room, corners, runs) {
+  const url = new URL(buildWalkInPlanUrl(room, corners, runs));
+  url.searchParams.set('estimate', '1');
+  return url.toString();
+}
+
+function shouldShowEstimatePage() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get('estimate') === '1';
+}
+
+function buildDetailedWalkInParts(room, runs) {
+  const parts = new Map();
+  const add = (sku, name, quantity = 1, details = '', category = 'Parts') => {
+    if (!quantity) return;
+    const key = `${category}|${sku}|${name}|${details}`;
+    const current = parts.get(key);
+    parts.set(key, {
+      category,
+      sku,
+      name,
+      details,
+      quantity: (current?.quantity || 0) + quantity,
+    });
+  };
+
+  let towerCount = 0;
+  let adjustableShelfCount = 0;
+  let rodCount = 0;
+  let smallDrawerCount = 0;
+  let largeDrawerCount = 0;
+
+  ['back', 'left', 'right'].forEach((wall) => {
+    const modules = runs[wall] || [];
+    const height = getWallHeight(room, wall);
+
+    if (!modules.length) {
+      return;
+    }
+
+    towerCount += modules.length;
+    add(`VL-24-${height}-W`, `Left vertical panel 24" x ${height}"`, 1, `${wallLabels[wall]} outer left side panel.`, 'Panels');
+    add(`VR-24-${height}-W`, `Right vertical panel 24" x ${height}"`, 1, `${wallLabels[wall]} outer right side panel.`, 'Panels');
+    add(`VD-24-${height}-W`, `Shared divider panel 24" x ${height}"`, Math.max(0, modules.length - 1), `${wallLabels[wall]} shared dividers between connected towers.`, 'Panels');
+
+    modules.forEach((module) => {
+      const code = getWalkInLayoutCode(module, height);
+      const width = numberValue(module.width);
+      const layout = buildWalkInTowerLayout(height, code);
+      const fixedShelves = layout.shelves.filter((shelf) => shelf.fixed).length;
+      const adjustableShelves = layout.shelves.length - fixedShelves;
+      const rods = layout.rods.length;
+      const smallDrawers = layout.drawers.filter((drawer) => drawer.height === 5).length;
+      const largeDrawers = layout.drawers.filter((drawer) => drawer.height === 10).length;
+
+      adjustableShelfCount += adjustableShelves;
+      rodCount += rods;
+      smallDrawerCount += smallDrawers;
+      largeDrawerCount += largeDrawers;
+
+      add(`FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, fixedShelves, `${wallLabels[wall]} ${towerNames[code] || code} structural shelves.`, 'Shelves');
+      add(`SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, adjustableShelves, `${wallLabels[wall]} ${towerNames[code] || code} movable shelves.`, 'Shelves');
+      add(`TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `${wallLabels[wall]} recessed toe-kick kit.`, 'Kits');
+      add(`RK-${width}-S`, `Rod kit ${width}"`, rods, `${wallLabels[wall]} hanging rod kit.`, 'Kits');
+    });
+  });
+
+  add('DRK-24-5-13-W', 'Small drawer kit 24" x 5" x 13"', smallDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
+  add('DRK-24-10-13-W', 'Large drawer kit 24" x 10" x 13"', largeDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
+  add('RDB-S-1', 'Rod bracket set, pair', rodCount, `${rodCount * 2} individual brackets total; one pair per rod.`, 'Hardware');
+  const wallBracketCount = towerCount * 2;
+  add('WLB-S-1', 'Wall L-bracket', wallBracketCount, 'Two wall safety brackets per tower section.', 'Hardware');
+  add('PIN-20-S', 'Shelf pin pack, 20 pins', Math.ceil((adjustableShelfCount * 4) / 20), `${adjustableShelfCount * 4} shelf pins required for ${adjustableShelfCount} adjustable shelves.`, 'Hardware');
+  add('CAMKIT-10-W', 'Rafix/cam lock and screw kit, 10 pieces', towerCount, `${towerCount * 8} Rafix/bolt connector positions required; one 10-piece kit packed per tower.`, 'Hardware');
+  add('WOOD-SCREW', 'Wood screws for wall L-brackets', wallBracketCount, 'One wood screw per wall L-bracket to connect the bracket to the fixed shelf.', 'Hardware');
+  add('WALL-SCREW', 'Wall/stud screws for wall L-brackets', wallBracketCount, 'One wall screw per wall L-bracket to connect the bracket to a stud or suitable wall anchor.', 'Hardware');
+
+  return [...parts.values()].filter((part) => part.quantity > 0);
+}
+
+function PartsList({ parts }) {
+  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware'];
+
+  return (
+    <section className="rounded border border-stone-200 bg-white p-4">
+      <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
+      <div className="mt-3 grid gap-4">
+        {groups.map((group) => {
+          const items = parts.filter((part) => part.category === group);
+
+          if (!items.length) return null;
+
+          return (
+            <div key={group}>
+              <h3 className="text-sm font-bold uppercase text-brand-orange">{group}</h3>
+              <div className="mt-2 overflow-x-auto rounded border border-stone-200">
+                <table className="min-w-[760px] w-full text-left text-sm">
+                  <thead className="bg-stone-50 text-xs uppercase text-stone-500">
+                    <tr>
+                      <th className="px-3 py-2">Qty</th>
+                      <th className="px-3 py-2">SKU</th>
+                      <th className="px-3 py-2">Item</th>
+                      <th className="px-3 py-2">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((part) => (
+                      <tr key={`${part.category}-${part.sku}-${part.name}`} className="border-t border-stone-100">
+                        <td className="px-3 py-2 font-bold text-stone-950">{part.quantity}</td>
+                        <td className="px-3 py-2 font-bold text-stone-700">{part.sku}</td>
+                        <td className="px-3 py-2 font-semibold text-stone-800">{part.name}</td>
+                        <td className="px-3 py-2 text-stone-600">{part.details}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function getRequestedWalkInPlan() {
@@ -1974,6 +2105,175 @@ function getRequestedWalkInPlan() {
   } catch {
     return null;
   }
+}
+
+function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
+  const [previewMode, setPreviewMode] = useState('plan');
+  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+  const parts = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
+  const planUrl = useMemo(() => buildWalkInPlanUrl(room, corners, runs), [room, corners, runs]);
+  const submitForVerification = async (event) => {
+    event.preventDefault();
+    setSubmitStatus({ state: 'loading', message: 'Saving plan to your account...' });
+
+    try {
+      const modules = Object.entries(runs).flatMap(([wall, wallModules]) =>
+        wallModules.map((module, index) => ({
+          wall,
+          index,
+          code: getWalkInProductCode(module, getWallHeight(room, wall)),
+          width: module.width,
+          label: module.label,
+        })),
+      );
+      const response = await fetch('/api/quote-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planType: 'walk-in',
+          customer,
+          room,
+          corners,
+          runs,
+          materials: parts.map(({ category, sku, name, quantity }) => ({ category, sku, name, quantity })),
+          modules,
+          estimatedPrice: pricing.estimatedPrice,
+          signature: pricing.signature,
+          planUrl,
+          wallSummaries: pricing.wallSummaries,
+          internalType: 'walk-in estimate verification',
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to save estimate');
+      }
+
+      setSubmitStatus({
+        state: 'success',
+        message: `Saved. Reference ${payload.quoteId}. Your plan link was attached to your Shopify customer record.`,
+      });
+    } catch (error) {
+      setSubmitStatus({
+        state: 'error',
+        message: error.message,
+      });
+    }
+  };
+
+  return (
+    <main className="h-screen overflow-y-auto bg-brand-ui p-3 text-brand-black sm:p-4">
+      <div className="mx-auto grid max-w-6xl gap-4">
+        <header className="rounded border border-stone-200 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
+              <h1 className="text-2xl font-bold text-stone-950">Walk-in Estimate Detail</h1>
+              <p className="mt-1 text-sm font-semibold text-stone-600">Saved room plan, visual review, and exact build parts for verification.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
+              <div className="text-2xl font-bold text-stone-950">{money(pricing.estimatedPrice) || '$0.00'}</div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a href={planUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">Open editable plan</a>
+            <a href="/walkin.html?type=walk-in" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50">Start new walk-in</a>
+          </div>
+        </header>
+
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4">
+            <section className="rounded border border-stone-200 bg-white p-3">
+              <div className="mb-3 flex justify-end">
+                <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
+                  {[
+                    ['plan', 'Plan'],
+                    ['3d', '3D'],
+                  ].map(([mode, label]) => (
+                    <button key={mode} type="button" onClick={() => setPreviewMode(mode)} className={`rounded px-3 py-1.5 ${previewMode === mode ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {previewMode === 'plan' ? (
+                <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluation} />
+              ) : (
+                <div className="relative h-[560px] overflow-hidden rounded bg-white">
+                  <OrbitHintBadge />
+                  <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
+                </div>
+              )}
+            </section>
+            <PartsList parts={parts} />
+          </div>
+
+          <aside className="grid gap-3 self-start">
+            <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
+              <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
+              <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
+              <div className="mt-3 grid gap-2">
+                <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
+              </div>
+              <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                Save to account
+              </button>
+              {submitStatus.message && (
+                <p className={`mt-2 rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {submitStatus.message}
+                </p>
+              )}
+            </form>
+            <section className="rounded border border-stone-200 bg-white p-4">
+              <h2 className="text-base font-bold text-stone-950">Room</h2>
+              <p className="mt-1 text-xs font-semibold text-stone-500">
+                Back-left: {corners.backLeft === 'back' ? 'back wall wins' : 'left wall wins'} / Back-right: {corners.backRight === 'back' ? 'back wall wins' : 'right wall wins'}
+              </p>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                <dt className="font-semibold text-stone-500">Back</dt>
+                <dd className="text-right font-bold">{formatInches(room.backWidth)}</dd>
+                <dt className="font-semibold text-stone-500">Left</dt>
+                <dd className="text-right font-bold">{formatInches(room.leftDepth)}</dd>
+                <dt className="font-semibold text-stone-500">Right</dt>
+                <dd className="text-right font-bold">{formatInches(room.rightDepth)}</dd>
+                <dt className="font-semibold text-stone-500">Opening</dt>
+                <dd className="text-right font-bold">{formatInches(room.openingWidth)}</dd>
+              </dl>
+            </section>
+            <section className="rounded border border-stone-200 bg-white p-4">
+              <h2 className="text-base font-bold text-stone-950">Wall Runs</h2>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                {Object.entries(evaluation.runLengths).map(([wall, length]) => (
+                  <React.Fragment key={wall}>
+                    <dt className="font-semibold text-stone-500">{wallLabels[wall]}</dt>
+                    <dd className="text-right font-bold text-stone-950">{formatInches(length)} / {formatInches(getWallHeight(room, wall))}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            </section>
+            <section className="rounded border border-stone-200 bg-white p-4">
+              <h2 className="text-base font-bold text-stone-950">Configurations</h2>
+              <div className="mt-2 grid gap-2 text-sm font-semibold text-stone-700">
+                {['back', 'left', 'right'].map((wall) => (
+                  <div key={wall} className="rounded bg-stone-50 px-2 py-1.5">
+                    <div className="font-bold text-stone-950">{wallLabels[wall]}</div>
+                    <div>{runs[wall].length ? runs[wall].map((module) => `${getWalkInLayoutCode(module, getWallHeight(room, wall))} ${module.width}"`).join(', ') : '-'}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </section>
+      </div>
+    </main>
+  );
 }
 
 function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady }) {
@@ -2060,6 +2360,13 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
                 {wallLabels[summary.wall]}: {summary.match.title} {summary.match.price > 0 ? `- ${money(summary.match.price)}` : ''}
               </a>
             ))}
+            <button
+              type="button"
+              onClick={() => window.open(buildWalkInEstimateUrl(room, corners, runs), '_blank', 'noopener,noreferrer')}
+              className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white"
+            >
+              Verify estimate
+            </button>
           </div>
         </div>
       )}
@@ -2074,7 +2381,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
             <button
               type="button"
               disabled={!evaluation.complete}
-              onClick={() => setShowForm((current) => !current)}
+              onClick={() => window.open(buildWalkInEstimateUrl(room, corners, runs), '_blank', 'noopener,noreferrer')}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300"
             >
               Verify estimate
@@ -2112,6 +2419,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
 
 function WalkInPlanner() {
   const requestedPlan = useMemo(() => getRequestedWalkInPlan(), []);
+  const requestedEstimatePage = useMemo(shouldShowEstimatePage, []);
   const defaultRoom = {
     backWidth: 96,
     leftDepth: 72,
@@ -2212,6 +2520,18 @@ function WalkInPlanner() {
     };
   }, []);
 
+  if (requestedEstimatePage && requestedPlan) {
+    return (
+      <WalkInEstimatePage
+        room={room}
+        corners={corners}
+        runs={runs}
+        evaluation={evaluation}
+        pricing={pricing}
+      />
+    );
+  }
+
   const addModule = (code, wall = 'back') => {
     setRuns((current) => ({
       ...current,
@@ -2268,7 +2588,7 @@ function WalkInPlanner() {
   }
 
   return (
-    <main className="min-h-screen bg-brand-ui text-brand-black lg:h-screen">
+    <main className="app-shell bg-brand-ui text-brand-black">
       <header className="flex min-h-16 items-center justify-between gap-3 border-b border-stone-200 bg-white px-3 py-2 sm:px-4">
         <div>
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>

@@ -31,6 +31,18 @@ AIRTABLE_QUOTES_TABLE
 EMAIL_WEBHOOK_URL
 ```
 
+## Optional Shopify customer save variables
+
+Add these if estimate submissions should create/update Shopify customers, subscribe them for email marketing, and attach the latest closet plan link to the customer record.
+
+The Shopify custom app token needs the `write_customers` Admin API scope.
+
+```text
+SHOPIFY_SHOP_DOMAIN
+SHOPIFY_ADMIN_ACCESS_TOKEN
+SHOPIFY_API_VERSION
+```
+
 ## Hosted API endpoints
 
 The website host must serve:

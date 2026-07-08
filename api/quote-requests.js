@@ -1,4 +1,5 @@
 import { createAirtableQuote, sendConfirmationEmail, sendJson } from './_airtable.js';
+import { upsertShopifyCustomerPlan } from './_shopify.js';
 
 async function readRequestBody(req) {
   return new Promise((resolve, reject) => {
@@ -25,12 +26,14 @@ export default async function handler(req, res) {
     const quoteId = `quote-${submittedAt.replace(/[:.]/g, '-')}`;
     const capturedQuote = { ...quote, quoteId, submittedAt };
     const airtableRecord = await createAirtableQuote(capturedQuote);
+    const shopifyCustomer = await upsertShopifyCustomerPlan(capturedQuote);
     const email = await sendConfirmationEmail(capturedQuote);
 
     sendJson(res, 200, {
       ok: true,
       quoteId,
       captureMode: airtableRecord ? 'airtable' : 'unconfigured',
+      shopifyCustomer,
       email,
     });
   } catch (error) {

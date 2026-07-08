@@ -332,6 +332,14 @@ function shouldExposeCaptureData() {
   return new URLSearchParams(window.location.search).get('capture') === '1';
 }
 
+function shouldShowEstimatePage() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get('estimate') === '1';
+}
+
 function getRequestedMode() {
   if (typeof window === 'undefined') {
     return 'planner';
@@ -365,7 +373,14 @@ function buildReachInPlanUrl(planDetails, modules) {
 
   const url = new URL(window.location.href);
   url.searchParams.delete('kit');
+  url.searchParams.delete('estimate');
   url.searchParams.set('plan', btoa(JSON.stringify({ planDetails, modules })));
+  return url.toString();
+}
+
+function buildReachInEstimateUrl(planDetails, modules) {
+  const url = new URL(buildReachInPlanUrl(planDetails, modules));
+  url.searchParams.set('estimate', '1');
   return url.toString();
 }
 
@@ -1741,6 +1756,112 @@ function buildMaterialSummary(modules) {
   return [...counts.entries()].filter(([, quantity]) => quantity > 0).map(([label, quantity]) => ({ label, quantity }));
 }
 
+function buildDetailedReachInParts(modules, height) {
+  const parts = new Map();
+  const add = (sku, name, quantity = 1, details = '', category = 'Parts') => {
+    if (!quantity) return;
+    const key = `${category}|${sku}|${name}|${details}`;
+    const current = parts.get(key);
+    parts.set(key, {
+      category,
+      sku,
+      name,
+      details,
+      quantity: (current?.quantity || 0) + quantity,
+    });
+  };
+
+  if (!modules.length) {
+    return [];
+  }
+
+  add(`VL-24-${height}-W`, `Left vertical panel 24" x ${height}"`, 1, 'Outer left side panel with 32mm drill line and baseboard notch.', 'Panels');
+  add(`VR-24-${height}-W`, `Right vertical panel 24" x ${height}"`, 1, 'Outer right side panel with 32mm drill line and baseboard notch.', 'Panels');
+  add(`VD-24-${height}-W`, `Shared divider panel 24" x ${height}"`, Math.max(0, modules.length - 1), 'One shared divider at each tower joint; no doubled side panels.', 'Panels');
+
+  const drawing = createDrawing(createPlannerDrawing(height, modules));
+  let adjustableShelfCount = 0;
+  let rodCount = 0;
+  let smallDrawerCount = 0;
+  let largeDrawerCount = 0;
+
+  drawing.towers.forEach((tower) => {
+    const layout = buildTowerLayout(drawing, tower);
+    const fixedShelves = layout.shelves.filter((shelf) => shelf.fixed).length;
+    const adjustableShelves = layout.shelves.length - fixedShelves;
+    const rods = layout.rods.length;
+    const smallDrawers = layout.drawers.filter((drawer) => drawer.height === 5).length;
+    const largeDrawers = layout.drawers.filter((drawer) => drawer.height === 10).length;
+
+    adjustableShelfCount += adjustableShelves;
+    rodCount += rods;
+    smallDrawerCount += smallDrawers;
+    largeDrawerCount += largeDrawers;
+
+    add(`FS-${tower.width}-14-W`, `Fixed shelf ${tower.width}" x 14"`, fixedShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay structural shelves.`, 'Shelves');
+    add(`SH-${tower.width}-14-W`, `Adjustable shelf ${tower.width}" x 14"`, adjustableShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay movable shelves.`, 'Shelves');
+    add(`TKK-${tower.width}-5-W`, `Toe-kick kit ${tower.width}" x 5"`, 1, 'One recessed toe-kick kit per tower bay.', 'Kits');
+    add(`RK-${tower.width}-S`, `Rod kit ${tower.width}"`, rods, 'Hanging rod kit for this bay width.', 'Kits');
+  });
+
+  add('DRK-24-5-13-W', 'Small drawer kit 24" x 5" x 13"', smallDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
+  add('DRK-24-10-13-W', 'Large drawer kit 24" x 10" x 13"', largeDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
+  add('RDB-S-1', 'Rod bracket set, pair', rodCount, `${rodCount * 2} individual brackets total; one pair per rod.`, 'Hardware');
+  const wallBracketCount = modules.length * 2;
+  add('WLB-S-1', 'Wall L-bracket', wallBracketCount, 'Two wall safety brackets per tower section.', 'Hardware');
+  add('PIN-20-S', 'Shelf pin pack, 20 pins', Math.ceil((adjustableShelfCount * 4) / 20), `${adjustableShelfCount * 4} shelf pins required for ${adjustableShelfCount} adjustable shelves.`, 'Hardware');
+  add('CAMKIT-10-W', 'Rafix/cam lock and screw kit, 10 pieces', modules.length, `${modules.length * 8} Rafix/bolt connector positions required; one 10-piece kit packed per tower.`, 'Hardware');
+  add('WOOD-SCREW', 'Wood screws for wall L-brackets', wallBracketCount, 'One wood screw per wall L-bracket to connect the bracket to the fixed shelf.', 'Hardware');
+  add('WALL-SCREW', 'Wall/stud screws for wall L-brackets', wallBracketCount, 'One wall screw per wall L-bracket to connect the bracket to a stud or suitable wall anchor.', 'Hardware');
+
+  return [...parts.values()].filter((part) => part.quantity > 0);
+}
+
+function PartsList({ parts }) {
+  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware'];
+
+  return (
+    <section className="rounded border border-stone-200 bg-white p-4">
+      <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
+      <div className="mt-3 grid gap-4">
+        {groups.map((group) => {
+          const items = parts.filter((part) => part.category === group);
+
+          if (!items.length) return null;
+
+          return (
+            <div key={group}>
+              <h3 className="text-sm font-bold uppercase text-brand-orange">{group}</h3>
+              <div className="mt-2 overflow-x-auto rounded border border-stone-200">
+                <table className="min-w-[760px] w-full text-left text-sm">
+                  <thead className="bg-stone-50 text-xs uppercase text-stone-500">
+                    <tr>
+                      <th className="px-3 py-2">Qty</th>
+                      <th className="px-3 py-2">SKU</th>
+                      <th className="px-3 py-2">Item</th>
+                      <th className="px-3 py-2">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((part) => (
+                      <tr key={`${part.category}-${part.sku}-${part.name}`} className="border-t border-stone-100">
+                        <td className="px-3 py-2 font-bold text-stone-950">{part.quantity}</td>
+                        <td className="px-3 py-2 font-bold text-stone-700">{part.sku}</td>
+                        <td className="px-3 py-2 font-semibold text-stone-800">{part.name}</td>
+                        <td className="px-3 py-2 text-stone-600">{part.details}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function isDrawerTower(module) {
   return ['S3D', 'H3D', 'S2D'].includes(module.code);
 }
@@ -1916,6 +2037,9 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
               Buy This System
             </a>
           )}
+          <button type="button" onClick={onContinue} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">
+            Verify estimate
+          </button>
         </div>
         {drawerWarnings.length > 0 && (
           <div className="mt-3 grid gap-2">
@@ -2085,6 +2209,166 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
         </form>
       </div>
     </section>
+  );
+}
+
+function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
+  const [previewMode, setPreviewMode] = useState('plan');
+  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+  const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
+  const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules), [planDetails, modules]);
+  const submitForVerification = async (event) => {
+    event.preventDefault();
+    setSubmitStatus({ state: 'loading', message: 'Saving plan to your account...' });
+
+    try {
+      const response = await fetch('/api/quote-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...planDetails,
+          customer,
+          materials: parts.map(({ category, sku, name, quantity }) => ({ category, sku, name, quantity })),
+          planType: 'reach-in',
+          planUrl,
+          modules: modules.map((module, index) => ({
+            index,
+            code: module.code,
+            width: module.width,
+            label: module.label,
+          })),
+          estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
+          signature: evaluation.signature,
+          internalType: 'reach-in estimate verification',
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to save estimate');
+      }
+
+      setSubmitStatus({
+        state: 'success',
+        message: `Saved. Reference ${payload.quoteId}. Your plan link was attached to your Shopify customer record.`,
+      });
+    } catch (error) {
+      setSubmitStatus({
+        state: 'error',
+        message: error.message,
+      });
+    }
+  };
+
+  return (
+    <main className="h-screen overflow-y-auto bg-brand-ui p-3 text-brand-black sm:p-4">
+      <div className="mx-auto grid max-w-6xl gap-4">
+        <header className="rounded border border-stone-200 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
+              <h1 className="text-2xl font-bold text-stone-950">Reach-in Estimate Detail</h1>
+              <p className="mt-1 text-sm font-semibold text-stone-600">Saved plan, visual review, and exact build parts for verification.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
+              <div className="text-2xl font-bold text-stone-950">{money(evaluation.displayPrice || evaluation.estimatedPrice) || '$0.00'}</div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a href={planUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">Open editable plan</a>
+            <a href="/" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50">Start new plan</a>
+          </div>
+        </header>
+
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4">
+            <section className="rounded border border-stone-200 bg-white p-3">
+              <div className="mb-3 flex justify-end">
+                <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
+                  {[
+                    ['plan', 'Plan'],
+                    ['3d', '3D'],
+                  ].map(([mode, label]) => (
+                    <button key={mode} type="button" onClick={() => setPreviewMode(mode)} className={`rounded px-3 py-1.5 ${previewMode === mode ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {previewMode === 'plan' ? (
+                <ReachInPlanView
+                  modules={modules}
+                  wallWidth={planDetails.wallWidth}
+                  roomDepth={planDetails.roomDepth}
+                  openingWidth={planDetails.openingWidth}
+                  openingLeft={planDetails.openingLeft}
+                  openingRight={planDetails.openingRight}
+                  doorType={planDetails.doorType}
+                  height={planDetails.height}
+                />
+              ) : (
+                <div className="relative h-[520px] overflow-hidden rounded bg-white">
+                  <OrbitHintBadge />
+                  <Canvas className="h-full w-full" camera={{ position: [0, 50, 105], fov: 34 }} dpr={[1, 2]} shadows>
+                    <RenderScene drawing={drawing} photoMode={false} wallWidth={planDetails.wallWidth} reachInRoom={planDetails} />
+                  </Canvas>
+                </div>
+              )}
+            </section>
+            <PartsList parts={parts} />
+          </div>
+
+          <aside className="grid gap-3 self-start">
+            <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
+              <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
+              <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
+              <div className="mt-3 grid gap-2">
+                <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
+              </div>
+              <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                Save to account
+              </button>
+              {submitStatus.message && (
+                <p className={`mt-2 rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {submitStatus.message}
+                </p>
+              )}
+            </form>
+            <section className="rounded border border-stone-200 bg-white p-4">
+              <h2 className="text-base font-bold text-stone-950">Plan Summary</h2>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                <dt className="font-semibold text-stone-500">Height</dt>
+                <dd className="text-right font-bold">{formatInches(planDetails.height)}</dd>
+                <dt className="font-semibold text-stone-500">Wall width</dt>
+                <dd className="text-right font-bold">{formatInches(planDetails.wallWidth)}</dd>
+                <dt className="font-semibold text-stone-500">Assembled</dt>
+                <dd className="text-right font-bold">{formatInches(planDetails.assembledWidth)}</dd>
+                <dt className="font-semibold text-stone-500">Needed</dt>
+                <dd className="text-right font-bold">{formatInches(planDetails.requiredWidth)}</dd>
+                <dt className="font-semibold text-stone-500">Opening</dt>
+                <dd className="text-right font-bold">{formatInches(planDetails.openingWidth)}</dd>
+                <dt className="font-semibold text-stone-500">Door</dt>
+                <dd className="text-right font-bold">{reachInDoorTypes.find((type) => type.value === planDetails.doorType)?.label || 'No door / regular'}</dd>
+              </dl>
+            </section>
+            <section className="rounded border border-stone-200 bg-white p-4">
+              <h2 className="text-base font-bold text-stone-950">Towers</h2>
+              <ol className="mt-2 grid gap-1 text-sm font-semibold text-stone-700">
+                {modules.map((module, index) => (
+                  <li key={module.id}>{index + 1}. {towerNames[module.code] || module.code} / {module.width}" bay</li>
+                ))}
+              </ol>
+            </section>
+          </aside>
+        </section>
+      </div>
+    </main>
   );
 }
 
@@ -2388,6 +2672,7 @@ export default function App() {
   const exposeCaptureData = useMemo(shouldExposeCaptureData, []);
   const requestedMode = useMemo(getRequestedMode, []);
   const requestedReachInPlan = useMemo(getRequestedReachInPlan, []);
+  const requestedEstimatePage = useMemo(shouldShowEstimatePage, []);
   const requestedPlanDetails = requestedReachInPlan?.planDetails || {};
   const requestedPlanModules = Array.isArray(requestedReachInPlan?.modules) ? requestedReachInPlan.modules : null;
   const [appMode, setAppMode] = useState(requestedMode);
@@ -2751,6 +3036,17 @@ export default function App() {
     onCenterOpening: () => balanceOpeningReturns(wallWidth, reachInOpeningWidth),
   };
 
+  if (requestedEstimatePage && requestedReachInPlan) {
+    return (
+      <ReachInEstimatePage
+        evaluation={plannerEvaluation}
+        modules={plannerModules}
+        planDetails={plannerPlanDetails}
+        drawing={drawing}
+      />
+    );
+  }
+
   if (appMode === 'planner' && !closetType) {
     return <ClosetTypeStart onReachIn={selectReachIn} />;
   }
@@ -2901,7 +3197,7 @@ export default function App() {
                     evaluation={plannerEvaluation}
                     modules={plannerModules}
                     planDetails={plannerPlanDetails}
-                    onContinue={() => setPlannerStep('review')}
+                    onContinue={() => window.open(buildReachInEstimateUrl(plannerPlanDetails, plannerModules), '_blank', 'noopener,noreferrer')}
                     isCatalogReady={airtableStatus.state === 'ready'}
                   />
                 </div>
