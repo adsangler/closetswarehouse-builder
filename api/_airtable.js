@@ -2,6 +2,8 @@ const tableEnvKeys = {
   kits: 'AIRTABLE_KITS_TABLE',
   parts: 'AIRTABLE_PARTS_TABLE',
   kitParts: 'AIRTABLE_KIT_PARTS_TABLE',
+  components: 'AIRTABLE_COMPONENTS_TABLE',
+  partComponents: 'AIRTABLE_PART_COMPONENTS_TABLE',
 };
 
 function getAirtableConfig(tableKey) {

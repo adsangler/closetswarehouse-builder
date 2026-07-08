@@ -2,11 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { buildResolvedParts } from './api/_part-pricing.js';
 
 const airtableTables = {
   '/api/kits': 'AIRTABLE_KITS_TABLE',
   '/api/parts': 'AIRTABLE_PARTS_TABLE',
   '/api/kit-parts': 'AIRTABLE_KIT_PARTS_TABLE',
+  '/api/components': 'AIRTABLE_COMPONENTS_TABLE',
+  '/api/part-components': 'AIRTABLE_PART_COMPONENTS_TABLE',
 };
 
 function airtableProxy(env) {
@@ -62,6 +65,82 @@ function airtableProxy(env) {
 
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ records }));
+        } catch (error) {
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+    },
+  };
+}
+
+async function fetchAirtableRecords(env, tableEnvKey) {
+  const token = env.AIRTABLE_TOKEN;
+  const baseId = env.AIRTABLE_BASE_ID;
+  const tableName = env[tableEnvKey];
+
+  if (!token || !baseId || !tableName) {
+    throw new Error(`Missing Airtable env config for ${tableEnvKey}`);
+  }
+
+  const records = [];
+  let offset;
+
+  do {
+    const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
+    url.searchParams.set('pageSize', '100');
+
+    if (offset) {
+      url.searchParams.set('offset', offset);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Airtable returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    records.push(...payload.records);
+    offset = payload.offset;
+  } while (offset);
+
+  return records;
+}
+
+function resolvedPartsProxy(env) {
+  return {
+    name: 'resolved-parts-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const pathname = req.url?.split('?')[0];
+
+        if (pathname !== '/api/parts-resolved') {
+          next();
+          return;
+        }
+
+        if (req.method !== 'GET') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          const [parts, components, partComponents] = await Promise.all([
+            fetchAirtableRecords(env, 'AIRTABLE_PARTS_TABLE'),
+            fetchAirtableRecords(env, 'AIRTABLE_COMPONENTS_TABLE'),
+            fetchAirtableRecords(env, 'AIRTABLE_PART_COMPONENTS_TABLE'),
+          ]);
+
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ records: buildResolvedParts({ parts, components, partComponents }) }));
         } catch (error) {
           res.statusCode = 502;
           res.setHeader('Content-Type', 'application/json');
@@ -227,7 +306,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [quoteRequestProxy(env), airtableProxy(env), react()],
+    plugins: [quoteRequestProxy(env), resolvedPartsProxy(env), airtableProxy(env), react()],
     server: {
       host: 'localhost',
       port: 5173,

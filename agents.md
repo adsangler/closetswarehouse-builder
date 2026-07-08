@@ -98,6 +98,9 @@ Use the BOM rules from Airtable/business spec when deriving kit geometry or part
 - Cam lock kits use `CAMKIT-10-W`.
 - Shelf pins use `PIN-20-S`; calculate 4 pins per adjustable shelf.
 - Shelf pin pack quantity: 1 pack for up to 5 adjustable shelves, 2 packs for 6-8 adjustable shelves (`S7` / `S8` towers).
+- Airtable has `Components` and `Part Components` tables for nested part composition.
+- A part can carry its own direct cost/price, or if those direct fields are blank/zero and the part is made from components, calculate effective cost/price from the linked component quantities.
+- The `Part Components` table links parent parts to component rows and includes the quantity of each component used in that part.
 
 Width calculations:
 - Single tower assembled width = nominal width + 1.5".

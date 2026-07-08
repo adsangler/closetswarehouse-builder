@@ -20,6 +20,8 @@ AIRTABLE_BASE_ID
 AIRTABLE_KITS_TABLE
 AIRTABLE_PARTS_TABLE
 AIRTABLE_KIT_PARTS_TABLE
+AIRTABLE_COMPONENTS_TABLE
+AIRTABLE_PART_COMPONENTS_TABLE
 ```
 
 ## Optional quote capture variables
@@ -51,6 +53,9 @@ The website host must serve:
 /api/kits
 /api/parts
 /api/kit-parts
+/api/components
+/api/part-components
+/api/parts-resolved
 /api/quote-requests
 ```
 
