@@ -1690,40 +1690,6 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
           </text>
         )}
       </svg>
-      <div className="mt-2 grid gap-2 text-xs sm:grid-cols-6">
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Room depth</div>
-          <div className="text-sm font-bold text-stone-950">{formatInches(reachDepth)}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Closet unit</div>
-          <div className="text-sm font-bold text-stone-950">{formatInches(depth)}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Clear depth</div>
-          <div className="text-sm font-bold text-emerald-700">{formatInches(remainingDepth)}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Height</div>
-          <div className="text-sm font-bold text-stone-950">{formatInches(height)}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Opening</div>
-          <div className="text-sm font-bold text-stone-950">{formatInches(doorWidth)}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Open math</div>
-          <div className={`text-sm font-bold ${openingMatchesWall ? 'text-emerald-700' : 'text-red-700'}`}>{formatInches(openingTotal)}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Door</div>
-          <div className="text-sm font-bold text-stone-950">{reachInDoorTypes.find((type) => type.value === doorType)?.label || 'No door / regular'}</div>
-        </div>
-        <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Center divider</div>
-          <div className={`text-sm font-bold ${slidingDividerAligned ? 'text-emerald-700' : 'text-red-700'}`}>{doorType === 'sliding' ? (slidingDividerAligned ? 'Aligned' : 'Needed') : 'N/A'}</div>
-        </div>
-      </div>
     </section>
   );
 }
@@ -1914,58 +1880,88 @@ function isDrawerTower(module) {
   return ['S3D', 'H3D', 'S2D'].includes(module.code);
 }
 
-function SystemMetrics({ planDetails, moduleCount, layout = 'horizontal' }) {
+function SummaryMetricGrid({ items, layout = 'horizontal' }) {
   const metricClass = layout === 'rail' ? 'grid grid-cols-2 gap-2 text-xs' : 'grid grid-cols-4 gap-1.5 text-xs';
 
   return (
     <div className={metricClass}>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Assembled</div>
-        <div className="text-sm font-bold text-stone-950">{moduleCount ? `${planDetails.assembledWidth.toFixed(2)}"` : '-'}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Wall needed</div>
-        <div className="text-sm font-bold text-stone-950">{moduleCount ? `${planDetails.requiredWidth.toFixed(2)}"` : '-'}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Remaining</div>
-        <div className={`text-sm font-bold ${planDetails.fits ? 'text-emerald-700' : 'text-red-700'}`}>{moduleCount ? `${planDetails.remainingWidth.toFixed(2)}"` : '-'}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Towers</div>
-        <div className="text-sm font-bold text-stone-950">{moduleCount || '-'}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Room depth</div>
-        <div className="text-sm font-bold text-stone-950">{formatInches(planDetails.roomDepth || depth)}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Ceiling</div>
-        <div className={`text-sm font-bold ${planDetails.ceilingClear ? 'text-emerald-700' : 'text-red-700'}`}>{formatInches(planDetails.ceilingHeight || 0)}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Clear depth</div>
-        <div className="text-sm font-bold text-emerald-700">{formatInches(planDetails.clearDepth || 0)}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Opening</div>
-        <div className={`text-sm font-bold ${planDetails.openingClear ? 'text-stone-950' : 'text-red-700'}`}>{formatInches(planDetails.openingWidth || 0)}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Open total</div>
-        <div className={`text-sm font-bold ${planDetails.openingMatchesWall ? 'text-emerald-700' : 'text-red-700'}`}>{formatInches(planDetails.openingTotal || 0)}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Door type</div>
-        <div className="text-sm font-bold text-stone-950">{reachInDoorTypes.find((type) => type.value === planDetails.doorType)?.label || 'No door / regular'}</div>
-      </div>
-      <div className="rounded bg-stone-50 px-2 py-1.5">
-        <div className="font-semibold text-stone-500">Sliding divider</div>
-        <div className={`text-sm font-bold ${planDetails.slidingDividerAligned ? 'text-emerald-700' : 'text-red-700'}`}>
-          {planDetails.doorType === 'sliding' ? (planDetails.slidingDividerAligned ? 'Centered' : 'Off center') : 'N/A'}
+      {items.map(({ label, value, tone = 'text-stone-950' }) => (
+        <div key={label} className="rounded bg-stone-50 px-2 py-1.5">
+          <div className="font-semibold text-stone-500">{label}</div>
+          <div className={`text-sm font-bold ${tone}`}>{value}</div>
         </div>
-      </div>
+      ))}
     </div>
+  );
+}
+
+function ReachInSpaceSummary({ planDetails, onEdit, children }) {
+  const doorLabel = reachInDoorTypes.find((type) => type.value === planDetails.doorType)?.label || 'No door / regular';
+  const items = [
+    { label: 'Back wall', value: formatInches(planDetails.wallWidth || 0) },
+    { label: 'Closet depth', value: formatInches(planDetails.roomDepthInput || planDetails.roomDepth || 0) },
+    { label: 'Ceiling', value: formatInches(planDetails.ceilingHeight || 0), tone: planDetails.ceilingClear ? 'text-emerald-700' : 'text-red-700' },
+    { label: 'Opening', value: formatInches(planDetails.openingWidth || 0), tone: planDetails.openingClear ? 'text-stone-950' : 'text-red-700' },
+    { label: 'Left / right', value: `${formatInches(planDetails.openingLeft || 0)} / ${formatInches(planDetails.openingRight || 0)}` },
+    { label: 'Open total', value: formatInches(planDetails.openingTotal || 0), tone: planDetails.openingMatchesWall ? 'text-emerald-700' : 'text-red-700' },
+    { label: 'Door type', value: doorLabel },
+    {
+      label: 'Sliding divider',
+      value: planDetails.doorType === 'sliding' ? (planDetails.slidingDividerAligned ? 'Centered' : 'Off center') : 'N/A',
+      tone: planDetails.slidingDividerAligned ? 'text-emerald-700' : 'text-red-700',
+    },
+  ];
+
+  return (
+    <section className="rounded border border-stone-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-stone-950">Closet space summary</h2>
+        <button type="button" onClick={onEdit} className="rounded border border-stone-300 px-2 py-1 text-xs font-bold text-stone-700 hover:border-brand-orange">
+          Edit
+        </button>
+      </div>
+      <div className="mt-3">
+        <SummaryMetricGrid items={items} />
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ReachInClosetDetailsSummary({ planDetails, moduleCount, embedded = false }) {
+  const details = [
+    ['System height', formatInches(planDetails.height || 0)],
+    ['Closet unit depth', formatInches(depth)],
+    ['Assembled', moduleCount ? `${planDetails.assembledWidth.toFixed(2)}"` : '-'],
+    ['Wall needed', moduleCount ? `${planDetails.requiredWidth.toFixed(2)}"` : '-'],
+    ['Remaining', moduleCount ? `${planDetails.remainingWidth.toFixed(2)}"` : '-'],
+    ['Towers', moduleCount || '-'],
+    ['Clear depth', formatInches(planDetails.clearDepth || 0)],
+    ['Fit', planDetails.fits ? 'Fits' : 'Needs adjustment'],
+  ];
+
+  const content = (
+    <>
+      <h3 className="text-sm font-bold text-stone-950">Closet details</h3>
+      <dl className="mt-3 grid grid-cols-4 gap-2 text-xs">
+        {details.map(([label, value]) => (
+          <div key={label} className="rounded bg-stone-50 px-2 py-1.5">
+            <dt className="font-semibold text-stone-500">{label}</dt>
+            <dd className="mt-0.5 font-bold text-stone-950">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="mt-3 border-t border-stone-200 pt-3">{content}</div>;
+  }
+
+  return (
+    <section className="rounded border border-stone-200 bg-white p-3">
+      {content}
+    </section>
   );
 }
 
@@ -1975,22 +1971,23 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange }
 
   if (modules.length === 0) {
     return (
-      <section className="border-t border-stone-200 bg-white p-3">
+      <section className="border-b border-stone-200 bg-white p-3">
         <div className="rounded border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm font-semibold text-stone-400">
-          Drag one of the 7 configurations onto the render area.
+          Build your closets by clicking or dragging any of the above configurations.
         </div>
       </section>
     );
   }
 
   return (
-    <section className="border-t border-stone-200 bg-white p-3">
-      <div className="grid w-full items-start gap-2 pb-1" style={{ gridTemplateColumns: cardGridColumns }}>
+    <section className="border-b border-stone-200 bg-white p-3">
+      <h2 className="mb-2 text-sm font-bold text-stone-950">Tower selected</h2>
+      <div className="grid w-full items-start gap-2 pb-1 sm:grid-cols-2 xl:grid-cols-[var(--tower-grid-columns)]" style={{ '--tower-grid-columns': cardGridColumns }}>
         {modules.map((module, index) => {
           const widthOptions = getWidthOptions(module.configCode);
 
           return (
-            <article key={module.id} className="min-w-0 rounded border border-stone-200 bg-stone-50 p-2">
+            <article key={module.id} className="min-w-0 rounded border border-stone-200 bg-stone-50 p-2 xl:[grid-column:auto]">
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-1">
                 <div className="min-w-0">
                   <div className="truncate text-xs font-bold text-stone-950" title={towerNames[module.code] || module.code}>
@@ -2194,7 +2191,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
               <dd className="font-bold text-stone-950">{planDetails.height}"</dd>
               <dt className="font-semibold text-stone-500">Wall width</dt>
               <dd className="font-bold text-stone-950">{planDetails.wallWidth}"</dd>
-              <dt className="font-semibold text-stone-500">Room depth</dt>
+              <dt className="font-semibold text-stone-500">Closet depth</dt>
               <dd className="font-bold text-stone-950">{formatInches(planDetails.roomDepth || depth)}</dd>
               <dt className="font-semibold text-stone-500">Clear depth</dt>
               <dd className="font-bold text-stone-950">{formatInches(planDetails.clearDepth || 0)}</dd>
@@ -2472,7 +2469,7 @@ function ReachInRoomSetup({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="ceiling-height">
-              Room ceiling height
+              Closet ceiling height
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -2492,7 +2489,7 @@ function ReachInRoomSetup({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="wall-width">
-              Room back wall width
+              Closet back wall width
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -2511,7 +2508,7 @@ function ReachInRoomSetup({
 
         <div>
           <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="reach-in-depth">
-            Room reach-in depth
+            Closet reach-in depth
           </label>
           <div className="flex items-center gap-1">
             <input
@@ -2663,7 +2660,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
   }
 
   if (!planDetails.ceilingClear) {
-    blocking.push(`Room ceiling height ${formatInches(planDetails.ceilingHeight)} must be higher than the ${formatInches(planDetails.height)} closet system height.`);
+    blocking.push(`Closet ceiling height ${formatInches(planDetails.ceilingHeight)} must be higher than the ${formatInches(planDetails.height)} closet system height.`);
   }
 
   return (
@@ -2671,7 +2668,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
       <header className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4">
         <div>
           <h1 className="text-lg font-bold text-stone-950">Reach-in Closet Planner</h1>
-          <p className="text-xs font-semibold text-stone-500">Step 1: room dimensions and opening</p>
+          <p className="text-xs font-semibold text-stone-500">Step 1: closet dimensions and opening</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
@@ -2682,7 +2679,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
       </header>
       <section className="grid gap-4 p-4 xl:grid-cols-[460px_minmax(0,1fr)]">
         <div className="space-y-3">
-          <ReachInRoomSetup title="Reach-in Dimensions" {...setupProps} planDetails={planDetails} />
+          <ReachInRoomSetup title="Closet Dimensions" {...setupProps} planDetails={planDetails} />
           <section className="rounded border border-stone-200 bg-white p-3">
             <h2 className="text-base font-bold text-stone-950">Validation</h2>
             <div className="mt-2 space-y-2 text-sm font-bold">
@@ -2721,24 +2718,28 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
   );
 }
 
-export default function App() {
+export default function App({ internalRenderer = false }) {
   const requestedKitHandle = useMemo(getRequestedKitHandle, []);
   const requestedFallbackKit = useMemo(() => kitHandleToDrawing(requestedKitHandle) || fallbackKit, [requestedKitHandle]);
   const exposeCaptureData = useMemo(shouldExposeCaptureData, []);
-  const requestedMode = useMemo(getRequestedMode, []);
+  const requestedMode = useMemo(() => {
+    if (!internalRenderer) return 'planner';
+    if (typeof window === 'undefined') return 'renderer';
+    return new URLSearchParams(window.location.search).get('mode') === 'planner' ? 'planner' : 'renderer';
+  }, [internalRenderer]);
   const requestedType = useMemo(() => (typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('type')), []);
   const requestedReachInPlan = useMemo(getRequestedReachInPlan, []);
   const requestedEstimatePage = useMemo(shouldShowEstimatePage, []);
   const requestedPlanDetails = requestedReachInPlan?.planDetails || {};
   const requestedPlanModules = Array.isArray(requestedReachInPlan?.modules) ? requestedReachInPlan.modules : null;
-  const [appMode, setAppMode] = useState(requestedMode);
+  const [appMode, setAppMode] = useState(internalRenderer ? requestedMode : 'planner');
   const [airtableStatus, setAirtableStatus] = useState({
     state: 'loading',
     message: 'Checking Airtable...',
   });
-  const startsInReachIn = requestedType === 'reach-in' || requestedMode === 'renderer' || Boolean(requestedReachInPlan);
+  const startsInReachIn = internalRenderer || requestedType === 'reach-in' || requestedMode === 'renderer' || Boolean(requestedReachInPlan);
   const [closetType, setClosetType] = useState(startsInReachIn ? 'reach-in' : '');
-  const [reachInRoomCaptured, setReachInRoomCaptured] = useState(requestedMode === 'renderer' || Boolean(requestedReachInPlan));
+  const [reachInRoomCaptured, setReachInRoomCaptured] = useState(internalRenderer || requestedMode === 'renderer' || Boolean(requestedReachInPlan));
   const [kitOptions, setKitOptions] = useState([requestedFallbackKit]);
   const [selectedHandle, setSelectedHandle] = useState(requestedFallbackKit.handle);
   const [viewMode, setViewMode] = useState('photo');
@@ -3009,6 +3010,14 @@ export default function App() {
     setPlannerPreviewMode('plan');
   };
 
+  const enterReachInConfiguration = () => {
+    setReachInRoomCaptured(true);
+    window.requestAnimationFrame(() => {
+      document.querySelector('.app-shell')?.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  };
+
   const resetClosetType = () => {
     setClosetType('');
     setReachInRoomCaptured(false);
@@ -3113,7 +3122,7 @@ export default function App() {
       <ReachInRoomCaptureStep
         setupProps={reachInSetupProps}
         planDetails={plannerPlanDetails}
-        onContinue={() => setReachInRoomCaptured(true)}
+        onContinue={enterReachInConfiguration}
         onBack={resetClosetType}
       />
     );
@@ -3122,48 +3131,61 @@ export default function App() {
   return (
     <main className="app-shell bg-brand-ui text-brand-black">
       <header className="app-header flex items-center justify-between gap-3 border-b border-stone-200 bg-white px-4">
-        <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">Closets Warehouse Renderer</h1>
-        <div className="flex min-w-0 items-center gap-3">
-          {appMode === 'planner' && (
+        <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">
+          {internalRenderer ? 'Internal Image Renderer' : 'Reach-in Closet Planner'}
+        </h1>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+          {!internalRenderer && appMode === 'planner' && (
             <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
               Change to Walk In
             </button>
           )}
-          {appMode === 'planner' && <ConsultationCta compact />}
-          <span
-            className={`whitespace-nowrap text-xs font-semibold ${
-              airtableStatus.state === 'ready'
-                ? 'text-emerald-700'
-                : airtableStatus.state === 'error'
-                  ? 'text-red-700'
-                  : 'text-stone-500'
-            }`}
-            title={airtableStatus.message}
-          >
-            Airtable: {airtableStatus.message}
-          </span>
-          <AppModeToggle appMode={appMode} onChange={setAppMode} />
-          <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
-          {appMode === 'renderer' && <KitSelector drawings={kitOptions} selectedHandle={drawing.handle} onChange={setSelectedHandle} />}
-          {appMode === 'renderer' && <ExportButton drawing={drawing} />}
+          {!internalRenderer && appMode === 'planner' && <ConsultationCta compact />}
+          {internalRenderer && (
+            <>
+              <a href="/internal-renderer-style-guide.md" target="_blank" className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+                Style guide
+              </a>
+              <a href="/shopify-photo-workflow.md" target="_blank" className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+                Photo workflow
+              </a>
+              <span
+                className={`whitespace-nowrap text-xs font-semibold ${
+                  airtableStatus.state === 'ready'
+                    ? 'text-emerald-700'
+                    : airtableStatus.state === 'error'
+                      ? 'text-red-700'
+                      : 'text-stone-500'
+                }`}
+                title={airtableStatus.message}
+              >
+                Airtable: {airtableStatus.message}
+              </span>
+              <AppModeToggle appMode={appMode} onChange={setAppMode} />
+              <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
+              {appMode === 'renderer' && <KitSelector drawings={kitOptions} selectedHandle={drawing.handle} onChange={setSelectedHandle} />}
+              {appMode === 'renderer' && <ExportButton drawing={drawing} />}
+            </>
+          )}
         </div>
       </header>
       {appMode === 'planner' ? (
         <section className="app-workspace grid grid-cols-1 gap-0 xl:grid-cols-[minmax(260px,330px)_minmax(0,1fr)_minmax(280px,340px)]">
-          <aside className="min-h-0 overflow-y-auto border-r border-stone-200 bg-stone-100 p-3">
+          <aside className="bg-stone-100 p-3 xl:min-h-0 xl:overflow-y-auto xl:border-r xl:border-stone-200">
             <div className="space-y-3">
-              <ReachInRoomSetup {...reachInSetupProps} planDetails={plannerPlanDetails} />
-
               <section className="rounded border border-stone-200 bg-white p-3">
-                <h2 className="text-sm font-bold text-stone-950">Drag Configurations</h2>
+                <h2 className="text-sm font-bold text-stone-950">Configure your closet</h2>
                 <p className="mb-2 mt-1 text-xs text-stone-500">Click or drag any module onto the wall.</p>
                 <ModulePalette height={plannerHeight} onAdd={addPlannerModule} />
               </section>
 
+              {internalRenderer ? (
+                <ReachInRoomSetup {...reachInSetupProps} planDetails={plannerPlanDetails} />
+              ) : null}
             </div>
           </aside>
           {plannerStep === 'review' ? (
-            <section className="col-span-2 min-h-0 overflow-y-auto bg-white">
+            <section className="bg-white xl:col-span-2 xl:min-h-0 xl:overflow-y-auto">
               <OrderReviewPanel
                 evaluation={plannerEvaluation}
                 modules={plannerModules}
@@ -3174,7 +3196,7 @@ export default function App() {
           ) : (
             <>
               <section
-                className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-white"
+                className="grid bg-white xl:min-h-0 xl:grid-rows-[minmax(0,1fr)_auto]"
                 onDragOver={(event) => {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = 'copy';
@@ -3187,8 +3209,15 @@ export default function App() {
                   }
                 }}
               >
-                <section className="relative min-h-0 overflow-hidden bg-white">
-                  <div className="absolute right-3 top-3 z-20 flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold shadow-sm">
+                <ModuleControlStrip
+                  modules={plannerModules}
+                  height={plannerHeight}
+                  onRemove={removePlannerModule}
+                  onMove={movePlannerModule}
+                  onWidthChange={updatePlannerModuleWidth}
+                />
+                <section className="relative bg-white xl:min-h-0 xl:overflow-hidden">
+                  <div className="sticky top-2 z-20 ml-auto mr-3 mt-3 flex w-fit rounded border border-stone-300 bg-white p-0.5 text-xs font-bold shadow-sm xl:absolute xl:right-3 xl:top-3 xl:m-0">
                     {[
                       ['plan', 'Plan'],
                       ['3d', '3D'],
@@ -3204,7 +3233,7 @@ export default function App() {
                     ))}
                   </div>
                   {plannerPreviewMode === 'plan' ? (
-                    <div className="h-full overflow-y-auto bg-stone-50 p-4 pt-14">
+                    <div className="bg-stone-50 p-4 pt-3 xl:h-full xl:overflow-y-auto xl:pt-14">
                       <ReachInPlanView
                         modules={plannerModules}
                         wallWidth={plannerPlanDetails.wallWidth}
@@ -3217,7 +3246,7 @@ export default function App() {
                       />
                     </div>
                   ) : (
-                    <>
+                    <div className="relative h-[460px] bg-white sm:h-[560px] xl:h-full">
                       <OrbitHintBadge />
                       <Canvas
                         key={`${viewMode}-${drawing.handle}`}
@@ -3237,25 +3266,21 @@ export default function App() {
                       >
                         <RenderScene drawing={drawing} photoMode={photoMode} wallWidth={plannerPlanDetails.wallWidth} reachInRoom={plannerPlanDetails} />
                       </Canvas>
-                    </>
+                    </div>
                   )}
                 </section>
-                <ModuleControlStrip
-                  modules={plannerModules}
-                  height={plannerHeight}
-                  onRemove={removePlannerModule}
-                  onMove={movePlannerModule}
-                  onWidthChange={updatePlannerModuleWidth}
-                />
               </section>
-              <aside className="min-h-0 overflow-y-auto border-l border-stone-200 bg-stone-50 p-3">
+              <aside className="border-t border-stone-200 bg-stone-50 p-3 xl:min-h-0 xl:overflow-y-auto xl:border-l xl:border-t-0">
                 <div className="space-y-3">
-                  <section className="rounded border border-stone-200 bg-white p-3">
-                    <h2 className="text-sm font-bold text-stone-950">Order Summary</h2>
-                    <div className="mt-2">
-                      <SystemMetrics planDetails={plannerPlanDetails} moduleCount={plannerModules.length} layout="rail" />
-                    </div>
-                  </section>
+                  {!internalRenderer ? (
+                    <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={() => setReachInRoomCaptured(false)}>
+                      <ReachInClosetDetailsSummary planDetails={plannerPlanDetails} moduleCount={plannerModules.length} embedded />
+                    </ReachInSpaceSummary>
+                  ) : (
+                    <section className="rounded border border-stone-200 bg-white p-3">
+                      <ReachInClosetDetailsSummary planDetails={plannerPlanDetails} moduleCount={plannerModules.length} embedded />
+                    </section>
+                  )}
                   <MatchPanel
                     evaluation={plannerEvaluation}
                     modules={plannerModules}

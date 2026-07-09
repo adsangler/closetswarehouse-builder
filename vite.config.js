@@ -315,6 +315,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),
+          internalRenderer: path.resolve(__dirname, 'internal-renderer.html'),
           walkin: path.resolve(__dirname, 'walkin.html'),
         },
       },
