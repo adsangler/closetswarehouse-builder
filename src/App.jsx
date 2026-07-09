@@ -4,10 +4,23 @@ import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/d
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
 
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
+const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
 
 function getProductUrl(handle) {
   const shopifyHandle = String(handle || '').trim().toLowerCase();
   return shopifyHandle ? `${storefrontBaseUrl}/products/${shopifyHandle}` : '';
+}
+
+function ConsultationCta({ compact = false }) {
+  return (
+    <a
+      href={consultationUrl}
+      target="_top"
+      className={`rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white hover:bg-stone-800 ${compact ? 'text-xs sm:text-sm' : ''}`}
+    >
+      Need help? Schedule a free design consultation
+    </a>
+  );
 }
 
 const fallbackKit = {
@@ -382,6 +395,11 @@ function buildReachInEstimateUrl(planDetails, modules) {
   const url = new URL(buildReachInPlanUrl(planDetails, modules));
   url.searchParams.set('estimate', '1');
   return url.toString();
+}
+
+function navigateInsideFrame(path) {
+  if (typeof window === 'undefined') return;
+  window.self.location.assign(new URL(path, window.self.location.href).toString());
 }
 
 function createDrawing(baseDrawing) {
@@ -2311,6 +2329,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
           <div className="mt-3 flex flex-wrap gap-2">
             <a href={planUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">Open editable plan</a>
             <a href="/" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50">Start new plan</a>
+            <ConsultationCta />
           </div>
         </header>
 
@@ -2606,15 +2625,18 @@ function ClosetTypeStart({ onReachIn }) {
           <h1 className="text-xl font-bold text-stone-950">Closet Planner</h1>
           <p className="mt-1 text-sm font-semibold text-stone-500">Choose the closet shape before entering dimensions.</p>
         </div>
+        <div className="mb-4 flex justify-start">
+          <ConsultationCta />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" onClick={onReachIn} className="rounded border border-brand-orange bg-orange-50 p-4 text-left transition hover:bg-orange-100">
             <div className="text-lg font-bold text-stone-950">Reach-in closet</div>
             <div className="mt-1 text-sm font-semibold text-stone-600">One back wall with depth, opening, and door type.</div>
           </button>
-          <a href="/walkin.html?type=walk-in" className="rounded border border-stone-200 bg-white p-4 text-left transition hover:border-brand-orange hover:bg-stone-50">
+          <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="rounded border border-stone-200 bg-white p-4 text-left transition hover:border-brand-orange hover:bg-stone-50">
             <div className="text-lg font-bold text-stone-950">Walk-in closet</div>
             <div className="mt-1 text-sm font-semibold text-stone-600">Back, left, and right wall layout with corner rules.</div>
-          </a>
+          </button>
         </div>
       </section>
     </main>
@@ -2651,9 +2673,12 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
           <h1 className="text-lg font-bold text-stone-950">Reach-in Closet Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Step 1: room dimensions and opening</p>
         </div>
-        <button type="button" onClick={onBack} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-          Change type
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <ConsultationCta compact />
+          <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+            Change to Walk In
+          </button>
+        </div>
       </header>
       <section className="grid gap-4 p-4 xl:grid-cols-[460px_minmax(0,1fr)]">
         <div className="space-y-3">
@@ -2701,6 +2726,7 @@ export default function App() {
   const requestedFallbackKit = useMemo(() => kitHandleToDrawing(requestedKitHandle) || fallbackKit, [requestedKitHandle]);
   const exposeCaptureData = useMemo(shouldExposeCaptureData, []);
   const requestedMode = useMemo(getRequestedMode, []);
+  const requestedType = useMemo(() => (typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('type')), []);
   const requestedReachInPlan = useMemo(getRequestedReachInPlan, []);
   const requestedEstimatePage = useMemo(shouldShowEstimatePage, []);
   const requestedPlanDetails = requestedReachInPlan?.planDetails || {};
@@ -2710,7 +2736,8 @@ export default function App() {
     state: 'loading',
     message: 'Checking Airtable...',
   });
-  const [closetType, setClosetType] = useState(requestedMode === 'renderer' || requestedReachInPlan ? 'reach-in' : '');
+  const startsInReachIn = requestedType === 'reach-in' || requestedMode === 'renderer' || Boolean(requestedReachInPlan);
+  const [closetType, setClosetType] = useState(startsInReachIn ? 'reach-in' : '');
   const [reachInRoomCaptured, setReachInRoomCaptured] = useState(requestedMode === 'renderer' || Boolean(requestedReachInPlan));
   const [kitOptions, setKitOptions] = useState([requestedFallbackKit]);
   const [selectedHandle, setSelectedHandle] = useState(requestedFallbackKit.handle);
@@ -3097,6 +3124,12 @@ export default function App() {
       <header className="app-header flex items-center justify-between gap-3 border-b border-stone-200 bg-white px-4">
         <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">Closets Warehouse Renderer</h1>
         <div className="flex min-w-0 items-center gap-3">
+          {appMode === 'planner' && (
+            <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+              Change to Walk In
+            </button>
+          )}
+          {appMode === 'planner' && <ConsultationCta compact />}
           <span
             className={`whitespace-nowrap text-xs font-semibold ${
               airtableStatus.state === 'ready'

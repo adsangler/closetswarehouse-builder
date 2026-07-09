@@ -7,6 +7,7 @@ import './styles.css';
 const panelThickness = 0.75;
 const closetDepth = 14;
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
+const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
 const cornerReachGap = 12;
 const cornerStopDistance = closetDepth + cornerReachGap;
 const closetHeights = [84, 96];
@@ -21,6 +22,18 @@ const shelfOnlyAdjustableShelfCounts = {
   S7: 6,
   S8: 7,
 };
+
+function ConsultationCta({ compact = false }) {
+  return (
+    <a
+      href={consultationUrl}
+      target="_top"
+      className={`rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white hover:bg-stone-800 ${compact ? 'text-xs sm:text-sm' : ''}`}
+    >
+      Need help? Schedule a free design consultation
+    </a>
+  );
+}
 
 const moduleConfigs = [
   { code: 'LH', label: 'Long Hang', defaultWidth: 24 },
@@ -718,9 +731,12 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Step 1: room dimensions</p>
         </div>
-        <a href="/" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-          Reach-in app
-        </a>
+        <div className="flex flex-wrap justify-end gap-2">
+          <ConsultationCta compact />
+          <button type="button" onClick={() => navigateInsideFrame('/?type=reach-in')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+            Change to Reach In
+          </button>
+        </div>
       </header>
       <section className="app-workspace min-h-0 w-full overflow-y-auto">
         <div className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -799,11 +815,14 @@ function ClosetTypeStart({ onWalkIn }) {
       <section className="w-full max-w-3xl rounded border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
         <h1 className="mt-1 text-3xl font-bold text-stone-950">Closet Shape Planner</h1>
+        <div className="mt-4 flex justify-start">
+          <ConsultationCta />
+        </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <a href="/" className="rounded border border-stone-300 p-4 transition hover:border-brand-orange hover:bg-orange-50">
+          <button type="button" onClick={() => navigateInsideFrame('/?type=reach-in')} className="rounded border border-stone-300 p-4 text-left transition hover:border-brand-orange hover:bg-orange-50">
             <div className="text-lg font-bold text-stone-950">Reach-in closet</div>
             <div className="mt-2 text-sm font-semibold text-stone-500">Use the current straight-wall planner.</div>
-          </a>
+          </button>
           <button type="button" onClick={onWalkIn} className="rounded border border-brand-orange bg-orange-50 p-4 text-left transition hover:bg-orange-100">
             <div className="text-lg font-bold text-stone-950">Walk-in closet</div>
             <div className="mt-2 text-sm font-semibold text-stone-600">Plan left, back, and right wall runs with corner and entrance rules.</div>
@@ -1967,6 +1986,11 @@ function buildWalkInEstimateUrl(room, corners, runs) {
   return url.toString();
 }
 
+function navigateInsideFrame(path) {
+  if (typeof window === 'undefined') return;
+  window.self.location.assign(new URL(path, window.self.location.href).toString());
+}
+
 function shouldShowEstimatePage() {
   if (typeof window === 'undefined') {
     return false;
@@ -2213,6 +2237,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
           <div className="mt-3 flex flex-wrap gap-2">
             <a href={planUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">Open editable plan</a>
             <a href="/walkin.html?type=walk-in" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50">Start new walk-in</a>
+            <ConsultationCta />
           </div>
         </header>
 
@@ -2621,9 +2646,12 @@ function WalkInPlanner() {
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Left, back, and right wall layout</p>
         </div>
-        <a href="/" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-          Reach-in app
-        </a>
+        <div className="flex flex-wrap justify-end gap-2">
+          <ConsultationCta compact />
+          <button type="button" onClick={() => navigateInsideFrame('/?type=reach-in')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+            Change to Reach In
+          </button>
+        </div>
       </header>
       <section className="app-workspace grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="min-w-0 bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:min-h-0 lg:overflow-y-auto lg:pr-4">
