@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Closets Warehouse real-photo metadata",
+  "type": "object",
+  "required": ["id", "file", "sha256", "role", "permission", "quality", "notes"],
+  "properties": {
+    "id": { "type": "string" },
+    "file": { "type": "string" },
+    "sha256": { "type": "string" },
+    "role": { "enum": ["unreviewed", "scene", "product", "detail", "edit-target"] },
+    "permission": { "enum": ["unconfirmed", "owned", "customer-approved", "restricted", "exclude"] },
+    "quality": { "enum": ["unrated", "excellent", "good", "limited", "reject"] },
+    "sku": { "type": "string" },
+    "configurations": {
+      "type": "array",
+      "items": { "enum": ["LH", "DH", "HS", "S3D", "H3D", "S2D", "S7", "S8"] }
+    },
+    "heightInches": { "enum": [84, 96] },
+    "towerCount": { "type": "integer", "minimum": 1 },
+    "camera": { "enum": ["unknown", "straight-on", "approved-three-quarter", "detail", "other"] },
+    "lighting": { "enum": ["unknown", "daylight", "mixed", "warm-interior", "studio", "other"] },
+    "containsPeople": { "type": "boolean" },
+    "containsPrivateInformation": { "type": "boolean" },
+    "notes": { "type": "string" }
+  }
+}

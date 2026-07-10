@@ -1068,9 +1068,83 @@ function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom
   );
 }
 
-function ExportButton({ drawing }) {
+function seoSlug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getPhotoExportPlan(drawing, installationType) {
+  const handle = seoSlug(drawing.handle);
+  const towerCount = drawing.towers?.length || drawing.towerSpecs?.length || 1;
+  const walkInOnly = Number(drawing.height) >= 96;
+
+  if (walkInOnly || installationType === 'walk-in') {
+    return [
+      {
+        id: 'walk-in-hero',
+        label: 'Walk-in hero',
+        scene: 'walk-in',
+        bifoldDoorSets: 0,
+        filename: `${handle}-walk-in-hero.png`,
+      },
+    ];
+  }
+
+  const bifoldDoorSets = towerCount === 1 ? 1 : 2;
+
+  return [
+    {
+      id: 'product-hero',
+      label: 'Clean product hero',
+      scene: 'product',
+      bifoldDoorSets: 0,
+      filename: `${handle}-product-hero.png`,
+    },
+    {
+      id: 'reach-in-installed',
+      label: `Reach-in installed · ${bifoldDoorSets} bi-fold ${bifoldDoorSets === 1 ? 'set' : 'sets'}`,
+      scene: 'reach-in',
+      bifoldDoorSets,
+      filename: `${handle}-reach-in-installed-${bifoldDoorSets}-bifold.png`,
+    },
+  ];
+}
+
+function PhotoSetRules({ drawing, installationType, onChange }) {
+  const shots = getPhotoExportPlan(drawing, installationType);
+  const towerCount = drawing.towers?.length || drawing.towerSpecs?.length || 1;
+  const bifoldDoorSets = towerCount === 1 ? 1 : 2;
+  const walkInOnly = Number(drawing.height) >= 96;
+
+  return (
+    <div className="flex items-center gap-2 rounded border border-stone-200 bg-stone-50 px-2 py-1">
+      <label className="text-xs font-bold text-stone-600" htmlFor="photo-installation-type">
+        Scene rules
+      </label>
+      <select
+        id="photo-installation-type"
+        value={walkInOnly ? 'walk-in' : installationType}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={walkInOnly}
+        className="rounded border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-800 disabled:cursor-not-allowed disabled:bg-stone-200"
+      >
+        <option value="reach-in">Reach-in · 2 images</option>
+        <option value="walk-in">Walk-in · 1 image</option>
+      </select>
+      <span className="whitespace-nowrap text-[11px] font-semibold text-stone-500">
+        {!walkInOnly && installationType === 'reach-in' ? `Product only + installed · ${bifoldDoorSets} bi-fold ${bifoldDoorSets === 1 ? 'set' : 'sets'}` : 'One walk-in hero'}
+      </span>
+    </div>
+  );
+}
+
+function ExportButton({ drawing, installationType }) {
   const [status, setStatus] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const shots = getPhotoExportPlan(drawing, installationType);
 
   const exportRender = () => {
     const canvas = document.querySelector('canvas');
@@ -1086,6 +1160,8 @@ function ExportButton({ drawing }) {
       window.__closetExport = {
         handle: drawing.handle,
         dataUrl,
+        installationType,
+        shots,
       };
 
       if (shouldExposeCaptureData()) {
@@ -1095,7 +1171,7 @@ function ExportButton({ drawing }) {
 
       const link = document.createElement('a');
       link.href = dataUrl;
-      link.download = `${drawing.handle}.png`;
+      link.download = shots[0].filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1113,11 +1189,11 @@ function ExportButton({ drawing }) {
         onClick={exportRender}
         className="rounded border border-brand-orange px-3 py-1 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange hover:text-white"
       >
-        Export PNG
+        Export {shots.length}-photo set
       </button>
       {status && <span className="text-xs font-medium text-stone-500">{status}</span>}
       {downloadUrl && (
-        <a className="text-xs font-semibold text-brand-orange underline" href={downloadUrl} download={`${drawing.handle}.png`}>
+        <a className="text-xs font-semibold text-brand-orange underline" href={downloadUrl} download={shots[0].filename}>
           Download ready
         </a>
       )}
@@ -1690,6 +1766,171 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
           </text>
         )}
       </svg>
+    </section>
+  );
+}
+
+function GeneratePhotosButton({ drawing, installationType, onGenerated }) {
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const shots = getPhotoExportPlan(drawing, installationType);
+
+  const generatePhotos = async () => {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) {
+      setStatus('Geometry canvas is not ready.');
+      return;
+    }
+
+    setBusy(true);
+    setStatus(`Generating ${shots.length} ${shots.length === 1 ? 'photo' : 'photos'}...`);
+
+    try {
+      const response = await fetch('/api/generate-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          handle: drawing.handle,
+          height: drawing.height,
+          assembledWidth: drawing.assembledWidth,
+          towerSpecs: (drawing.towers || drawing.towerSpecs || []).map((tower) => ({ code: tower.code, width: tower.width })),
+          installationType,
+          shots,
+          geometryDataUrl: canvas.toDataURL('image/png'),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Photo generation failed.');
+
+      setStatus(`${payload.generated.length} ${payload.generated.length === 1 ? 'photo' : 'photos'} generated.`);
+      onGenerated?.();
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={generatePhotos}
+        disabled={busy}
+        className="rounded bg-brand-orange px-3 py-1.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-wait disabled:opacity-60"
+      >
+        {busy ? 'Generating...' : `Generate ${shots.length} ${shots.length === 1 ? 'photo' : 'photos'}`}
+      </button>
+      {status && <span className="max-w-72 text-xs font-semibold text-stone-600">{status}</span>}
+    </div>
+  );
+}
+
+function GeneratedPhotoGallery({ drawing, onSelectHandle, refreshToken }) {
+  const [photos, setPhotos] = useState([]);
+  const [status, setStatus] = useState('Loading generated drafts...');
+  const [sceneFilter, setSceneFilter] = useState('all');
+  const handleSlug = seoSlug(drawing.handle);
+
+  useEffect(() => {
+    let ignore = false;
+
+    fetch('/api/photo-drafts')
+      .then((response) => response.json())
+      .then((payload) => {
+        if (ignore) return;
+        const allPhotos = Array.isArray(payload.photos) ? payload.photos : [];
+        setPhotos(allPhotos);
+        setStatus(allPhotos.length ? '' : 'No generated drafts have been saved yet.');
+      })
+      .catch((error) => {
+        if (!ignore) setStatus(error.message);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [refreshToken]);
+
+  const matchingPhotos = photos.filter((photo) => photo.name.startsWith(`${handleSlug}-`));
+  const displayedPhotos = matchingPhotos.filter((photo) => {
+    if (sceneFilter === 'product') return photo.name.includes('-product-hero-');
+    if (sceneFilter === 'reach-in') return photo.name.includes('-reach-in-installed-');
+    if (sceneFilter === 'walk-in') return photo.name.includes('-walk-in-hero-');
+    return true;
+  });
+  const availableHandles = [...new Set(photos.map((photo) => photo.name.split(/-(?:product-hero|reach-in-installed|walk-in-hero)-/)[0]).filter(Boolean))].sort();
+
+  return (
+    <section className="h-full overflow-y-auto bg-stone-100 p-4">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-orange">AI realistic drafts</p>
+            <h2 className="mt-1 text-xl font-black text-stone-950">Generated Photos</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Saved under <code>assets/drafts/generated-photos</code>. These are drafts only and are never added to exports without approval.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              ['all', 'All'],
+              ['product', 'Product only'],
+              ['reach-in', 'Installed reach-in'],
+              ['walk-in', 'Walk-in'],
+            ].map(([filter, label]) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setSceneFilter(filter)}
+                className={`rounded-full px-3 py-1 text-xs font-bold shadow-sm ${sceneFilter === filter ? 'bg-brand-orange text-white' : 'bg-white text-stone-600 hover:bg-stone-200'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {status ? (
+          <div className="rounded border border-dashed border-stone-300 bg-white p-8 text-center text-sm font-semibold text-stone-500">{status}</div>
+        ) : matchingPhotos.length === 0 ? (
+          <div className="rounded border border-dashed border-amber-300 bg-amber-50 p-8 text-center">
+            <p className="text-base font-black text-stone-900">No generated photos for {drawing.handle}</p>
+            <p className="mt-2 text-sm font-semibold text-stone-600">The gallery never substitutes photos from another SKU.</p>
+            <p className="mt-4 text-xs font-bold uppercase tracking-wide text-stone-500">Choose a SKU with generated drafts</p>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {availableHandles.map((handle) => (
+                <button
+                  key={handle}
+                  type="button"
+                  onClick={() => onSelectHandle?.(handle.toUpperCase())}
+                  className="rounded border border-brand-orange bg-white px-3 py-1.5 text-xs font-bold uppercase text-brand-orange hover:bg-brand-orange hover:text-white"
+                >
+                  {handle}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : displayedPhotos.length === 0 ? (
+          <div className="rounded border border-dashed border-stone-300 bg-white p-8 text-center text-sm font-semibold text-stone-500">
+            No {sceneFilter.replace('-', ' ')} draft has been generated for {drawing.handle}.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {displayedPhotos.map((photo) => (
+              <article key={photo.name} className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
+                <div className="aspect-square bg-stone-50">
+                  <img src={photo.url} alt={photo.name.replace(/-/g, ' ')} className="h-full w-full object-contain" />
+                </div>
+                <div className="border-t border-stone-200 p-3">
+                  <p className="break-all text-xs font-bold text-stone-800">{photo.name}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-amber-700">Draft · awaiting approval</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -2743,6 +2984,9 @@ export default function App({ internalRenderer = false }) {
   const [kitOptions, setKitOptions] = useState([requestedFallbackKit]);
   const [selectedHandle, setSelectedHandle] = useState(requestedFallbackKit.handle);
   const [viewMode, setViewMode] = useState('photo');
+  const [photoInstallationType, setPhotoInstallationType] = useState('reach-in');
+  const [photoWorkspaceTab, setPhotoWorkspaceTab] = useState('generated');
+  const [photoGalleryVersion, setPhotoGalleryVersion] = useState(0);
   const [plannerHeight, setPlannerHeight] = useState(requestedPlanDetails.height || 84);
   const [ceilingHeight, setCeilingHeight] = useState(requestedPlanDetails.ceilingHeight || 108);
   const [wallWidth, setWallWidth] = useState(requestedPlanDetails.wallWidth || 96);
@@ -3164,7 +3408,46 @@ export default function App({ internalRenderer = false }) {
               <AppModeToggle appMode={appMode} onChange={setAppMode} />
               <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
               {appMode === 'renderer' && <KitSelector drawings={kitOptions} selectedHandle={drawing.handle} onChange={setSelectedHandle} />}
-              {appMode === 'renderer' && <ExportButton drawing={drawing} />}
+              {appMode === 'renderer' && viewMode === 'photo' && (
+                <>
+                  <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
+                    {[
+                      ['generated', 'Generated photos'],
+                      ['geometry', 'Geometry render'],
+                    ].map(([tab, label]) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setPhotoWorkspaceTab(tab)}
+                        className={`rounded px-2 py-1 ${photoWorkspaceTab === tab ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <PhotoSetRules drawing={drawing} installationType={photoInstallationType} onChange={setPhotoInstallationType} />
+                </>
+              )}
+              {appMode === 'renderer' && viewMode === 'photo' && photoWorkspaceTab === 'generated' && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoWorkspaceTab('geometry')}
+                  className="rounded bg-brand-orange px-3 py-1.5 text-sm font-black text-white shadow-sm hover:bg-orange-700"
+                >
+                  Generate new photos
+                </button>
+              )}
+              {appMode === 'renderer' && viewMode === 'photo' && photoWorkspaceTab === 'geometry' && (
+                <GeneratePhotosButton
+                  drawing={drawing}
+                  installationType={photoInstallationType}
+                  onGenerated={() => {
+                    setPhotoGalleryVersion((version) => version + 1);
+                    setPhotoWorkspaceTab('generated');
+                  }}
+                />
+              )}
+              {appMode === 'renderer' && <ExportButton drawing={drawing} installationType={photoInstallationType} />}
             </>
           )}
         </div>
@@ -3297,26 +3580,33 @@ export default function App({ internalRenderer = false }) {
         <section
           className={`app-workspace ${photoMode ? '' : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]'}`}
         >
-          <section className="h-full min-h-0 bg-white">
-            <Canvas
-              key={`${viewMode}-${drawing.handle}`}
-              className="h-full w-full"
-              orthographic={rendererPhotoMode}
-              camera={camera}
-              dpr={[1, 2]}
-              gl={{ antialias: true, preserveDrawingBuffer: true }}
-              shadows
-              onCreated={({ gl }) => {
-                gl.shadowMap.enabled = true;
-                gl.shadowMap.type = PCFSoftShadowMap;
-                gl.outputColorSpace = SRGBColorSpace;
-                gl.toneMapping = ACESFilmicToneMapping;
-                gl.toneMappingExposure = photoMode ? 0.95 : 1;
-              }}
-            >
-              <RenderScene drawing={drawing} photoMode={photoMode} />
-            </Canvas>
-          </section>
+          {photoMode && photoWorkspaceTab === 'generated' ? (
+            <GeneratedPhotoGallery drawing={drawing} onSelectHandle={setSelectedHandle} refreshToken={photoGalleryVersion} />
+          ) : (
+            <section className="relative h-full min-h-0 bg-white">
+              {photoMode && (
+                <span className="absolute left-3 top-3 z-10 rounded bg-stone-950/80 px-3 py-1 text-xs font-bold text-white">Geometry source · not final photo</span>
+              )}
+              <Canvas
+                key={`${viewMode}-${drawing.handle}`}
+                className="h-full w-full"
+                orthographic={rendererPhotoMode}
+                camera={camera}
+                dpr={[1, 2]}
+                gl={{ antialias: true, preserveDrawingBuffer: true }}
+                shadows
+                onCreated={({ gl }) => {
+                  gl.shadowMap.enabled = true;
+                  gl.shadowMap.type = PCFSoftShadowMap;
+                  gl.outputColorSpace = SRGBColorSpace;
+                  gl.toneMapping = ACESFilmicToneMapping;
+                  gl.toneMappingExposure = photoMode ? 0.95 : 1;
+                }}
+              >
+                <RenderScene drawing={drawing} photoMode={photoMode} />
+              </Canvas>
+            </section>
+          )}
           {!photoMode && (
             <section className="min-h-0 border-l border-stone-200 bg-white">
               <TechnicalDrawing drawing={drawing} />
