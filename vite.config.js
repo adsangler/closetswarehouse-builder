@@ -302,22 +302,50 @@ function quoteRequestProxy(env) {
   };
 }
 
+function removeProductionInternalAssets(enabled) {
+  return {
+    name: 'remove-production-internal-assets',
+    apply: 'build',
+    async closeBundle() {
+      if (!enabled) return;
+
+      await Promise.all([
+        fs.rm(path.resolve(__dirname, 'dist/internal-renderer.html'), { force: true }),
+        fs.rm(path.resolve(__dirname, 'dist/internal-renderer-style-guide.md'), { force: true }),
+        fs.rm(path.resolve(__dirname, 'dist/shopify-photo-workflow.md'), { force: true }),
+      ]);
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const includeInternalRenderer = mode !== 'production' || env.BUILD_INTERNAL_RENDERER === 'true';
+  const publicProductionBuild = mode === 'production' && !includeInternalRenderer;
+  const input = {
+    main: path.resolve(__dirname, 'index.html'),
+    walkin: path.resolve(__dirname, 'walkin.html'),
+  };
+
+  if (includeInternalRenderer) {
+    input.internalRenderer = path.resolve(__dirname, 'internal-renderer.html');
+  }
 
   return {
-    plugins: [quoteRequestProxy(env), resolvedPartsProxy(env), airtableProxy(env), react()],
+    plugins: [
+      quoteRequestProxy(env),
+      resolvedPartsProxy(env),
+      airtableProxy(env),
+      removeProductionInternalAssets(publicProductionBuild),
+      react(),
+    ],
     server: {
       host: 'localhost',
       port: 5173,
     },
     build: {
       rollupOptions: {
-        input: {
-          main: path.resolve(__dirname, 'index.html'),
-          internalRenderer: path.resolve(__dirname, 'internal-renderer.html'),
-          walkin: path.resolve(__dirname, 'walkin.html'),
-        },
+        input,
       },
     },
   };
