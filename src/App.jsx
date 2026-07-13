@@ -402,6 +402,15 @@ function navigateInsideFrame(path) {
   window.self.location.assign(new URL(path, window.self.location.href).toString());
 }
 
+function navigateTopPage(url) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.top.location.assign(url);
+  } catch {
+    window.self.location.assign(url);
+  }
+}
+
 function createDrawing(baseDrawing) {
   const towers = [];
   let cursor = panelThickness;
@@ -2902,7 +2911,7 @@ function ClosetTypeStart({ onReachIn }) {
             <div className="text-lg font-bold text-stone-950">Reach-in closet</div>
             <div className="mt-1 text-sm font-semibold text-stone-600">One back wall with depth, opening, and door type.</div>
           </button>
-          <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="rounded border border-stone-200 bg-white p-4 text-left transition hover:border-brand-orange hover:bg-stone-50">
+          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/walk-in-closet-design-tool')} className="rounded border border-stone-200 bg-white p-4 text-left transition hover:border-brand-orange hover:bg-stone-50">
             <div className="text-lg font-bold text-stone-950">Walk-in closet</div>
             <div className="mt-1 text-sm font-semibold text-stone-600">Back, left, and right wall layout with corner rules.</div>
           </button>
@@ -2944,7 +2953,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
-          <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/walk-in-closet-design-tool')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
             Change to Walk In
           </button>
         </div>
@@ -3417,7 +3426,7 @@ export default function App({ internalRenderer = false }) {
         </h1>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
           {!internalRenderer && appMode === 'planner' && (
-            <button type="button" onClick={() => navigateInsideFrame('/walkin.html?type=walk-in')} className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+            <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/walk-in-closet-design-tool')} className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
               Change to Walk In
             </button>
           )}
@@ -3605,7 +3614,7 @@ export default function App({ internalRenderer = false }) {
                     evaluation={plannerEvaluation}
                     modules={plannerModules}
                     planDetails={plannerPlanDetails}
-                    onContinue={() => window.open(buildReachInEstimateUrl(plannerPlanDetails, plannerModules), '_blank', 'noopener,noreferrer')}
+                    onContinue={() => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules))}
                     isCatalogReady={airtableStatus.state === 'ready'}
                   />
                 </div>

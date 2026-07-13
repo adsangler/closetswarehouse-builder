@@ -733,7 +733,7 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
-          <button type="button" onClick={() => navigateInsideFrame('/?type=reach-in')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/reach-in-closet-design-tool')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
             Change to Reach In
           </button>
         </div>
@@ -819,7 +819,7 @@ function ClosetTypeStart({ onWalkIn }) {
           <ConsultationCta />
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <button type="button" onClick={() => navigateInsideFrame('/?type=reach-in')} className="rounded border border-stone-300 p-4 text-left transition hover:border-brand-orange hover:bg-orange-50">
+          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/reach-in-closet-design-tool')} className="rounded border border-stone-300 p-4 text-left transition hover:border-brand-orange hover:bg-orange-50">
             <div className="text-lg font-bold text-stone-950">Reach-in closet</div>
             <div className="mt-2 text-sm font-semibold text-stone-500">Use the current straight-wall planner.</div>
           </button>
@@ -1991,6 +1991,15 @@ function navigateInsideFrame(path) {
   window.self.location.assign(new URL(path, window.self.location.href).toString());
 }
 
+function navigateTopPage(url) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.top.location.assign(url);
+  } catch {
+    window.self.location.assign(url);
+  }
+}
+
 function shouldShowEstimatePage() {
   if (typeof window === 'undefined') {
     return false;
@@ -2414,7 +2423,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
             ))}
             <button
               type="button"
-              onClick={() => window.open(buildWalkInEstimateUrl(room, corners, runs), '_blank', 'noopener,noreferrer')}
+              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white"
             >
               Verify estimate
@@ -2433,7 +2442,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
             <button
               type="button"
               disabled={!evaluation.complete}
-              onClick={() => window.open(buildWalkInEstimateUrl(room, corners, runs), '_blank', 'noopener,noreferrer')}
+              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300"
             >
               Verify estimate
@@ -2648,7 +2657,7 @@ function WalkInPlanner() {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
-          <button type="button" onClick={() => navigateInsideFrame('/?type=reach-in')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
+          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/reach-in-closet-design-tool')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
             Change to Reach In
           </button>
         </div>
