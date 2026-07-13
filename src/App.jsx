@@ -402,15 +402,6 @@ function navigateInsideFrame(path) {
   window.self.location.assign(new URL(path, window.self.location.href).toString());
 }
 
-function navigateTopPage(url) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.top.location.assign(url);
-  } catch {
-    window.self.location.assign(url);
-  }
-}
-
 function createDrawing(baseDrawing) {
   const towers = [];
   let cursor = panelThickness;
@@ -1706,9 +1697,11 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
           <h2 className="text-base font-bold text-stone-950">Reach-in Plan</h2>
           <p className="text-xs font-semibold text-stone-500">Back wall closet with side walls, front returns, opening, and 14" unit depth.</p>
         </div>
-        <span className={`rounded px-2 py-1 text-xs font-bold ${planIsClear ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-          {modules.length ? (planIsClear ? 'Fits back wall' : 'Needs fixes') : 'Add towers'}
-        </span>
+        {modules.length > 0 && (
+          <span className={`rounded px-2 py-1 text-xs font-bold ${planIsClear ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+            {planIsClear ? 'Fits back wall' : 'Needs fixes'}
+          </span>
+        )}
       </div>
       {drawerWarnings.length > 0 && (
         <div className="mb-2 grid gap-1.5">
@@ -2900,20 +2893,16 @@ function ClosetTypeStart({ onReachIn }) {
     <main className="grid min-h-screen place-items-center bg-brand-ui p-4 text-brand-black">
       <section className="w-full max-w-3xl rounded border border-stone-200 bg-white p-5 shadow-sm">
         <div className="mb-4">
-          <h1 className="text-xl font-bold text-stone-950">Closet Planner</h1>
-          <p className="mt-1 text-sm font-semibold text-stone-500">Choose the closet shape before entering dimensions.</p>
+          <h1 className="text-xl font-bold text-stone-950">Reach-in Closet Planner</h1>
+          <p className="mt-1 text-sm font-semibold text-stone-500">Enter closet dimensions to start your reach-in design.</p>
         </div>
         <div className="mb-4 flex justify-start">
           <ConsultationCta />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div>
           <button type="button" onClick={onReachIn} className="rounded border border-brand-orange bg-orange-50 p-4 text-left transition hover:bg-orange-100">
-            <div className="text-lg font-bold text-stone-950">Reach-in closet</div>
+            <div className="text-lg font-bold text-stone-950">Start reach-in design</div>
             <div className="mt-1 text-sm font-semibold text-stone-600">One back wall with depth, opening, and door type.</div>
-          </button>
-          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/walk-in-closet-design-tool')} className="rounded border border-stone-200 bg-white p-4 text-left transition hover:border-brand-orange hover:bg-stone-50">
-            <div className="text-lg font-bold text-stone-950">Walk-in closet</div>
-            <div className="mt-1 text-sm font-semibold text-stone-600">Back, left, and right wall layout with corner rules.</div>
           </button>
         </div>
       </section>
@@ -2953,9 +2942,6 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
-          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/walk-in-closet-design-tool')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-            Change to Walk In
-          </button>
         </div>
       </header>
       <section className="grid gap-3 p-3 xl:grid-cols-[minmax(280px,0.25fr)_minmax(0,0.75fr)]">
@@ -3019,7 +3005,7 @@ export default function App({ internalRenderer = false }) {
     state: 'loading',
     message: 'Checking Airtable...',
   });
-  const startsInReachIn = internalRenderer || requestedType === 'reach-in' || requestedMode === 'renderer' || Boolean(requestedReachInPlan);
+  const startsInReachIn = internalRenderer || requestedType !== 'walk-in' || requestedMode === 'renderer' || Boolean(requestedReachInPlan);
   const [closetType, setClosetType] = useState(startsInReachIn ? 'reach-in' : '');
   const [reachInRoomCaptured, setReachInRoomCaptured] = useState(internalRenderer || requestedMode === 'renderer' || Boolean(requestedReachInPlan));
   const [kitOptions, setKitOptions] = useState([requestedFallbackKit]);
@@ -3425,11 +3411,6 @@ export default function App({ internalRenderer = false }) {
           {internalRenderer ? 'Internal Image Renderer' : 'Reach-in Closet Planner'}
         </h1>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
-          {!internalRenderer && appMode === 'planner' && (
-            <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/walk-in-closet-design-tool')} className="whitespace-nowrap rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-              Change to Walk In
-            </button>
-          )}
           {!internalRenderer && appMode === 'planner' && <ConsultationCta compact />}
           {internalRenderer && (
             <>

@@ -733,9 +733,6 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
-          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/reach-in-closet-design-tool')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-            Change to Reach In
-          </button>
         </div>
       </header>
       <section className="app-workspace min-h-0 w-full overflow-y-auto">
@@ -814,17 +811,13 @@ function ClosetTypeStart({ onWalkIn }) {
     <main className="grid min-h-screen place-items-center bg-brand-ui p-6 text-brand-black">
       <section className="w-full max-w-3xl rounded border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
-        <h1 className="mt-1 text-3xl font-bold text-stone-950">Closet Shape Planner</h1>
+        <h1 className="mt-1 text-3xl font-bold text-stone-950">Walk-in Shape Planner</h1>
         <div className="mt-4 flex justify-start">
           <ConsultationCta />
         </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/reach-in-closet-design-tool')} className="rounded border border-stone-300 p-4 text-left transition hover:border-brand-orange hover:bg-orange-50">
-            <div className="text-lg font-bold text-stone-950">Reach-in closet</div>
-            <div className="mt-2 text-sm font-semibold text-stone-500">Use the current straight-wall planner.</div>
-          </button>
+        <div className="mt-6">
           <button type="button" onClick={onWalkIn} className="rounded border border-brand-orange bg-orange-50 p-4 text-left transition hover:bg-orange-100">
-            <div className="text-lg font-bold text-stone-950">Walk-in closet</div>
+            <div className="text-lg font-bold text-stone-950">Start walk-in design</div>
             <div className="mt-2 text-sm font-semibold text-stone-600">Plan left, back, and right wall runs with corner and entrance rules.</div>
           </button>
         </div>
@@ -1991,15 +1984,6 @@ function navigateInsideFrame(path) {
   window.self.location.assign(new URL(path, window.self.location.href).toString());
 }
 
-function navigateTopPage(url) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.top.location.assign(url);
-  } catch {
-    window.self.location.assign(url);
-  }
-}
-
 function shouldShowEstimatePage() {
   if (typeof window === 'undefined') {
     return false;
@@ -2657,9 +2641,6 @@ function WalkInPlanner() {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <ConsultationCta compact />
-          <button type="button" onClick={() => navigateTopPage('https://closetswarehouse.com/pages/reach-in-closet-design-tool')} className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700">
-            Change to Reach In
-          </button>
         </div>
       </header>
       <section className="app-workspace grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -2724,7 +2705,7 @@ function WalkInPlanner() {
 
 function ShapePlannerApp() {
   const requestedType = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('type');
-  const [closetType, setClosetType] = useState(requestedType === 'walk-in' ? 'walk-in' : '');
+  const [closetType, setClosetType] = useState(requestedType === 'reach-in' ? '' : 'walk-in');
 
   if (closetType !== 'walk-in') {
     return <ClosetTypeStart onWalkIn={() => setClosetType('walk-in')} />;
