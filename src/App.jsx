@@ -1426,7 +1426,7 @@ function ModulePalette({ height, onAdd }) {
   const [dragCode, setDragCode] = useState('');
 
   return (
-    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
       {plannerConfigs.map((config) => {
         const code = getPlannerCode(config.code, height);
         const widths = getWidthOptions(config.code).join(' / ');
@@ -2422,7 +2422,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
   };
 
   return (
-    <section className="h-full overflow-y-auto bg-white p-5">
+    <section className="bg-white p-5">
       <div className="mx-auto max-w-4xl">
         <button type="button" onClick={onBack} className="mb-4 rounded border border-stone-300 px-3 py-1.5 text-sm font-bold text-stone-700">
           Back to planner
@@ -3470,7 +3470,7 @@ export default function App({ internalRenderer = false }) {
       {appMode === 'planner' ? (
         <section className="app-workspace grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,0.75fr)_minmax(240px,0.25fr)]">
           {plannerStep === 'review' ? (
-            <section className="bg-white xl:col-span-2 xl:min-h-0 xl:overflow-y-auto">
+            <section className="bg-white xl:col-span-2">
               <OrderReviewPanel
                 evaluation={plannerEvaluation}
                 modules={plannerModules}
@@ -3494,7 +3494,7 @@ export default function App({ internalRenderer = false }) {
                   }
                 }}
               >
-                <div className="grid gap-2 overflow-y-auto border-b border-stone-200 bg-stone-100 p-2 xl:max-h-[25vh] xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,0.68fr)]">
+                <div className="grid gap-2 border-b border-stone-200 bg-stone-100 p-2 xl:grid-cols-2">
                   <section className="rounded border border-stone-200 bg-white p-2">
                     <h2 className="text-sm font-bold text-stone-950">Configure your closet</h2>
                     <p className="mb-1 mt-0.5 text-xs text-stone-500">Click or drag a configuration.</p>
@@ -3513,7 +3513,7 @@ export default function App({ internalRenderer = false }) {
                     </div>
                   ) : null}
                 </div>
-                <section className="relative bg-white xl:min-h-0 xl:overflow-hidden">
+                <section className="relative bg-white">
                   <div className="sticky top-2 z-20 ml-auto mr-3 mt-3 flex w-fit rounded border border-stone-300 bg-white p-0.5 text-xs font-bold shadow-sm xl:absolute xl:right-3 xl:top-3 xl:m-0">
                     {[
                       ['plan', 'Plan'],
@@ -3530,7 +3530,7 @@ export default function App({ internalRenderer = false }) {
                     ))}
                   </div>
                   {plannerPreviewMode === 'plan' ? (
-                    <div className="bg-stone-50 p-4 pt-3 xl:h-full xl:overflow-y-auto xl:pt-14">
+                    <div className="bg-stone-50 p-4 pt-3 xl:pt-14">
                       <ReachInPlanView
                         modules={plannerModules}
                         wallWidth={plannerPlanDetails.wallWidth}
@@ -3567,7 +3567,7 @@ export default function App({ internalRenderer = false }) {
                   )}
                 </section>
               </section>
-              <aside className="border-t border-stone-200 bg-stone-50 p-3 xl:min-h-0 xl:overflow-y-auto xl:border-l xl:border-t-0">
+              <aside className="border-t border-stone-200 bg-stone-50 p-3 xl:border-l xl:border-t-0">
                 <div className="space-y-3">
                   {!internalRenderer ? (
                     <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={() => setReachInRoomCaptured(false)}>
