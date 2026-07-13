@@ -1660,7 +1660,7 @@ function PlannerWall({ modules, height, wallWidth, onDropModule, onRemove, onMov
   );
 }
 
-function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingLeft, openingRight, doorType, height }) {
+function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingLeft, openingRight, doorType, height, drawerWarnings = [] }) {
   const backWidth = Math.max(1, Number(wallWidth) || 0);
   const reachDepth = Math.max(depth, Number(roomDepth) || depth);
   const doorWidth = Math.max(0, Number(openingWidth) || 0);
@@ -1687,6 +1687,8 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
   const sharedDividerCenters = getSharedDividerCenters(modules, runStart);
   const wallCenter = backWidth / 2;
   const slidingDividerAligned = doorType !== 'sliding' || sharedDividerCenters.some((dividerCenter) => Math.abs(dividerCenter - wallCenter) <= 0.5);
+  const drawerAccessClear = drawerWarnings.length === 0;
+  const planIsClear = fitsWidth && slidingDividerAligned && drawerAccessClear;
 
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
@@ -1695,10 +1697,19 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
           <h2 className="text-base font-bold text-stone-950">Reach-in Plan</h2>
           <p className="text-xs font-semibold text-stone-500">Back wall closet with side walls, front returns, opening, and 14" unit depth.</p>
         </div>
-        <span className={`rounded px-2 py-1 text-xs font-bold ${fitsWidth && slidingDividerAligned ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-          {modules.length ? (fitsWidth && slidingDividerAligned ? 'Fits back wall' : 'Needs fixes') : 'Add towers'}
+        <span className={`rounded px-2 py-1 text-xs font-bold ${planIsClear ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+          {modules.length ? (planIsClear ? 'Fits back wall' : 'Needs fixes') : 'Add towers'}
         </span>
       </div>
+      {drawerWarnings.length > 0 && (
+        <div className="mb-2 grid gap-1.5">
+          {drawerWarnings.map((warning) => (
+            <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              {warning}
+            </div>
+          ))}
+        </div>
+      )}
       <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-[300px] w-full rounded bg-stone-50 sm:h-[340px] xl:h-[min(72vh,680px)]">
         <rect x={toX(0)} y={toY(0)} width={backWidth * scale} height={reachDepth * scale} className="fill-white stroke-stone-200" strokeWidth="1.5" />
         <rect x={toX(0)} y={toY(0) - wallPx / 2} width={backWidth * scale} height={wallPx} rx="1" className="fill-stone-600" />
@@ -2169,6 +2180,15 @@ function ReachInSpaceSummary({ planDetails, onEdit, children }) {
       <div className="mt-3">
         <SummaryMetricGrid items={items} />
       </div>
+      {planDetails.drawerWarnings?.length > 0 && (
+        <div className="mt-3 grid gap-2">
+          {planDetails.drawerWarnings.map((warning) => (
+            <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              {warning}
+            </div>
+          ))}
+        </div>
+      )}
       {children}
     </section>
   );
@@ -2604,6 +2624,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
                   openingRight={planDetails.openingRight}
                   doorType={planDetails.doorType}
                   height={planDetails.height}
+                  drawerWarnings={planDetails.drawerWarnings}
                 />
               ) : (
                 <div className="relative h-[520px] overflow-hidden rounded bg-white">
@@ -2963,6 +2984,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
           openingRight={planDetails.openingRight}
           doorType={planDetails.doorType}
           height={planDetails.height}
+          drawerWarnings={planDetails.drawerWarnings}
         />
       </section>
     </main>
@@ -3540,6 +3562,7 @@ export default function App({ internalRenderer = false }) {
                         openingRight={plannerPlanDetails.openingRight}
                         doorType={plannerPlanDetails.doorType}
                         height={plannerHeight}
+                        drawerWarnings={plannerPlanDetails.drawerWarnings}
                       />
                     </div>
                   ) : (
