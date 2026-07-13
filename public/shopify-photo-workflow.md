@@ -43,6 +43,7 @@ Reject drafts with:
 - Rods or hangers set too far back
 - Cropped top/back cabinet read
 - Flush or oversized toe kicks
+- Missing, covered, cropped, or floating toe kicks; the 5-inch recessed base and kick-board shadow line must remain visible
 - Duplicate divider panels
 - Excess empty wall or floor, unrelated furniture or decor, or a product that appears too small in the frame
 - Inconsistent featured-image aspect ratio or off-center product placement

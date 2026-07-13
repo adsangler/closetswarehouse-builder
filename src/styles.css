@@ -31,6 +31,10 @@ body {
   overflow: hidden;
 }
 
+.app-shell.app-shell-scroll {
+  overflow-y: auto;
+}
+
 .app-header {
   min-height: 4rem;
   flex-shrink: 0;
@@ -40,6 +44,11 @@ body {
   flex: 1 1 auto;
   height: 100%;
   min-height: 0;
+}
+
+.app-shell-scroll .app-workspace {
+  height: auto;
+  min-height: calc(100dvh - 4rem);
 }
 
 @media (max-width: 1023px) {

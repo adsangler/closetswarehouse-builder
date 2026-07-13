@@ -24,6 +24,7 @@ Use this internal renderer only for product image creation, render checks, and S
 - Keep only architectural context that explains the installation. Minimize unrelated walls, floors, windows, furniture, artwork, rugs, plants, and room decor.
 - For reach-in products, retain enough casing, header, and open door panels to identify the door type, but crop the room tightly around the opening.
 - Keep the complete cabinet visible. Never crop its top, sides, toe kicks, or important top-back read.
+- The toe-kick is mandatory visible product geometry: retain the complete 5-inch-high zone below the bottom shelf, a kick board recessed about 2 inches from the front plane, and the continuous shadow line under the bottom shelf. Never replace it with a flush plinth, legs, or an empty/floating base.
 - Use the same framing scale and visual center across the featured-image catalog so collection cards remain consistent.
 
 ## Automatic Photo Sets

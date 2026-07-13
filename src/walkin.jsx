@@ -2050,7 +2050,7 @@ function buildDetailedWalkInParts(room, runs) {
 
       add(`FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, fixedShelves, `${wallLabels[wall]} ${towerNames[code] || code} structural shelves.`, 'Shelves');
       add(`SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, adjustableShelves, `${wallLabels[wall]} ${towerNames[code] || code} movable shelves.`, 'Shelves');
-      add(`TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `${wallLabels[wall]} recessed toe-kick kit.`, 'Kits');
+      add(`TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `Toe-kick kit for the ${wallLabels[wall].toLowerCase()} run.`, 'Kits');
       add(`RK-${width}-S`, `Rod kit ${width}"`, rods, `${wallLabels[wall]} hanging rod kit.`, 'Kits');
     });
   });
