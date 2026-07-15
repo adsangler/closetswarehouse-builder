@@ -98,10 +98,45 @@ function phoneMatches(left, right) {
       && normalizedLeft.slice(-10) === normalizedRight.slice(-10));
 }
 
+function emailMatches(left, right) {
+  return normalizeEmail(left) === normalizeEmail(right);
+}
+
 function compactFields(fields) {
   return Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ''),
   );
+}
+
+async function fetchQuoteRecords(config, configureUrl = () => {}) {
+  const records = [];
+  let offset;
+
+  do {
+    const url = new URL(`https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`);
+    url.searchParams.set('pageSize', '100');
+    configureUrl(url);
+
+    if (offset) {
+      url.searchParams.set('offset', offset);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Airtable quote lookup returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    records.push(...(payload.records || []));
+    offset = payload.offset;
+  } while (offset);
+
+  return records;
 }
 
 function getCustomerDisplayName(customer = {}) {
@@ -350,29 +385,33 @@ export async function fetchAirtableQuotesByContact({ email, phone }, { requirePh
     throw new Error('Email and phone are required');
   }
 
-  const url = new URL(`https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`);
-  url.searchParams.set('pageSize', '100');
-  url.searchParams.set('filterByFormula', `LOWER({Email}) = '${escapeAirtableString(normalizedEmail)}'`);
-  url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
-  url.searchParams.set('sort[0][direction]', 'desc');
+  const filterMatches = (quote) => {
+    const matchesEmail = emailMatches(quote.customer?.email, normalizedEmail)
+      || emailMatches(quote.quote?.customer?.email, normalizedEmail);
+    const matchesPhone = !normalizedPhone
+      || phoneMatches(quote.customer?.phone, normalizedPhone)
+      || phoneMatches(quote.quote?.customer?.phone, normalizedPhone);
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-    },
+    return matchesEmail && matchesPhone;
+  };
+
+  const records = await fetchQuoteRecords(config, (url) => {
+    url.searchParams.set('filterByFormula', `LOWER({Email}) = '${escapeAirtableString(normalizedEmail)}'`);
+    url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
+    url.searchParams.set('sort[0][direction]', 'desc');
   });
+  const quotes = records.map((record) => parseQuoteRecord(record)).filter(filterMatches);
 
-  if (!response.ok) {
-    throw new Error(`Airtable contact quote lookup returned ${response.status}`);
+  if (quotes.length) {
+    return quotes;
   }
 
-  const payload = await response.json();
+  const fallbackRecords = await fetchQuoteRecords(config, (url) => {
+    url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
+    url.searchParams.set('sort[0][direction]', 'desc');
+  });
 
-  const quotes = (payload.records || []).map((record) => parseQuoteRecord(record));
-
-  return normalizedPhone
-    ? quotes.filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone))
-    : quotes;
+  return fallbackRecords.map((record) => parseQuoteRecord(record)).filter(filterMatches);
 }
 
 export async function sendConfirmationEmail(quote) {

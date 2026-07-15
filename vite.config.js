@@ -221,6 +221,10 @@ function phoneMatches(left, right) {
       && normalizedLeft.slice(-10) === normalizedRight.slice(-10));
 }
 
+function emailMatches(left, right) {
+  return normalizeEmail(left) === normalizeEmail(right);
+}
+
 function buildLegacyQuoteFields(quote) {
   const customerName = [quote.customer?.firstName, quote.customer?.lastName].filter(Boolean).join(' ').trim() || quote.customer?.name || '';
 
@@ -257,6 +261,40 @@ function buildEnrichedQuoteFields(env, quote) {
       [fieldNames.shopifyCustomerEmail]: quote.shopifyCustomer?.customerEmail,
     }),
   };
+}
+
+async function fetchAirtableQuoteRecords(env, configureUrl = () => {}) {
+  const token = env.AIRTABLE_TOKEN;
+  const baseId = env.AIRTABLE_BASE_ID;
+  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const records = [];
+  let offset;
+
+  do {
+    const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
+    url.searchParams.set('pageSize', '100');
+    configureUrl(url);
+
+    if (offset) {
+      url.searchParams.set('offset', offset);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Airtable quote lookup returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    records.push(...(payload.records || []));
+    offset = payload.offset;
+  } while (offset);
+
+  return records;
 }
 
 function applyServerEnv(env, keys) {
@@ -491,29 +529,33 @@ async function fetchAirtableQuotesByContact(env, { email, phone }, { requirePhon
   }
 
   const fieldNames = getQuoteFieldNames(env);
-  const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
-  url.searchParams.set('pageSize', '100');
-  url.searchParams.set('filterByFormula', `LOWER({Email}) = '${normalizedEmail.replace(/'/g, "\\'")}'`);
-  url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
-  url.searchParams.set('sort[0][direction]', 'desc');
+  const filterMatches = (quote) => {
+    const matchesEmail = emailMatches(quote.customer?.email, normalizedEmail)
+      || emailMatches(quote.quote?.customer?.email, normalizedEmail);
+    const matchesPhone = !normalizedPhone
+      || phoneMatches(quote.customer?.phone, normalizedPhone)
+      || phoneMatches(quote.quote?.customer?.phone, normalizedPhone);
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    return matchesEmail && matchesPhone;
+  };
+
+  const records = await fetchAirtableQuoteRecords(env, (url) => {
+    url.searchParams.set('filterByFormula', `LOWER({Email}) = '${normalizedEmail.replace(/'/g, "\\'")}'`);
+    url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
+    url.searchParams.set('sort[0][direction]', 'desc');
   });
+  const quotes = records.map((record) => parseQuoteRecord(env, record)).filter(filterMatches);
 
-  if (!response.ok) {
-    throw new Error(`Airtable contact quote lookup returned ${response.status}`);
+  if (quotes.length) {
+    return quotes;
   }
 
-  const payload = await response.json();
+  const fallbackRecords = await fetchAirtableQuoteRecords(env, (url) => {
+    url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
+    url.searchParams.set('sort[0][direction]', 'desc');
+  });
 
-  const quotes = (payload.records || []).map((record) => parseQuoteRecord(env, record));
-
-  return normalizedPhone
-    ? quotes.filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone))
-    : quotes;
+  return fallbackRecords.map((record) => parseQuoteRecord(env, record)).filter(filterMatches);
 }
 
 function getShopifyProxySecret(env) {
