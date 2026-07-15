@@ -566,19 +566,35 @@ function verifyShopifyAppProxySignature(env, requestUrl) {
   const secret = getShopifyProxySecret(env);
 
   if (!secret) {
-    return process.env.NODE_ENV !== 'production';
+    return process.env.NODE_ENV !== 'production'
+      ? { ok: true }
+      : { ok: false, reason: 'missing_secret' };
   }
 
   const signature = requestUrl.searchParams.get('signature') || requestUrl.searchParams.get('hmac');
 
   if (!signature) {
-    return false;
+    return { ok: false, reason: 'missing_signature' };
   }
 
-  return getSignaturePayloads(requestUrl).some((message) => {
+  const ok = getSignaturePayloads(requestUrl).some((message) => {
     const digest = createHmac('sha256', secret).update(message).digest('hex');
     return constantTimeEqual(digest, signature);
   });
+
+  return ok ? { ok: true } : { ok: false, reason: 'signature_mismatch' };
+}
+
+function getProxyErrorMessage(reason) {
+  if (reason === 'missing_secret') {
+    return 'Plans lookup is connected, but the deployment is missing the Shopify app secret.';
+  }
+
+  if (reason === 'signature_mismatch') {
+    return 'Plans lookup reached Shopify, but the Shopify app secret does not match this deployment.';
+  }
+
+  return 'This plans lookup must be opened through closetswarehouse.com.';
 }
 
 async function sendConfirmationEmail(env, quote) {
@@ -638,10 +654,15 @@ function quoteRequestProxy(env) {
           try {
             const requestUrl = new URL(req.url || '', 'http://localhost');
 
-            if (!verifyShopifyAppProxySignature(env, requestUrl)) {
+            const proxyAuth = verifyShopifyAppProxySignature(env, requestUrl);
+            if (!proxyAuth.ok) {
               res.statusCode = 401;
               res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Unauthorized customer quote request' }));
+              res.end(JSON.stringify({
+                error: 'Unauthorized customer quote request',
+                reason: proxyAuth.reason,
+                message: getProxyErrorMessage(proxyAuth.reason),
+              }));
               return;
             }
 

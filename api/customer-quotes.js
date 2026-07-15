@@ -166,19 +166,35 @@ function verifyShopifyAppProxySignature(requestUrl) {
   const secret = getShopifyProxySecret();
 
   if (!secret) {
-    return process.env.NODE_ENV !== 'production';
+    return process.env.NODE_ENV !== 'production'
+      ? { ok: true }
+      : { ok: false, reason: 'missing_secret' };
   }
 
   const signature = requestUrl.searchParams.get('signature') || requestUrl.searchParams.get('hmac');
 
   if (!signature) {
-    return false;
+    return { ok: false, reason: 'missing_signature' };
   }
 
-  return getSignaturePayloads(requestUrl).some((message) => {
+  const ok = getSignaturePayloads(requestUrl).some((message) => {
     const digest = createHmac('sha256', secret).update(message).digest('hex');
     return constantTimeEqual(digest, signature);
   });
+
+  return ok ? { ok: true } : { ok: false, reason: 'signature_mismatch' };
+}
+
+function getProxyErrorMessage(reason) {
+  if (reason === 'missing_secret') {
+    return 'Plans lookup is connected, but the deployment is missing the Shopify app secret.';
+  }
+
+  if (reason === 'signature_mismatch') {
+    return 'Plans lookup reached Shopify, but the Shopify app secret does not match this deployment.';
+  }
+
+  return 'This plans lookup must be opened through closetswarehouse.com.';
 }
 
 export default async function handler(req, res) {
@@ -191,11 +207,12 @@ export default async function handler(req, res) {
     const requestUrl = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
     const wantsJson = requestUrl.searchParams.get('format') === 'json';
 
-    if (!verifyShopifyAppProxySignature(requestUrl)) {
+    const proxyAuth = verifyShopifyAppProxySignature(requestUrl);
+    if (!proxyAuth.ok) {
       if (wantsJson) {
-        sendJson(res, 401, { error: 'Unauthorized customer quote request' });
+        sendJson(res, 401, { error: 'Unauthorized customer quote request', reason: proxyAuth.reason });
       } else {
-        sendHtml(res, 401, renderQuotesHtml({ state: 'error', message: 'This plans lookup must be opened from closetswarehouse.com.' }));
+        sendHtml(res, 401, renderQuotesHtml({ state: 'error', message: getProxyErrorMessage(proxyAuth.reason) }));
       }
       return;
     }
