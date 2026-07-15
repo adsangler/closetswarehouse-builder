@@ -833,6 +833,18 @@ function quoteRequestProxy(env) {
 
           applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
           const airtableRecord = await createAirtableQuote(env, capturedQuote);
+
+          if (!airtableRecord?.id) {
+            const outDir = path.resolve('assets/drafts/quote-requests');
+            await fs.mkdir(outDir, { recursive: true });
+            await fs.writeFile(path.join(outDir, `${quoteId}.json`), JSON.stringify(capturedQuote, null, 2), 'utf8');
+
+            res.statusCode = 502;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'We could not save this plan to Airtable. Please try again before printing the reference.' }));
+            return;
+          }
+
           let shopifyCustomer = null;
 
           try {
@@ -841,25 +853,15 @@ function quoteRequestProxy(env) {
             shopifyCustomer = null;
           }
 
-          const capturedQuoteWithCustomer = { ...capturedQuote, shopifyCustomer };
-
           if (airtableRecord?.id && shopifyCustomer?.customerId) {
             await updateAirtableQuoteShopifyCustomer(env, airtableRecord.id, capturedQuote, shopifyCustomer);
-          }
-
-          const captureMode = airtableRecord ? 'airtable' : 'local';
-
-          if (!airtableRecord) {
-            const outDir = path.resolve('assets/drafts/quote-requests');
-            await fs.mkdir(outDir, { recursive: true });
-            await fs.writeFile(path.join(outDir, `${quoteId}.json`), JSON.stringify(capturedQuoteWithCustomer, null, 2), 'utf8');
           }
 
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
             ok: true,
             quoteId,
-            captureMode,
+            captureMode: 'airtable',
             shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
           }));
         } catch (error) {

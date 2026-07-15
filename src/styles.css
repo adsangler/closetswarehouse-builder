@@ -66,6 +66,64 @@ body {
   }
 }
 
+.print-plan-reference {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 0.5in;
+  }
+
+  html,
+  body,
+  #root,
+  main,
+  section,
+  aside,
+  .app-shell,
+  .app-workspace,
+  .print-flow {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  button,
+  .print-hide {
+    display: none !important;
+  }
+
+  .print-plan-reference {
+    display: block !important;
+    break-after: avoid;
+  }
+
+  [class*="overflow-y-auto"],
+  [class*="overflow-x-auto"],
+  [class*="overflow-auto"],
+  [class*="overflow-hidden"],
+  [class*="h-screen"] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  [class*="lg:grid-cols"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+}
+
 .drawing-title {
   fill: #1A1A1A;
   font-size: 18px;

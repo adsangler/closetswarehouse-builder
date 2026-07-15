@@ -223,6 +223,31 @@ function buildEnrichedQuoteFields(quote, shopifyCustomer = null) {
   };
 }
 
+function buildCoreQuoteFields(quote) {
+  const fieldNames = getQuoteFieldNames();
+
+  return {
+    ...buildLegacyQuoteFields(quote),
+    ...compactFields({
+      [fieldNames.quoteId]: quote.quoteId,
+      [fieldNames.planUrl]: quote.planUrl,
+      [fieldNames.planType]: quote.planType || quote.internalType || 'closet plan',
+      [fieldNames.submittedAt]: quote.submittedAt,
+    }),
+  };
+}
+
+function buildRequiredQuoteFields(quote) {
+  const fieldNames = getQuoteFieldNames();
+
+  return {
+    ...buildLegacyQuoteFields(quote),
+    ...compactFields({
+      [fieldNames.quoteId]: quote.quoteId,
+    }),
+  };
+}
+
 export async function createAirtableQuote(quote) {
   const config = getQuoteConfig();
 
@@ -252,16 +277,29 @@ export async function createAirtableQuote(quote) {
       throw new Error(`Airtable quote capture returned ${response.status}`);
     }
 
-    const fallback = await airtableRequest(config, '', {
+    const coreFallback = await airtableRequest(config, '', {
       method: 'POST',
-      body: JSON.stringify({ fields: buildLegacyQuoteFields(quote) }),
+      body: JSON.stringify({ fields: buildCoreQuoteFields(quote) }),
     });
 
-    if (!fallback.response.ok) {
-      throw new Error(`Airtable quote capture returned ${fallback.response.status}`);
+    if (coreFallback.response.ok) {
+      return coreFallback.payload;
     }
 
-    return fallback.payload;
+    if (!/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(coreFallback.text)) {
+      throw new Error(`Airtable quote capture returned ${coreFallback.response.status}`);
+    }
+
+    const requiredFallback = await airtableRequest(config, '', {
+      method: 'POST',
+      body: JSON.stringify({ fields: buildRequiredQuoteFields(quote) }),
+    });
+
+    if (!requiredFallback.response.ok) {
+      throw new Error(`Airtable quote capture returned ${requiredFallback.response.status}`);
+    }
+
+    return requiredFallback.payload;
   } catch {
     return null;
   }

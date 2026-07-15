@@ -63,6 +63,12 @@ export default async function handler(req, res) {
     }
 
     const airtableRecord = await createAirtableQuote(capturedQuote);
+
+    if (!airtableRecord?.id) {
+      sendJson(res, 502, { error: 'We could not save this plan to Airtable. Please try again before printing the reference.' });
+      return;
+    }
+
     let shopifyCustomer = null;
 
     try {
@@ -78,7 +84,7 @@ export default async function handler(req, res) {
     sendJson(res, 200, {
       ok: true,
       quoteId,
-      captureMode: airtableRecord ? 'airtable' : 'unconfigured',
+      captureMode: 'airtable',
       shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
     });
   } catch (error) {

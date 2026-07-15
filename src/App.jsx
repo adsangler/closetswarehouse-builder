@@ -44,7 +44,7 @@ function SavedPlanActions({ quoteId }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
-        Saved. Reference {quoteId}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
+        Saved. Plan ID {quoteId}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <button type="button" onClick={() => window.print()} className="rounded bg-emerald-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-emerald-800">
@@ -58,6 +58,20 @@ function SavedPlanActions({ quoteId }) {
         </a>
       </div>
     </div>
+  );
+}
+
+function PrintablePlanReference({ quoteId, planType = 'Closet plan' }) {
+  if (!quoteId) {
+    return null;
+  }
+
+  return (
+    <section className="print-plan-reference rounded border border-stone-300 bg-white p-4">
+      <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
+      <h2 className="mt-1 text-xl font-bold text-stone-950">{planType}</h2>
+      <p className="mt-2 text-base font-bold text-stone-950">Plan ID: {quoteId}</p>
+    </section>
   );
 }
 
@@ -2672,8 +2686,9 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   };
 
   return (
-    <main className="h-screen overflow-y-auto bg-brand-ui p-2 text-brand-black sm:p-4">
+    <main className="print-flow h-screen overflow-y-auto bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
+        <PrintablePlanReference quoteId={submitStatus.quoteId} planType="Reach-in saved plan" />
         <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
