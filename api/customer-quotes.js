@@ -117,31 +117,63 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
 </html>`;
 }
 
+function getShopifyProxySecret() {
+  return process.env.SHOPIFY_API_SECRET
+    || process.env.SHOPIFY_CLIENT_SECRET
+    || process.env.SHOPIFY_APP_SECRET;
+}
+
+function constantTimeEqual(left = '', right = '') {
+  const expected = Buffer.from(String(left), 'utf8');
+  const actual = Buffer.from(String(right), 'utf8');
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function getSignaturePayloads(requestUrl) {
+  const decodedParams = new URLSearchParams(requestUrl.search);
+  decodedParams.delete('signature');
+  decodedParams.delete('hmac');
+  const decodedEntries = [...decodedParams.entries()]
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+  const rawEntries = String(requestUrl.search || '')
+    .replace(/^\?/, '')
+    .split('&')
+    .filter(Boolean)
+    .map((pair) => {
+      const separatorIndex = pair.indexOf('=');
+      return separatorIndex === -1
+        ? [pair, '']
+        : [pair.slice(0, separatorIndex), pair.slice(separatorIndex + 1)];
+    })
+    .filter(([key]) => key !== 'signature' && key !== 'hmac')
+    .sort(([leftKey], [rightKey]) => decodeURIComponent(leftKey).localeCompare(decodeURIComponent(rightKey)));
+
+  return [
+    decodedEntries.map(([key, value]) => `${key}=${value}`).join(''),
+    decodedEntries.map(([key, value]) => `${key}=${value}`).join('&'),
+    rawEntries.map(([key, value]) => `${key}=${value}`).join(''),
+    rawEntries.map(([key, value]) => `${key}=${value}`).join('&'),
+  ].filter((payload, index, payloads) => payload && payloads.indexOf(payload) === index);
+}
+
 function verifyShopifyAppProxySignature(requestUrl) {
-  const secret = process.env.SHOPIFY_API_SECRET;
+  const secret = getShopifyProxySecret();
 
   if (!secret) {
     return process.env.NODE_ENV !== 'production';
   }
 
-  const signature = requestUrl.searchParams.get('signature');
+  const signature = requestUrl.searchParams.get('signature') || requestUrl.searchParams.get('hmac');
 
   if (!signature) {
     return false;
   }
 
-  const params = new URLSearchParams(requestUrl.search);
-  params.delete('signature');
-
-  const message = [...params.entries()]
-    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-    .map(([key, value]) => `${key}=${value}`)
-    .join('');
-  const digest = createHmac('sha256', secret).update(message).digest('hex');
-  const expected = Buffer.from(digest, 'utf8');
-  const actual = Buffer.from(signature, 'utf8');
-
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
+  return getSignaturePayloads(requestUrl).some((message) => {
+    const digest = createHmac('sha256', secret).update(message).digest('hex');
+    return constantTimeEqual(digest, signature);
+  });
 }
 
 export default async function handler(req, res) {
