@@ -291,7 +291,7 @@ function buildRequiredQuoteFields(env, quote) {
 async function fetchAirtableQuoteRecords(env, configureUrl = () => {}) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
   const records = [];
   let offset;
 
@@ -333,7 +333,7 @@ function applyServerEnv(env, keys) {
 async function createAirtableQuote(env, quote) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
 
   if (!token || !baseId || !tableName) {
     return { record: null, error: 'missing_airtable_quote_env' };
@@ -431,7 +431,7 @@ async function createAirtableQuote(env, quote) {
 async function updateAirtableQuoteShopifyCustomer(env, recordId, quote, shopifyCustomer) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
 
   if (!token || !baseId || !tableName || !recordId || !shopifyCustomer?.customerId) {
     return null;
@@ -458,7 +458,7 @@ async function updateAirtableQuoteShopifyCustomer(env, recordId, quote, shopifyC
 async function fetchAirtableQuoteByReference(env, { quoteId, email }) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
 
   if (!token || !baseId || !tableName) {
     return null;
@@ -546,7 +546,7 @@ function parseQuoteRecord(env, record, fallbackQuoteId = '') {
 async function fetchAirtableQuotesByShopifyCustomerId(env, shopifyCustomerId) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
 
   if (!token || !baseId || !tableName) {
     return [];
@@ -584,7 +584,7 @@ async function fetchAirtableQuotesByShopifyCustomerId(env, shopifyCustomerId) {
 async function fetchAirtableQuotesByContact(env, { email, phone }, { requirePhone = true } = {}) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE;
+  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
 
   if (!token || !baseId || !tableName) {
     return [];

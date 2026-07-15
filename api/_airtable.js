@@ -52,7 +52,7 @@ export async function fetchAirtableRecords(tableKey) {
 function getQuoteConfig() {
   const token = process.env.AIRTABLE_TOKEN;
   const baseId = process.env.AIRTABLE_BASE_ID;
-  const tableName = process.env.AIRTABLE_QUOTES_TABLE;
+  const tableName = process.env.AIRTABLE_QUOTES_TABLE || 'Quotes';
 
   if (!token || !baseId || !tableName) {
     return null;
