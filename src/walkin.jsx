@@ -56,9 +56,12 @@ function SavedPlanActions({ quoteId }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
-        Saved. Reference {quoteId}. You can reopen this plan from the Your plans section using the email and phone you entered. Call or email us to finalize your order.
+        Saved. Reference {quoteId}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
       </p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <button type="button" onClick={() => window.print()} className="rounded bg-emerald-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-emerald-800">
+          Print reference
+        </button>
         <a href={phoneHref} target="_top" className="rounded bg-stone-950 px-3 py-2 text-center text-sm font-bold text-white hover:bg-stone-800">
           Call {phoneDisplay}
         </a>

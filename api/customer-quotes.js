@@ -40,6 +40,12 @@ function renderLookupForm({ email = '', phone = '', message = '' } = {}) {
 }
 
 function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '', email = '', phone = '' }) {
+  const quoteIds = quotes
+    .map((quote) => quote.quoteId)
+    .filter(Boolean);
+  const resultMessage = quoteIds.length
+    ? `Found ${quoteIds.length === 1 ? 'your saved plan' : `${quoteIds.length} saved plans`}. Reference ${quoteIds.map(escapeHtml).join(', ')}. Print this page for future reference.`
+    : '';
   const cards = quotes.length
     ? quotes.map((quote) => {
       const quoteId = escapeHtml(quote.quoteId || 'Saved plan');
@@ -52,9 +58,13 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
           <div>
             <p class="eyebrow">${planType}</p>
             <h3>${quoteId}</h3>
+            <p class="muted">Reference ${quoteId}</p>
             ${date ? `<p class="muted">Saved ${escapeHtml(date)}</p>` : ''}
           </div>
-          ${planUrl ? `<a class="button" href="${planUrl}" target="_top">Open plan</a>` : ''}
+          <div class="actions">
+            ${planUrl ? `<a class="button" href="${planUrl}" target="_top">Open plan</a>` : ''}
+            <button class="button print-button" type="button" onclick="window.print()">Print reference</button>
+          </div>
         </article>
       `;
     }).join('')
@@ -64,7 +74,7 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
     ? renderLookupForm({ email, phone, message })
     : state === 'error'
       ? `<p class="empty">${escapeHtml(message || 'We could not load your saved plans right now.')}</p>`
-      : `${renderLookupForm({ email, phone })}<div class="plans">${cards}</div>`;
+      : `${renderLookupForm({ email, phone })}${resultMessage ? `<p class="result-message">${resultMessage}</p>` : ''}<div class="plans">${cards}</div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -81,11 +91,19 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
       button { min-height: 42px; border: 0; border-radius: 6px; background: #d95d23; color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
       .plans { display: grid; gap: 12px; }
       .plan-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid #e7e5e4; border-radius: 8px; background: #fff; }
+      .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
       .eyebrow { margin: 0 0 4px; color: #d95d23; font-size: 12px; font-weight: 800; text-transform: uppercase; }
       h3 { margin: 0; font-size: 18px; line-height: 1.2; }
-      .muted, .empty, .form-message { margin: 6px 0 0; color: #57534e; font-size: 14px; font-weight: 600; }
+      .muted, .empty, .form-message, .result-message { margin: 6px 0 0; color: #57534e; font-size: 14px; font-weight: 600; }
+      .result-message { margin: 0 0 12px; padding: 12px 14px; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; background: #f0fdf4; }
       .button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 10px 14px; border-radius: 6px; background: #1c1917; color: white; font-size: 14px; font-weight: 800; text-decoration: none; white-space: nowrap; }
-      @media (max-width: 520px) { .plan-card { display: grid; } .button { width: 100%; } }
+      .print-button { background: #d95d23; }
+      @media (max-width: 520px) { .plan-card, .actions { display: grid; } .button { width: 100%; } }
+      @media print {
+        .lookup-form, .print-button { display: none; }
+        body { background: #fff; }
+        .plan-card, .result-message { break-inside: avoid; }
+      }
     </style>
   </head>
   <body>
