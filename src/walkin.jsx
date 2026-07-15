@@ -506,8 +506,8 @@ function RoomSetup({ room, setRoom, corners, setCorners }) {
           ['rightDepth', 'Room right wall width'],
           ['ceilingHeight', 'Room ceiling height'],
           ['openingWidth', 'Entrance opening'],
-          ['openingLeft', 'Left of entrance'],
-          ['openingRight', 'Right of entrance'],
+          ['openingLeft', 'Left return wall'],
+          ['openingRight', 'Right return wall'],
         ].map(([key, label]) => (
           <label key={key} className="block">
             <span className="mb-1 block text-xs font-bold text-stone-500">{label}</span>

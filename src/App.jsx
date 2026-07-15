@@ -2156,7 +2156,7 @@ function ReachInSpaceSummary({ planDetails, onEdit, children }) {
     { label: 'Closet depth', value: formatInches(planDetails.roomDepthInput || planDetails.roomDepth || 0) },
     { label: 'Ceiling', value: formatInches(planDetails.ceilingHeight || 0), tone: planDetails.ceilingClear ? 'text-emerald-700' : 'text-red-700' },
     { label: 'Opening', value: formatInches(planDetails.openingWidth || 0), tone: planDetails.openingClear ? 'text-stone-950' : 'text-red-700' },
-    { label: 'Left / right', value: `${formatInches(planDetails.openingLeft || 0)} / ${formatInches(planDetails.openingRight || 0)}` },
+    { label: 'Return walls', value: `${formatInches(planDetails.openingLeft || 0)} / ${formatInches(planDetails.openingRight || 0)}` },
     { label: 'Open total', value: formatInches(planDetails.openingTotal || 0), tone: planDetails.openingMatchesWall ? 'text-emerald-700' : 'text-red-700' },
     { label: 'Door type', value: doorLabel },
     {
@@ -2308,10 +2308,38 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange }
   );
 }
 
+function getReachInValidationMessages(planDetails) {
+  if (!planDetails) return [];
+
+  const messages = [];
+
+  if (planDetails.requiredWidth > 0 && planDetails.wallWidth < planDetails.requiredWidth) {
+    messages.push(`This closet configuration is too wide. It needs ${formatInches(planDetails.requiredWidth)} of wall space, but the closet wall is ${formatInches(planDetails.wallWidth)}.`);
+  }
+
+  if (!planDetails.openingMatchesWall) {
+    messages.push('The opening and return wall dimensions need to add up to the full closet width.');
+  }
+
+  if (!planDetails.openingClear) {
+    messages.push('The closet opening must be at least 24" wide.');
+  }
+
+  if (!planDetails.slidingDividerAligned) {
+    messages.push('For sliding doors, a shared divider must be centered so each side can be reached when one door is closed.');
+  }
+
+  if (!planDetails.ceilingClear) {
+    messages.push('The selected tower height must be lower than the ceiling height.');
+  }
+
+  return [...messages, ...(planDetails.drawerWarnings || [])];
+}
+
 function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogReady }) {
   const hasModules = modules.length > 0;
-  const drawerWarnings = planDetails?.drawerWarnings || [];
-  const hasDrawerAccessIssue = drawerWarnings.length > 0;
+  const validationMessages = getReachInValidationMessages(planDetails);
+  const canVerifyEstimate = Boolean(planDetails?.fits);
 
   if (!hasModules) {
     return (
@@ -2345,7 +2373,7 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
               {money(evaluation.displayPrice)} <span className="text-xs font-bold uppercase tracking-wide text-emerald-700">kit price</span>
             </span>
           )}
-          {evaluation.match.productUrl && !hasDrawerAccessIssue && (
+          {evaluation.match.productUrl && canVerifyEstimate && (
             <a
               href={evaluation.match.productUrl}
               className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white transition hover:bg-orange-700"
@@ -2353,13 +2381,13 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
               Buy This System
             </a>
           )}
-          <button type="button" onClick={onContinue} disabled={hasDrawerAccessIssue} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
+          <button type="button" onClick={onContinue} disabled={!canVerifyEstimate} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
             Verify estimate
           </button>
         </div>
-        {drawerWarnings.length > 0 && (
+        {validationMessages.length > 0 && (
           <div className="mt-3 grid gap-2">
-            {drawerWarnings.map((warning) => (
+            {validationMessages.map((warning) => (
               <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
                 {warning}
               </div>
@@ -2376,13 +2404,13 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
       <p className="mt-2 text-sm text-stone-700">Review the material and order details before submitting for verification.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-lg font-bold text-stone-950">{money(evaluation.estimatedPrice)} estimated</span>
-        <button type="button" onClick={onContinue} disabled={hasDrawerAccessIssue} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
+        <button type="button" onClick={onContinue} disabled={!canVerifyEstimate} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
           Verify estimate
         </button>
       </div>
-      {drawerWarnings.length > 0 && (
+      {validationMessages.length > 0 && (
         <div className="mt-3 grid gap-2">
-          {drawerWarnings.map((warning) => (
+          {validationMessages.map((warning) => (
             <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
               {warning}
             </div>
@@ -2468,7 +2496,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
               <dd className="font-bold text-stone-950">{formatInches(planDetails.clearDepth || 0)}</dd>
               <dt className="font-semibold text-stone-500">Opening</dt>
               <dd className="font-bold text-stone-950">{formatInches(planDetails.openingWidth || 0)}</dd>
-              <dt className="font-semibold text-stone-500">Left / right opening</dt>
+              <dt className="font-semibold text-stone-500">Return walls</dt>
               <dd className="font-bold text-stone-950">{formatInches(planDetails.openingLeft || 0)} / {formatInches(planDetails.openingRight || 0)}</dd>
               <dt className="font-semibold text-stone-500">Door type</dt>
               <dd className="font-bold text-stone-950">{reachInDoorTypes.find((type) => type.value === planDetails.doorType)?.label || 'No door / regular'}</dd>
@@ -2534,8 +2562,15 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
   const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules), [planDetails, modules]);
+  const validationMessages = getReachInValidationMessages(planDetails);
+  const canSavePlan = Boolean(planDetails?.fits);
   const submitForVerification = async (event) => {
     event.preventDefault();
+    if (!canSavePlan) {
+      setSubmitStatus({ state: 'error', message: 'Please fix the closet configuration before saving this estimate.' });
+      return;
+    }
+
     setSubmitStatus({ state: 'loading', message: 'Saving plan to your account...' });
 
     try {
@@ -2649,7 +2684,16 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
                 <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
                 <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
               </div>
-              <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+              {validationMessages.length > 0 && (
+                <div className="mt-3 grid gap-2">
+                  {validationMessages.map((warning) => (
+                    <div key={warning} className="rounded bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                      {warning}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button type="submit" disabled={submitStatus.state === 'loading' || !canSavePlan} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
                 Save to account
               </button>
               {submitStatus.message && (
@@ -2813,7 +2857,7 @@ function ReachInRoomSetup({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="reach-in-opening-left">
-              Left of opening
+              Left return wall
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -2830,7 +2874,7 @@ function ReachInRoomSetup({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500" htmlFor="reach-in-opening-right">
-              Right of opening
+              Right return wall
             </label>
             <div className="flex items-center gap-1">
               <input
