@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
 import { buildResolvedParts } from './api/_part-pricing.js';
 import { normalizeQuoteSubmission, validateNormalizedQuote } from './api/_quote-normalize.js';
 import { isInternalAirtableApiEnabled, sanitizePublicKitRecords } from './api/_public-records.js';
-import { upsertShopifyCustomerPlan } from './api/_shopify.js';
+import { fetchShopifyCustomerContact, upsertShopifyCustomerPlan } from './api/_shopify.js';
 
 const airtableTables = {
   '/api/kits': 'AIRTABLE_KITS_TABLE',
@@ -608,23 +608,61 @@ function quoteRequestProxy(env) {
             const customerId = requestUrl.searchParams.get('logged_in_customer_id') || requestUrl.searchParams.get('customerId');
             const email = requestUrl.searchParams.get('email') || '';
             const phone = requestUrl.searchParams.get('phone') || '';
+            const manualContactProvided = normalizeEmail(email) && normalizePhone(phone).length >= 7;
 
-            if (!customerId && (!normalizeEmail(email) || normalizePhone(phone).length < 7)) {
+            if (!customerId && !manualContactProvided) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Email and phone are required' }));
               return;
             }
 
-            const quotes = customerId
-              ? await fetchAirtableQuotesByShopifyCustomerId(env, customerId)
-              : await fetchAirtableQuotesByContact(env, { email, phone });
+            let quotes = [];
+            let matchedBy = '';
+            let message = '';
+
+            if (customerId) {
+              quotes = await fetchAirtableQuotesByShopifyCustomerId(env, customerId);
+              matchedBy = quotes.length ? 'customer' : '';
+
+              if (!quotes.length && !manualContactProvided) {
+                try {
+                  applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
+                  const accountContact = await fetchShopifyCustomerContact(customerId);
+
+                  if (normalizeEmail(accountContact?.customer?.email) && normalizePhone(accountContact?.customer?.phone).length >= 7) {
+                    quotes = await fetchAirtableQuotesByContact(env, accountContact.customer);
+                    matchedBy = quotes.length ? 'account_contact' : '';
+                    message = quotes.length
+                      ? ''
+                      : 'We could not find a saved plan for the email and phone on your customer account. Enter the email and phone used when you saved the plan.';
+                  } else {
+                    message = 'Enter the email and phone used when you saved the plan.';
+                  }
+                } catch (error) {
+                  message = 'Enter the email and phone used when you saved the plan.';
+                }
+              }
+
+              if (!quotes.length && manualContactProvided) {
+                quotes = await fetchAirtableQuotesByContact(env, { email, phone });
+                matchedBy = quotes.length ? 'manual_contact' : '';
+              }
+            } else {
+              quotes = await fetchAirtableQuotesByContact(env, { email, phone });
+              matchedBy = quotes.length ? 'manual_contact' : '';
+            }
 
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({
               ok: true,
               customerId,
-              email: customerId ? undefined : email,
+              email: matchedBy === 'manual_contact' ? email : undefined,
+              matchedBy,
+              needsContact: !quotes.length,
+              message: !quotes.length
+                ? message || 'No saved plans matched that email and phone. Check the details you used when saving the plan.'
+                : undefined,
               quotes: quotes.map(({ quote, ...summary }) => summary),
             }));
           } catch (error) {

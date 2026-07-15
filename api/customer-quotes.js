@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fetchAirtableQuotesByContact, fetchAirtableQuotesByShopifyCustomerId, sendJson } from './_airtable.js';
+import { fetchShopifyCustomerContact } from './_shopify.js';
 
 const storefrontBaseUrl = 'https://closetswarehouse.com';
+const enterSavedPlanContactMessage = 'Enter the email and phone used when you saved the plan.';
+const accountContactNoMatchMessage = 'We could not find a saved plan for the email and phone on your customer account. Enter the email and phone used when you saved the plan.';
 
 function escapeHtml(value) {
   return String(value || '')
@@ -39,7 +42,7 @@ function renderLookupForm({ email = '', phone = '', message = '' } = {}) {
   `;
 }
 
-function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '', email = '', phone = '' }) {
+function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '', email = '', phone = '', showLookupForm = true, emptyMessage = '' }) {
   const quoteIds = quotes
     .map((quote) => quote.quoteId)
     .filter(Boolean);
@@ -68,13 +71,13 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
         </article>
       `;
     }).join('')
-    : '<p class="empty">No saved plans matched that email and phone. Check the details you used when saving the plan.</p>';
+    : `<p class="empty">${escapeHtml(emptyMessage || 'No saved plans matched that email and phone. Check the details you used when saving the plan.')}</p>`;
 
   const body = state === 'form'
     ? renderLookupForm({ email, phone, message })
     : state === 'error'
       ? `<p class="empty">${escapeHtml(message || 'We could not load your saved plans right now.')}</p>`
-      : `${renderLookupForm({ email, phone })}${resultMessage ? `<p class="result-message">${resultMessage}</p>` : ''}<div class="plans">${cards}</div>`;
+      : `${showLookupForm ? renderLookupForm({ email, phone }) : ''}${resultMessage ? `<p class="result-message">${resultMessage}</p>` : ''}<div class="plans">${cards}</div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -163,30 +166,79 @@ export default async function handler(req, res) {
     const customerId = requestUrl.searchParams.get('logged_in_customer_id') || requestUrl.searchParams.get('customerId');
     const email = requestUrl.searchParams.get('email') || '';
     const phone = requestUrl.searchParams.get('phone') || '';
+    const manualContactProvided = hasLookupContact({ email, phone });
 
-    if (!customerId && !hasLookupContact({ email, phone })) {
+    if (!customerId && !manualContactProvided) {
       if (wantsJson) {
         sendJson(res, 400, { error: 'Email and phone are required' });
       } else {
-        sendHtml(res, 200, renderQuotesHtml({ state: 'form', email, phone }));
+        sendHtml(res, 200, renderQuotesHtml({ state: 'form', email, phone, message: enterSavedPlanContactMessage }));
       }
       return;
     }
 
-    const quotes = customerId
-      ? await fetchAirtableQuotesByShopifyCustomerId(customerId)
-      : await fetchAirtableQuotesByContact({ email, phone });
+    let quotes = [];
+    let matchedBy = '';
+    let lookupMessage = '';
+
+    if (customerId) {
+      quotes = await fetchAirtableQuotesByShopifyCustomerId(customerId);
+      matchedBy = quotes.length ? 'customer' : '';
+
+      if (!quotes.length && !manualContactProvided) {
+        try {
+          const accountContact = await fetchShopifyCustomerContact(customerId);
+
+          if (hasLookupContact(accountContact?.customer)) {
+            quotes = await fetchAirtableQuotesByContact(accountContact.customer);
+            matchedBy = quotes.length ? 'account_contact' : '';
+            lookupMessage = quotes.length ? '' : accountContactNoMatchMessage;
+          } else {
+            lookupMessage = enterSavedPlanContactMessage;
+          }
+        } catch (error) {
+          lookupMessage = enterSavedPlanContactMessage;
+        }
+      }
+
+      if (!quotes.length && manualContactProvided) {
+        quotes = await fetchAirtableQuotesByContact({ email, phone });
+        matchedBy = quotes.length ? 'manual_contact' : '';
+      }
+    } else {
+      quotes = await fetchAirtableQuotesByContact({ email, phone });
+      matchedBy = quotes.length ? 'manual_contact' : '';
+    }
+
     const summaries = quotes.map(({ quote, ...summary }) => summary);
 
     if (!wantsJson) {
-      sendHtml(res, 200, renderQuotesHtml({ customerId, quotes: summaries, email, phone }));
+      if (customerId && !summaries.length && !manualContactProvided) {
+        sendHtml(res, 200, renderQuotesHtml({
+          state: 'form',
+          customerId,
+          message: lookupMessage || enterSavedPlanContactMessage,
+        }));
+        return;
+      }
+
+      sendHtml(res, 200, renderQuotesHtml({
+        customerId,
+        quotes: summaries,
+        email,
+        phone,
+        showLookupForm: !summaries.length,
+      }));
       return;
     }
 
     sendJson(res, 200, {
       ok: true,
       customerId,
-      email: customerId ? undefined : email,
+      email: matchedBy === 'manual_contact' ? email : undefined,
+      matchedBy,
+      needsContact: !summaries.length,
+      message: !summaries.length ? (lookupMessage || 'No saved plans matched that email and phone. Check the details you used when saving the plan.') : undefined,
       quotes: summaries,
     });
   } catch (error) {

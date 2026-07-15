@@ -39,6 +39,21 @@ async function shopifyGraphql(query, variables = {}) {
   return payload.data;
 }
 
+function toCustomerGid(customerId = '') {
+  const value = String(customerId || '').trim();
+
+  if (!value) {
+    return '';
+  }
+
+  if (value.startsWith('gid://shopify/Customer/')) {
+    return value;
+  }
+
+  const numericId = value.match(/\d+/)?.[0] || '';
+  return numericId ? `gid://shopify/Customer/${numericId}` : '';
+}
+
 function splitCustomerName(name = '') {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
 
@@ -322,5 +337,45 @@ export async function upsertShopifyCustomerPlan(quote) {
     customerEmail: customer.email || email,
     created,
     planUrl: quote.planUrl || '',
+  };
+}
+
+export async function fetchShopifyCustomerContact(customerId) {
+  if (!getShopifyConfig()) {
+    return { configured: false, customer: null };
+  }
+
+  const id = toCustomerGid(customerId);
+
+  if (!id) {
+    return { configured: true, customer: null };
+  }
+
+  const data = await shopifyGraphql(
+    `query getCustomerContact($id: ID!) {
+      customer(id: $id) {
+        id
+        email
+        phone
+        defaultAddress {
+          phone
+        }
+      }
+    }`,
+    { id },
+  );
+  const customer = data?.customer;
+
+  if (!customer) {
+    return { configured: true, customer: null };
+  }
+
+  return {
+    configured: true,
+    customer: {
+      customerId: customer.id,
+      email: customer.email || '',
+      phone: customer.phone || customer.defaultAddress?.phone || '',
+    },
   };
 }
