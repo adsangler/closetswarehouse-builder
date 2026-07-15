@@ -335,7 +335,7 @@ export async function fetchAirtableQuotesByShopifyCustomerId(shopifyCustomerId) 
   return (payload.records || []).map((record) => parseQuoteRecord(record));
 }
 
-export async function fetchAirtableQuotesByContact({ email, phone }) {
+export async function fetchAirtableQuotesByContact({ email, phone }, { requirePhone = true } = {}) {
   const config = getQuoteConfig();
 
   if (!config) {
@@ -346,7 +346,7 @@ export async function fetchAirtableQuotesByContact({ email, phone }) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedPhone = normalizePhone(phone);
 
-  if (!normalizedEmail || !normalizedPhone) {
+  if (!normalizedEmail || (requirePhone && !normalizedPhone)) {
     throw new Error('Email and phone are required');
   }
 
@@ -368,9 +368,11 @@ export async function fetchAirtableQuotesByContact({ email, phone }) {
 
   const payload = await response.json();
 
-  return (payload.records || [])
-    .map((record) => parseQuoteRecord(record))
-    .filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone));
+  const quotes = (payload.records || []).map((record) => parseQuoteRecord(record));
+
+  return normalizedPhone
+    ? quotes.filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone))
+    : quotes;
 }
 
 export async function sendConfirmationEmail(quote) {

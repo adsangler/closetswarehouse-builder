@@ -474,7 +474,7 @@ async function fetchAirtableQuotesByShopifyCustomerId(env, shopifyCustomerId) {
   return (payload.records || []).map((record) => parseQuoteRecord(env, record));
 }
 
-async function fetchAirtableQuotesByContact(env, { email, phone }) {
+async function fetchAirtableQuotesByContact(env, { email, phone }, { requirePhone = true } = {}) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
   const tableName = env.AIRTABLE_QUOTES_TABLE;
@@ -486,7 +486,7 @@ async function fetchAirtableQuotesByContact(env, { email, phone }) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedPhone = normalizePhone(phone);
 
-  if (!normalizedEmail || !normalizedPhone) {
+  if (!normalizedEmail || (requirePhone && !normalizedPhone)) {
     throw new Error('Email and phone are required');
   }
 
@@ -509,9 +509,11 @@ async function fetchAirtableQuotesByContact(env, { email, phone }) {
 
   const payload = await response.json();
 
-  return (payload.records || [])
-    .map((record) => parseQuoteRecord(env, record))
-    .filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone));
+  const quotes = (payload.records || []).map((record) => parseQuoteRecord(env, record));
+
+  return normalizedPhone
+    ? quotes.filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone))
+    : quotes;
 }
 
 function getShopifyProxySecret(env) {
@@ -691,12 +693,12 @@ function quoteRequestProxy(env) {
                   applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
                   const accountContact = await fetchShopifyCustomerContact(customerId);
 
-                  if (normalizeEmail(accountContact?.customer?.email) && normalizePhone(accountContact?.customer?.phone).length >= 7) {
-                    quotes = await fetchAirtableQuotesByContact(env, accountContact.customer);
-                    matchedBy = quotes.length ? 'account_contact' : '';
+                  if (normalizeEmail(accountContact?.customer?.email)) {
+                    quotes = await fetchAirtableQuotesByContact(env, accountContact.customer, { requirePhone: false });
+                    matchedBy = quotes.length ? 'account_email' : '';
                     message = quotes.length
                       ? ''
-                      : 'We could not find a saved plan for the email and phone on your customer account. Enter the email and phone used when you saved the plan.';
+                      : 'We could not find a saved plan for the email on your customer account. Enter the email and phone used when you saved the plan.';
                   } else {
                     message = 'Enter the email and phone used when you saved the plan.';
                   }

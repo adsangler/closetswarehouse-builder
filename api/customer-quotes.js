@@ -4,7 +4,7 @@ import { fetchShopifyCustomerContact } from './_shopify.js';
 
 const storefrontBaseUrl = 'https://closetswarehouse.com';
 const enterSavedPlanContactMessage = 'Enter the email and phone used when you saved the plan.';
-const accountContactNoMatchMessage = 'We could not find a saved plan for the email and phone on your customer account. Enter the email and phone used when you saved the plan.';
+const accountContactNoMatchMessage = 'We could not find a saved plan for the email on your customer account. Enter the email and phone used when you saved the plan.';
 
 function escapeHtml(value) {
   return String(value || '')
@@ -23,6 +23,10 @@ function sendHtml(res, statusCode, html) {
 
 function hasLookupContact({ email = '', phone = '' } = {}) {
   return String(email || '').trim() && String(phone || '').replace(/\D/g, '').length >= 7;
+}
+
+function hasLookupEmail({ email = '' } = {}) {
+  return String(email || '').trim();
 }
 
 function renderLookupForm({ email = '', phone = '', message = '' } = {}) {
@@ -243,9 +247,9 @@ export default async function handler(req, res) {
         try {
           const accountContact = await fetchShopifyCustomerContact(customerId);
 
-          if (hasLookupContact(accountContact?.customer)) {
-            quotes = await fetchAirtableQuotesByContact(accountContact.customer);
-            matchedBy = quotes.length ? 'account_contact' : '';
+          if (hasLookupEmail(accountContact?.customer)) {
+            quotes = await fetchAirtableQuotesByContact(accountContact.customer, { requirePhone: false });
+            matchedBy = quotes.length ? 'account_email' : '';
             lookupMessage = quotes.length ? '' : accountContactNoMatchMessage;
           } else {
             lookupMessage = enterSavedPlanContactMessage;
