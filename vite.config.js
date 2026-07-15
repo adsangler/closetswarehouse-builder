@@ -263,6 +263,31 @@ function buildEnrichedQuoteFields(env, quote) {
   };
 }
 
+function buildCoreQuoteFields(env, quote) {
+  const fieldNames = getQuoteFieldNames(env);
+
+  return {
+    ...buildLegacyQuoteFields(quote),
+    ...compactFields({
+      [fieldNames.quoteId]: quote.quoteId,
+      [fieldNames.planUrl]: quote.planUrl,
+      [fieldNames.planType]: quote.planType || quote.internalType || 'closet plan',
+      [fieldNames.submittedAt]: quote.submittedAt,
+    }),
+  };
+}
+
+function buildRequiredQuoteFields(env, quote) {
+  const fieldNames = getQuoteFieldNames(env);
+
+  return compactFields({
+    [fieldNames.quoteId]: quote.quoteId,
+    Email: quote.customer?.email || '',
+    Phone: quote.customer?.phone || '',
+    'Quote JSON': JSON.stringify(quote),
+  });
+}
+
 async function fetchAirtableQuoteRecords(env, configureUrl = () => {}) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
@@ -339,17 +364,34 @@ async function createAirtableQuote(env, quote) {
     const text = await response.text();
 
     if (/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(text)) {
-      const fallback = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
+      const coreFallback = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ fields: buildLegacyQuoteFields(quote) }),
+        body: JSON.stringify({ fields: buildCoreQuoteFields(env, quote) }),
       });
 
-      if (fallback.ok) {
-        return fallback.json();
+      if (coreFallback.ok) {
+        return coreFallback.json();
+      }
+
+      const coreFallbackText = await coreFallback.text();
+
+      if (/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(coreFallbackText)) {
+        const requiredFallback = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fields: buildRequiredQuoteFields(env, quote) }),
+        });
+
+        if (requiredFallback.ok) {
+          return requiredFallback.json();
+        }
       }
     }
 

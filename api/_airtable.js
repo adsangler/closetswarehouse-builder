@@ -240,12 +240,12 @@ function buildCoreQuoteFields(quote) {
 function buildRequiredQuoteFields(quote) {
   const fieldNames = getQuoteFieldNames();
 
-  return {
-    ...buildLegacyQuoteFields(quote),
-    ...compactFields({
-      [fieldNames.quoteId]: quote.quoteId,
-    }),
-  };
+  return compactFields({
+    [fieldNames.quoteId]: quote.quoteId,
+    Email: quote.customer?.email || '',
+    Phone: quote.customer?.phone || '',
+    'Quote JSON': JSON.stringify(quote),
+  });
 }
 
 export async function createAirtableQuote(quote) {
