@@ -182,9 +182,48 @@ async function airtableRequest(config, path = '', options = {}) {
     },
   });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload = null;
+
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
 
   return { response, payload, text };
+}
+
+function getAirtableErrorMessage(payload, text = '') {
+  const message = payload?.error?.message || payload?.error?.type || text || '';
+  return String(message).replace(/\s+/g, ' ').slice(0, 220);
+}
+
+function shouldFallbackQuoteSave(result) {
+  return /UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(
+    getAirtableErrorMessage(result.payload, result.text),
+  );
+}
+
+function getQuoteSaveFailureReason(result, mode) {
+  const message = getAirtableErrorMessage(result.payload, result.text);
+
+  if (result.response.status === 401 || result.response.status === 403) {
+    return `${mode}: airtable_auth_${result.response.status}`;
+  }
+
+  if (result.response.status === 404) {
+    return `${mode}: airtable_table_not_found`;
+  }
+
+  if (/UNKNOWN_FIELD_NAME|Unknown field name/i.test(message)) {
+    return `${mode}: airtable_unknown_field (${message})`;
+  }
+
+  if (/INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(message)) {
+    return `${mode}: airtable_invalid_select_option (${message})`;
+  }
+
+  return `${mode}: airtable_${result.response.status}${message ? ` (${message})` : ''}`;
 }
 
 function buildLegacyQuoteFields(quote) {
@@ -248,11 +287,11 @@ function buildRequiredQuoteFields(quote) {
   });
 }
 
-export async function createAirtableQuote(quote) {
+export async function createAirtableQuoteWithDiagnostics(quote) {
   const config = getQuoteConfig();
 
   if (!config) {
-    return null;
+    return { record: null, error: 'missing_airtable_quote_env' };
   }
 
   const payload = {
@@ -260,21 +299,17 @@ export async function createAirtableQuote(quote) {
   };
 
   try {
-    const { response, payload: result, text } = await airtableRequest(config, '', {
+    const enrichedResult = await airtableRequest(config, '', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
 
-    if (response.status === 403 || response.status === 404) {
-      return null;
+    if (enrichedResult.response.ok) {
+      return { record: enrichedResult.payload, mode: 'enriched' };
     }
 
-    if (response.ok) {
-      return result;
-    }
-
-    if (!/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(text)) {
-      throw new Error(`Airtable quote capture returned ${response.status}`);
+    if (!shouldFallbackQuoteSave(enrichedResult)) {
+      return { record: null, error: getQuoteSaveFailureReason(enrichedResult, 'enriched') };
     }
 
     const coreFallback = await airtableRequest(config, '', {
@@ -283,11 +318,11 @@ export async function createAirtableQuote(quote) {
     });
 
     if (coreFallback.response.ok) {
-      return coreFallback.payload;
+      return { record: coreFallback.payload, mode: 'core' };
     }
 
-    if (!/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(coreFallback.text)) {
-      throw new Error(`Airtable quote capture returned ${coreFallback.response.status}`);
+    if (!shouldFallbackQuoteSave(coreFallback)) {
+      return { record: null, error: getQuoteSaveFailureReason(coreFallback, 'core') };
     }
 
     const requiredFallback = await airtableRequest(config, '', {
@@ -296,13 +331,18 @@ export async function createAirtableQuote(quote) {
     });
 
     if (!requiredFallback.response.ok) {
-      throw new Error(`Airtable quote capture returned ${requiredFallback.response.status}`);
+      return { record: null, error: getQuoteSaveFailureReason(requiredFallback, 'minimal') };
     }
 
-    return requiredFallback.payload;
-  } catch {
-    return null;
+    return { record: requiredFallback.payload, mode: 'minimal' };
+  } catch (error) {
+    return { record: null, error: `airtable_request_failed (${String(error?.message || error).slice(0, 160)})` };
   }
+}
+
+export async function createAirtableQuote(quote) {
+  const result = await createAirtableQuoteWithDiagnostics(quote);
+  return result.record;
 }
 
 export async function updateAirtableQuoteShopifyCustomer(recordId, quote, shopifyCustomer) {

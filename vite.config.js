@@ -336,69 +336,96 @@ async function createAirtableQuote(env, quote) {
   const tableName = env.AIRTABLE_QUOTES_TABLE;
 
   if (!token || !baseId || !tableName) {
-    return null;
+    return { record: null, error: 'missing_airtable_quote_env' };
   }
 
-  let response;
+  const tableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  const parseResult = async (response) => {
+    const text = await response.text();
+    let payload = null;
+
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = null;
+    }
+
+    return { response, text, payload };
+  };
+  const getMessage = (result) => String(result.payload?.error?.message || result.payload?.error?.type || result.text || '').replace(/\s+/g, ' ').slice(0, 220);
+  const shouldFallback = (result) => /UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(getMessage(result));
+  const getFailureReason = (result, mode) => {
+    const message = getMessage(result);
+
+    if (result.response.status === 401 || result.response.status === 403) {
+      return `${mode}: airtable_auth_${result.response.status}`;
+    }
+
+    if (result.response.status === 404) {
+      return `${mode}: airtable_table_not_found`;
+    }
+
+    if (/UNKNOWN_FIELD_NAME|Unknown field name/i.test(message)) {
+      return `${mode}: airtable_unknown_field (${message})`;
+    }
+
+    if (/INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(message)) {
+      return `${mode}: airtable_invalid_select_option (${message})`;
+    }
+
+    return `${mode}: airtable_${result.response.status}${message ? ` (${message})` : ''}`;
+  };
 
   try {
-    response = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
+    const response = await fetch(tableUrl, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         fields: buildEnrichedQuoteFields(env, quote),
       }),
     });
-  } catch {
-    return null;
-  }
+    const enrichedResult = await parseResult(response);
 
-  if (response.status === 403 || response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    const text = await response.text();
-
-    if (/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(text)) {
-      const coreFallback = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fields: buildCoreQuoteFields(env, quote) }),
-      });
-
-      if (coreFallback.ok) {
-        return coreFallback.json();
-      }
-
-      const coreFallbackText = await coreFallback.text();
-
-      if (/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(coreFallbackText)) {
-        const requiredFallback = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fields: buildRequiredQuoteFields(env, quote) }),
-        });
-
-        if (requiredFallback.ok) {
-          return requiredFallback.json();
-        }
-      }
+    if (enrichedResult.response.ok) {
+      return { record: enrichedResult.payload, mode: 'enriched' };
     }
 
-    throw new Error(`Airtable quote capture returned ${response.status}`);
-  }
+    if (!shouldFallback(enrichedResult)) {
+      return { record: null, error: getFailureReason(enrichedResult, 'enriched') };
+    }
 
-  return response.json();
+    const coreFallback = await parseResult(await fetch(tableUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ fields: buildCoreQuoteFields(env, quote) }),
+    }));
+
+    if (coreFallback.response.ok) {
+      return { record: coreFallback.payload, mode: 'core' };
+    }
+
+    if (!shouldFallback(coreFallback)) {
+      return { record: null, error: getFailureReason(coreFallback, 'core') };
+    }
+
+    const requiredFallback = await parseResult(await fetch(tableUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ fields: buildRequiredQuoteFields(env, quote) }),
+    }));
+
+    if (!requiredFallback.response.ok) {
+      return { record: null, error: getFailureReason(requiredFallback, 'minimal') };
+    }
+
+    return { record: requiredFallback.payload, mode: 'minimal' };
+  } catch (error) {
+    return { record: null, error: `airtable_request_failed (${String(error?.message || error).slice(0, 160)})` };
+  }
 }
 
 async function updateAirtableQuoteShopifyCustomer(env, recordId, quote, shopifyCustomer) {
@@ -874,7 +901,8 @@ function quoteRequestProxy(env) {
           }
 
           applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
-          const airtableRecord = await createAirtableQuote(env, capturedQuote);
+          const airtableResult = await createAirtableQuote(env, capturedQuote);
+          const airtableRecord = airtableResult.record;
 
           if (!airtableRecord?.id) {
             const outDir = path.resolve('assets/drafts/quote-requests');
@@ -883,7 +911,8 @@ function quoteRequestProxy(env) {
 
             res.statusCode = 502;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'We could not save this plan to Airtable. Please try again before printing the reference.' }));
+            const reason = airtableResult.error ? ` Airtable reason: ${airtableResult.error}.` : '';
+            res.end(JSON.stringify({ error: `We could not save this plan to Airtable. Please try again before printing the reference.${reason}` }));
             return;
           }
 
@@ -904,6 +933,7 @@ function quoteRequestProxy(env) {
             ok: true,
             quoteId,
             captureMode: 'airtable',
+            airtableMode: airtableResult.mode || 'unknown',
             shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
           }));
         } catch (error) {

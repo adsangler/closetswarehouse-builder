@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createAirtableQuote, fetchAirtableQuoteByReference, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
+import { createAirtableQuoteWithDiagnostics, fetchAirtableQuoteByReference, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
 import { normalizeQuoteSubmission, validateNormalizedQuote } from './_quote-normalize.js';
 import { upsertShopifyCustomerPlan } from './_shopify.js';
 
@@ -62,10 +62,12 @@ export default async function handler(req, res) {
       return;
     }
 
-    const airtableRecord = await createAirtableQuote(capturedQuote);
+    const airtableResult = await createAirtableQuoteWithDiagnostics(capturedQuote);
+    const airtableRecord = airtableResult.record;
 
     if (!airtableRecord?.id) {
-      sendJson(res, 502, { error: 'We could not save this plan to Airtable. Please try again before printing the reference.' });
+      const reason = airtableResult.error ? ` Airtable reason: ${airtableResult.error}.` : '';
+      sendJson(res, 502, { error: `We could not save this plan to Airtable. Please try again before printing the reference.${reason}` });
       return;
     }
 
@@ -85,6 +87,7 @@ export default async function handler(req, res) {
       ok: true,
       quoteId,
       captureMode: 'airtable',
+      airtableMode: airtableResult.mode || 'unknown',
       shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
     });
   } catch (error) {
