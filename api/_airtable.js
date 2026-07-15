@@ -76,6 +76,28 @@ function escapeAirtableString(value) {
   return String(value || '').replace(/'/g, "\\'");
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function phoneMatches(left, right) {
+  const normalizedLeft = normalizePhone(left);
+  const normalizedRight = normalizePhone(right);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  return normalizedLeft === normalizedRight
+    || (normalizedLeft.length >= 10
+      && normalizedRight.length >= 10
+      && normalizedLeft.slice(-10) === normalizedRight.slice(-10));
+}
+
 function compactFields(fields) {
   return Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ''),
@@ -311,6 +333,44 @@ export async function fetchAirtableQuotesByShopifyCustomerId(shopifyCustomerId) 
   const payload = await response.json();
 
   return (payload.records || []).map((record) => parseQuoteRecord(record));
+}
+
+export async function fetchAirtableQuotesByContact({ email, phone }) {
+  const config = getQuoteConfig();
+
+  if (!config) {
+    return [];
+  }
+
+  const fieldNames = getQuoteFieldNames();
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
+
+  if (!normalizedEmail || !normalizedPhone) {
+    throw new Error('Email and phone are required');
+  }
+
+  const url = new URL(`https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`);
+  url.searchParams.set('pageSize', '100');
+  url.searchParams.set('filterByFormula', `LOWER({Email}) = '${escapeAirtableString(normalizedEmail)}'`);
+  url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
+  url.searchParams.set('sort[0][direction]', 'desc');
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Airtable contact quote lookup returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+
+  return (payload.records || [])
+    .map((record) => parseQuoteRecord(record))
+    .filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone));
 }
 
 export async function sendConfirmationEmail(quote) {

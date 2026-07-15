@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { fetchAirtableQuotesByShopifyCustomerId, sendJson } from './_airtable.js';
+import { fetchAirtableQuotesByContact, fetchAirtableQuotesByShopifyCustomerId, sendJson } from './_airtable.js';
 
 const storefrontBaseUrl = 'https://closetswarehouse.com';
 
@@ -18,11 +18,28 @@ function sendHtml(res, statusCode, html) {
   res.end(html);
 }
 
-function buildLoginUrl() {
-  return `${storefrontBaseUrl}/account/login?return_url=${encodeURIComponent('/pages/design-your-own-closets')}`;
+function hasLookupContact({ email = '', phone = '' } = {}) {
+  return String(email || '').trim() && String(phone || '').replace(/\D/g, '').length >= 7;
 }
 
-function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '' }) {
+function renderLookupForm({ email = '', phone = '', message = '' } = {}) {
+  return `
+    <form class="lookup-form" method="get" action="/apps/closet-quotes" target="_self">
+      <div>
+        <label for="cw-plan-email">Email</label>
+        <input id="cw-plan-email" name="email" type="email" autocomplete="email" value="${escapeHtml(email)}" required>
+      </div>
+      <div>
+        <label for="cw-plan-phone">Phone</label>
+        <input id="cw-plan-phone" name="phone" type="tel" autocomplete="tel" value="${escapeHtml(phone)}" required>
+      </div>
+      <button type="submit">See plans</button>
+    </form>
+    ${message ? `<p class="form-message">${escapeHtml(message)}</p>` : ''}
+  `;
+}
+
+function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '', email = '', phone = '' }) {
   const cards = quotes.length
     ? quotes.map((quote) => {
       const quoteId = escapeHtml(quote.quoteId || 'Saved plan');
@@ -41,13 +58,13 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
         </article>
       `;
     }).join('')
-    : '<p class="empty">No saved plans yet. Create a reach-in or walk-in design and save it to your account.</p>';
+    : '<p class="empty">No saved plans matched that email and phone. Check the details you used when saving the plan.</p>';
 
-  const body = state === 'login'
-    ? `<p class="empty">Log in to view closet plans you saved from the design tool.</p><a class="button" href="${buildLoginUrl()}" target="_top">Log in</a>`
+  const body = state === 'form'
+    ? renderLookupForm({ email, phone, message })
     : state === 'error'
       ? `<p class="empty">${escapeHtml(message || 'We could not load your saved plans right now.')}</p>`
-      : `<div class="plans">${cards}</div>`;
+      : `${renderLookupForm({ email, phone })}<div class="plans">${cards}</div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -58,11 +75,15 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
       * { box-sizing: border-box; }
       body { margin: 0; color: #1c1917; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: transparent; }
       .wrap { padding: 0; }
+      .lookup-form { display: grid; gap: 10px; margin: 0 0 16px; padding: 16px; border: 1px solid #e7e5e4; border-radius: 8px; background: #fff; }
+      label { display: block; margin: 0 0 6px; color: #292524; font-size: 13px; font-weight: 800; }
+      input { width: 100%; min-height: 42px; border: 1px solid #d6d3d1; border-radius: 6px; padding: 9px 10px; color: #1c1917; font: inherit; font-size: 15px; background: #fff; }
+      button { min-height: 42px; border: 0; border-radius: 6px; background: #d95d23; color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
       .plans { display: grid; gap: 12px; }
       .plan-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid #e7e5e4; border-radius: 8px; background: #fff; }
       .eyebrow { margin: 0 0 4px; color: #d95d23; font-size: 12px; font-weight: 800; text-transform: uppercase; }
       h3 { margin: 0; font-size: 18px; line-height: 1.2; }
-      .muted, .empty { margin: 6px 0 0; color: #57534e; font-size: 14px; font-weight: 600; }
+      .muted, .empty, .form-message { margin: 6px 0 0; color: #57534e; font-size: 14px; font-weight: 600; }
       .button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 10px 14px; border-radius: 6px; background: #1c1917; color: white; font-size: 14px; font-weight: 800; text-decoration: none; white-space: nowrap; }
       @media (max-width: 520px) { .plan-card { display: grid; } .button { width: 100%; } }
     </style>
@@ -116,33 +137,38 @@ export default async function handler(req, res) {
       if (wantsJson) {
         sendJson(res, 401, { error: 'Unauthorized customer quote request' });
       } else {
-        sendHtml(res, 401, renderQuotesHtml({ state: 'login' }));
+        sendHtml(res, 401, renderQuotesHtml({ state: 'error', message: 'This plans lookup must be opened from closetswarehouse.com.' }));
       }
       return;
     }
 
     const customerId = requestUrl.searchParams.get('logged_in_customer_id') || requestUrl.searchParams.get('customerId');
+    const email = requestUrl.searchParams.get('email') || '';
+    const phone = requestUrl.searchParams.get('phone') || '';
 
-    if (!customerId) {
+    if (!customerId && !hasLookupContact({ email, phone })) {
       if (wantsJson) {
-        sendJson(res, 401, { error: 'Customer login is required' });
+        sendJson(res, 400, { error: 'Email and phone are required' });
       } else {
-        sendHtml(res, 200, renderQuotesHtml({ state: 'login' }));
+        sendHtml(res, 200, renderQuotesHtml({ state: 'form', email, phone }));
       }
       return;
     }
 
-    const quotes = await fetchAirtableQuotesByShopifyCustomerId(customerId);
+    const quotes = customerId
+      ? await fetchAirtableQuotesByShopifyCustomerId(customerId)
+      : await fetchAirtableQuotesByContact({ email, phone });
     const summaries = quotes.map(({ quote, ...summary }) => summary);
 
     if (!wantsJson) {
-      sendHtml(res, 200, renderQuotesHtml({ customerId, quotes: summaries }));
+      sendHtml(res, 200, renderQuotesHtml({ customerId, quotes: summaries, email, phone }));
       return;
     }
 
     sendJson(res, 200, {
       ok: true,
       customerId,
+      email: customerId ? undefined : email,
       quotes: summaries,
     });
   } catch (error) {

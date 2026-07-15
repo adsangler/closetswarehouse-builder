@@ -56,7 +56,7 @@ function SavedPlanActions({ quoteId }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
-        Saved. Reference {quoteId}. Your plan link can now be found when you login to your closetswarehouse.com account. Call or email us to finalize your order.
+        Saved. Reference {quoteId}. You can reopen this plan from the Your plans section using the email and phone you entered. Call or email us to finalize your order.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <a href={phoneHref} target="_top" className="rounded bg-stone-950 px-3 py-2 text-center text-sm font-bold text-white hover:bg-stone-800">

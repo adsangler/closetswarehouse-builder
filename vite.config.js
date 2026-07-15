@@ -199,6 +199,28 @@ function getQuoteFieldNames(env) {
   };
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function phoneMatches(left, right) {
+  const normalizedLeft = normalizePhone(left);
+  const normalizedRight = normalizePhone(right);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  return normalizedLeft === normalizedRight
+    || (normalizedLeft.length >= 10
+      && normalizedRight.length >= 10
+      && normalizedLeft.slice(-10) === normalizedRight.slice(-10));
+}
+
 function buildLegacyQuoteFields(quote) {
   const customerName = [quote.customer?.firstName, quote.customer?.lastName].filter(Boolean).join(' ').trim() || quote.customer?.name || '';
 
@@ -452,6 +474,46 @@ async function fetchAirtableQuotesByShopifyCustomerId(env, shopifyCustomerId) {
   return (payload.records || []).map((record) => parseQuoteRecord(env, record));
 }
 
+async function fetchAirtableQuotesByContact(env, { email, phone }) {
+  const token = env.AIRTABLE_TOKEN;
+  const baseId = env.AIRTABLE_BASE_ID;
+  const tableName = env.AIRTABLE_QUOTES_TABLE;
+
+  if (!token || !baseId || !tableName) {
+    return [];
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
+
+  if (!normalizedEmail || !normalizedPhone) {
+    throw new Error('Email and phone are required');
+  }
+
+  const fieldNames = getQuoteFieldNames(env);
+  const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
+  url.searchParams.set('pageSize', '100');
+  url.searchParams.set('filterByFormula', `LOWER({Email}) = '${normalizedEmail.replace(/'/g, "\\'")}'`);
+  url.searchParams.set('sort[0][field]', fieldNames.submittedAt);
+  url.searchParams.set('sort[0][direction]', 'desc');
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Airtable contact quote lookup returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+
+  return (payload.records || [])
+    .map((record) => parseQuoteRecord(env, record))
+    .filter((quote) => phoneMatches(quote.customer?.phone, normalizedPhone));
+}
+
 function verifyShopifyAppProxySignature(env, requestUrl) {
   const secret = env.SHOPIFY_API_SECRET || process.env.SHOPIFY_API_SECRET;
 
@@ -544,20 +606,25 @@ function quoteRequestProxy(env) {
             }
 
             const customerId = requestUrl.searchParams.get('logged_in_customer_id') || requestUrl.searchParams.get('customerId');
+            const email = requestUrl.searchParams.get('email') || '';
+            const phone = requestUrl.searchParams.get('phone') || '';
 
-            if (!customerId) {
-              res.statusCode = 401;
+            if (!customerId && (!normalizeEmail(email) || normalizePhone(phone).length < 7)) {
+              res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Customer login is required' }));
+              res.end(JSON.stringify({ error: 'Email and phone are required' }));
               return;
             }
 
-            const quotes = await fetchAirtableQuotesByShopifyCustomerId(env, customerId);
+            const quotes = customerId
+              ? await fetchAirtableQuotesByShopifyCustomerId(env, customerId)
+              : await fetchAirtableQuotesByContact(env, { email, phone });
 
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({
               ok: true,
               customerId,
+              email: customerId ? undefined : email,
               quotes: quotes.map(({ quote, ...summary }) => summary),
             }));
           } catch (error) {
@@ -645,15 +712,12 @@ function quoteRequestProxy(env) {
             await fs.writeFile(path.join(outDir, `${quoteId}.json`), JSON.stringify(capturedQuoteWithCustomer, null, 2), 'utf8');
           }
 
-          const email = await sendConfirmationEmail(env, capturedQuoteWithCustomer);
-
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
             ok: true,
             quoteId,
             captureMode,
             shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
-            email,
           }));
         } catch (error) {
           res.statusCode = 500;

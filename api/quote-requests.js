@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createAirtableQuote, fetchAirtableQuoteByReference, sendConfirmationEmail, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
+import { createAirtableQuote, fetchAirtableQuoteByReference, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
 import { normalizeQuoteSubmission, validateNormalizedQuote } from './_quote-normalize.js';
 import { upsertShopifyCustomerPlan } from './_shopify.js';
 
@@ -74,14 +74,12 @@ export default async function handler(req, res) {
     if (airtableRecord?.id && shopifyCustomer?.customerId) {
       await updateAirtableQuoteShopifyCustomer(airtableRecord.id, capturedQuote, shopifyCustomer);
     }
-    const email = await sendConfirmationEmail(capturedQuote);
 
     sendJson(res, 200, {
       ok: true,
       quoteId,
       captureMode: airtableRecord ? 'airtable' : 'unconfigured',
       shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
-      email,
     });
   } catch (error) {
     sendJson(res, 500, { error: error.message });
