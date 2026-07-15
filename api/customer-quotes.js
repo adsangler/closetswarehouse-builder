@@ -134,6 +134,10 @@ function getSignaturePayloads(requestUrl) {
   const decodedParams = new URLSearchParams(requestUrl.search);
   decodedParams.delete('signature');
   decodedParams.delete('hmac');
+  const groupedDecodedEntries = [...decodedParams.keys()]
+    .filter((key, index, keys) => keys.indexOf(key) === index)
+    .map((key) => [key, decodedParams.getAll(key).join(',')])
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
   const decodedEntries = [...decodedParams.entries()]
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
   const rawEntries = String(requestUrl.search || '')
@@ -150,6 +154,7 @@ function getSignaturePayloads(requestUrl) {
     .sort(([leftKey], [rightKey]) => decodeURIComponent(leftKey).localeCompare(decodeURIComponent(rightKey)));
 
   return [
+    groupedDecodedEntries.map(([key, value]) => `${key}=${value}`).join(''),
     decodedEntries.map(([key, value]) => `${key}=${value}`).join(''),
     decodedEntries.map(([key, value]) => `${key}=${value}`).join('&'),
     rawEntries.map(([key, value]) => `${key}=${value}`).join(''),
