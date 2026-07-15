@@ -3,6 +3,7 @@ import { fetchAirtableQuotesByContact, fetchAirtableQuotesByShopifyCustomerId, s
 import { fetchShopifyCustomerContact } from './_shopify.js';
 
 const storefrontBaseUrl = 'https://closetswarehouse.com';
+const defaultAppBaseUrl = 'https://closetswarehouse-builder.vercel.app';
 const enterSavedPlanContactMessage = 'Enter the email and phone used when you saved the plan.';
 const accountContactNoMatchMessage = 'We could not find a saved plan for the email on your customer account. Enter the email and phone used when you saved the plan.';
 
@@ -29,6 +30,46 @@ function hasLookupEmail({ email = '' } = {}) {
   return String(email || '').trim();
 }
 
+function getPublicAppBaseUrl(requestUrl = null) {
+  const configuredUrl = process.env.PUBLIC_APP_BASE_URL
+    || process.env.NEXT_PUBLIC_APP_BASE_URL
+    || process.env.VERCEL_PROJECT_PRODUCTION_URL
+    || process.env.VERCEL_URL
+    || '';
+  const rawUrl = String(configuredUrl || '').trim();
+
+  if (rawUrl) {
+    const withProtocol = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    return withProtocol.replace(/\/+$/, '');
+  }
+
+  const requestHost = requestUrl?.headers?.host || '';
+  if (requestHost && /vercel\.app$/i.test(requestHost)) {
+    return `https://${requestHost}`.replace(/\/+$/, '');
+  }
+
+  return defaultAppBaseUrl;
+}
+
+function buildQuotePrintUrl({ baseUrl = defaultAppBaseUrl, quote = {}, autoPrint = false } = {}) {
+  const quoteId = String(quote.quoteId || '').trim();
+  const email = String(quote.customer?.email || '').trim();
+
+  if (!quoteId || !email) {
+    return '';
+  }
+
+  const printUrl = new URL('/api/quote-print', baseUrl);
+  printUrl.searchParams.set('quoteId', quoteId);
+  printUrl.searchParams.set('email', email);
+
+  if (autoPrint) {
+    printUrl.searchParams.set('print', '1');
+  }
+
+  return printUrl.toString();
+}
+
 function renderLookupForm({ email = '', phone = '', message = '' } = {}) {
   return `
     <form class="lookup-form" method="get" action="/apps/closet-quotes" target="_self">
@@ -46,19 +87,20 @@ function renderLookupForm({ email = '', phone = '', message = '' } = {}) {
   `;
 }
 
-function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '', email = '', phone = '', showLookupForm = true, emptyMessage = '' }) {
+function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', message = '', email = '', phone = '', showLookupForm = true, emptyMessage = '', appBaseUrl = defaultAppBaseUrl }) {
   const quoteIds = quotes
     .map((quote) => quote.quoteId)
     .filter(Boolean);
   const resultMessage = quoteIds.length
-    ? `Found ${quoteIds.length === 1 ? 'your saved plan' : `${quoteIds.length} saved plans`}. Reference ${quoteIds.map(escapeHtml).join(', ')}. Print this page for future reference.`
+    ? `Found ${quoteIds.length === 1 ? 'your saved plan' : `${quoteIds.length} saved plans`}. Reference ${quoteIds.map(escapeHtml).join(', ')}. Open or print each saved plan below.`
     : '';
   const cards = quotes.length
     ? quotes.map((quote) => {
       const quoteId = escapeHtml(quote.quoteId || 'Saved plan');
       const planType = escapeHtml(quote.planType || 'Closet plan');
       const date = quote.submittedAt ? new Date(quote.submittedAt).toLocaleDateString('en-US') : '';
-      const planUrl = escapeHtml(quote.planUrl || '');
+      const printUrl = escapeHtml(quote.printUrl || buildQuotePrintUrl({ baseUrl: appBaseUrl, quote }));
+      const autoPrintUrl = escapeHtml(quote.printUrlAuto || buildQuotePrintUrl({ baseUrl: appBaseUrl, quote, autoPrint: true }));
 
       return `
         <article class="plan-card">
@@ -69,8 +111,8 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
             ${date ? `<p class="muted">Saved ${escapeHtml(date)}</p>` : ''}
           </div>
           <div class="actions">
-            ${planUrl ? `<a class="button" href="${planUrl}" target="_top">Open plan</a>` : ''}
-            <button class="button print-button" type="button" onclick="window.print()">Print reference</button>
+            ${printUrl ? `<a class="button" href="${printUrl}" target="_blank" rel="noopener">Open printable plan</a>` : ''}
+            ${autoPrintUrl ? `<a class="button print-button" href="${autoPrintUrl}" target="_blank" rel="noopener">Print plan</a>` : ''}
           </div>
         </article>
       `;
@@ -107,7 +149,7 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
       .print-button { background: #d95d23; }
       @media (max-width: 520px) { .plan-card, .actions { display: grid; } .button { width: 100%; } }
       @media print {
-        .lookup-form, .print-button { display: none; }
+        .lookup-form { display: none; }
         body { background: #fff; }
         .plan-card, .result-message { break-inside: avoid; }
       }
@@ -210,13 +252,14 @@ export default async function handler(req, res) {
   try {
     const requestUrl = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
     const wantsJson = requestUrl.searchParams.get('format') === 'json';
+    const appBaseUrl = getPublicAppBaseUrl(req);
 
     const proxyAuth = verifyShopifyAppProxySignature(requestUrl);
     if (!proxyAuth.ok) {
       if (wantsJson) {
         sendJson(res, 401, { error: 'Unauthorized customer quote request', reason: proxyAuth.reason });
       } else {
-        sendHtml(res, 401, renderQuotesHtml({ state: 'error', message: getProxyErrorMessage(proxyAuth.reason) }));
+        sendHtml(res, 401, renderQuotesHtml({ state: 'error', message: getProxyErrorMessage(proxyAuth.reason), appBaseUrl }));
       }
       return;
     }
@@ -230,7 +273,7 @@ export default async function handler(req, res) {
       if (wantsJson) {
         sendJson(res, 400, { error: 'Email and phone are required' });
       } else {
-        sendHtml(res, 200, renderQuotesHtml({ state: 'form', email, phone, message: enterSavedPlanContactMessage }));
+        sendHtml(res, 200, renderQuotesHtml({ state: 'form', email, phone, message: enterSavedPlanContactMessage, appBaseUrl }));
       }
       return;
     }
@@ -268,7 +311,11 @@ export default async function handler(req, res) {
       matchedBy = quotes.length ? 'manual_contact' : '';
     }
 
-    const summaries = quotes.map(({ quote, ...summary }) => summary);
+    const summaries = quotes.map(({ quote, ...summary }) => ({
+      ...summary,
+      printUrl: buildQuotePrintUrl({ baseUrl: appBaseUrl, quote: summary }),
+      printUrlAuto: buildQuotePrintUrl({ baseUrl: appBaseUrl, quote: summary, autoPrint: true }),
+    }));
 
     if (!wantsJson) {
       if (customerId && !summaries.length && !manualContactProvided) {
@@ -276,6 +323,7 @@ export default async function handler(req, res) {
           state: 'form',
           customerId,
           message: lookupMessage || enterSavedPlanContactMessage,
+          appBaseUrl,
         }));
         return;
       }
@@ -286,6 +334,7 @@ export default async function handler(req, res) {
         email,
         phone,
         showLookupForm: !summaries.length,
+        appBaseUrl,
       }));
       return;
     }
@@ -300,6 +349,6 @@ export default async function handler(req, res) {
       quotes: summaries,
     });
   } catch (error) {
-    sendHtml(res, 500, renderQuotesHtml({ state: 'error' }));
+    sendHtml(res, 500, renderQuotesHtml({ state: 'error', appBaseUrl: defaultAppBaseUrl }));
   }
 }
