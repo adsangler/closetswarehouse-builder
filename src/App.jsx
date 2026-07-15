@@ -5,6 +5,9 @@ import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
 
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
 const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
+const contactUrl = `${storefrontBaseUrl}/pages/contact`;
+const phoneDisplay = '(954) 247-8032';
+const phoneHref = 'tel:+19542478032';
 
 function getProductUrl(handle) {
   const shopifyHandle = String(handle || '').trim().toLowerCase();
@@ -20,6 +23,38 @@ function ConsultationCta({ compact = false }) {
     >
       Need help? Schedule a free design consultation
     </a>
+  );
+}
+
+function buildQuoteContactUrl(quoteId, intent = 'contact') {
+  const url = new URL(contactUrl);
+  const reference = String(quoteId || '').trim();
+
+  if (reference) {
+    url.searchParams.set('quote', reference);
+    url.searchParams.set('plan_reference', reference);
+    url.searchParams.set('contact[body]', `Plan reference: ${reference}`);
+  }
+
+  url.searchParams.set('contact_method', intent);
+  return url.toString();
+}
+
+function SavedPlanActions({ quoteId }) {
+  return (
+    <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
+      <p className="text-sm font-bold text-emerald-800">
+        Saved. Reference {quoteId}. Your plan link can now be found when you login to your closetswarehouse.com account. Call or email us to finalize your order.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <a href={phoneHref} target="_top" className="rounded bg-stone-950 px-3 py-2 text-center text-sm font-bold text-white hover:bg-stone-800">
+          Call {phoneDisplay}
+        </a>
+        <a href={buildQuoteContactUrl(quoteId, 'contact')} target="_top" className="rounded bg-brand-orange px-3 py-2 text-center text-sm font-bold text-white hover:bg-orange-700">
+          Contact
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -59,6 +94,11 @@ const panelMaterial = {
 const edgeMaterial = {
   color: '#f4f1e9',
   roughness: 0.78,
+  metalness: 0,
+};
+const photoToeKickMaterial = {
+  color: '#dedad0',
+  roughness: 0.68,
   metalness: 0,
 };
 const photoPanelMaterial = {
@@ -700,16 +740,21 @@ function ToeKick({ drawing, photoMode = false }) {
 
   return (
     <>
-      {drawing.towers.map((tower) => (
-        <BoxPart
-          key={`${tower.id}-toe`}
-          position={[tower.bayX + tower.width / 2 - drawing.sceneCenterX, toeKickHeight / 2, toeKickPanelZ]}
-          scale={[tower.width, toeKickHeight, panelThickness]}
-          material={edgeMaterial}
-          bevel={photoMode ? 0.018 : 0}
-          edge={!photoMode}
-        />
-      ))}
+      {drawing.towers.map((tower) => {
+        const towerCenterX = tower.bayX + tower.width / 2 - drawing.sceneCenterX;
+
+        return (
+          <group key={`${tower.id}-toe`}>
+            <BoxPart
+              position={[towerCenterX, toeKickHeight / 2, toeKickPanelZ]}
+              scale={[tower.width, toeKickHeight, panelThickness]}
+              material={photoMode ? photoToeKickMaterial : edgeMaterial}
+              bevel={photoMode ? 0.018 : 0}
+              edge={!photoMode}
+            />
+          </group>
+        );
+      })}
     </>
   );
 }
@@ -1349,13 +1394,20 @@ function TechnicalDrawing({ drawing }) {
 }
 
 function KitSelector({ drawings, selectedHandle, onChange }) {
+  const sortedDrawings = [...drawings].sort((left, right) =>
+    String(left.handle || '').localeCompare(String(right.handle || ''), undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }),
+  );
+
   return (
     <select
       value={selectedHandle}
       onChange={(event) => onChange(event.target.value)}
       className="max-w-[330px] rounded border border-stone-300 bg-white px-2 py-1 text-sm font-semibold text-stone-700"
     >
-      {drawings.map((option) => (
+      {sortedDrawings.map((option) => (
         <option key={option.handle} value={option.handle}>
           {option.handle}
         </option>
@@ -2350,15 +2402,6 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
     );
   }
 
-  if (!isCatalogReady) {
-    return (
-      <section className="rounded border border-stone-200 bg-white p-3">
-        <h2 className="text-base font-bold text-stone-950">Checking Product Price</h2>
-        <p className="mt-2 text-sm text-stone-500">Looking for an existing kit before showing the price.</p>
-      </section>
-    );
-  }
-
   if (evaluation.match) {
     return (
       <section className="rounded border border-emerald-200 bg-emerald-50 p-3">
@@ -2399,9 +2442,9 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
   }
 
   return (
-    <section className="rounded border border-stone-200 bg-white p-3">
-      <h2 className="text-base font-bold text-stone-950">Ready For Review</h2>
-      <p className="mt-2 text-sm text-stone-700">Review the material and order details before submitting for verification.</p>
+      <section className="rounded border border-stone-200 bg-white p-3">
+        <h2 className="text-base font-bold text-stone-950">Ready For Review</h2>
+        <p className="mt-2 text-sm text-stone-700">Review the material and order details before submitting for verification.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-lg font-bold text-stone-950">{money(evaluation.estimatedPrice)} estimated</span>
         <button type="button" onClick={onContinue} disabled={!canVerifyEstimate} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
@@ -2422,7 +2465,7 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
 }
 
 function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
-  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const materials = useMemo(() => buildMaterialSummary(modules), [modules]);
 
@@ -2461,7 +2504,8 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
 
       setSubmitStatus({
         state: 'success',
-        message: `Received. Reference ${payload.quoteId}. We will get back to you within one business day.`,
+        message: '',
+        quoteId: payload.quoteId,
       });
     } catch (error) {
       setSubmitStatus({
@@ -2537,15 +2581,24 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
 
         <form className="mt-4 rounded border border-stone-200 p-3" onSubmit={submitForVerification}>
           <h3 className="text-sm font-bold text-stone-950">Contact Information</h3>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-            <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-            <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-          </div>
-          <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-            Verify estimate
-          </button>
-          {submitStatus.message && (
+          {submitStatus.state === 'success' ? (
+            <div className="mt-3">
+              <SavedPlanActions quoteId={submitStatus.quoteId} />
+            </div>
+          ) : (
+            <>
+              <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+              </div>
+              <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                Verify estimate
+              </button>
+            </>
+          )}
+          {submitStatus.state === 'error' && submitStatus.message && (
             <p className={`mt-2 rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
               {submitStatus.message}
             </p>
@@ -2558,7 +2611,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
 
 function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   const [previewMode, setPreviewMode] = useState('plan');
-  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
   const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules), [planDetails, modules]);
@@ -2604,7 +2657,8 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
 
       setSubmitStatus({
         state: 'success',
-        message: `Saved. Reference ${payload.quoteId}. Your plan link was attached to your Shopify customer record.`,
+        message: '',
+        quoteId: payload.quoteId,
       });
     } catch (error) {
       setSubmitStatus({
@@ -2678,25 +2732,34 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
           <aside className="grid min-w-0 gap-3 self-start">
             <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
-              <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
-              <div className="mt-3 grid gap-2">
-                <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
-              </div>
-              {validationMessages.length > 0 && (
-                <div className="mt-3 grid gap-2">
-                  {validationMessages.map((warning) => (
-                    <div key={warning} className="rounded bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                      {warning}
-                    </div>
-                  ))}
+              {submitStatus.state === 'success' ? (
+                <div className="mt-3">
+                  <SavedPlanActions quoteId={submitStatus.quoteId} />
                 </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                    <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                    <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                    <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
+                  </div>
+                  {validationMessages.length > 0 && (
+                    <div className="mt-3 grid gap-2">
+                      {validationMessages.map((warning) => (
+                        <div key={warning} className="rounded bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                          {warning}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button type="submit" disabled={submitStatus.state === 'loading' || !canSavePlan} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    Save to account
+                  </button>
+                </>
               )}
-              <button type="submit" disabled={submitStatus.state === 'loading' || !canSavePlan} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-                Save to account
-              </button>
-              {submitStatus.message && (
+              {submitStatus.state === 'error' && submitStatus.message && (
                 <p className={`mt-2 rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
                   {submitStatus.message}
                 </p>
@@ -3640,7 +3703,7 @@ export default function App({ internalRenderer = false }) {
                     modules={plannerModules}
                     planDetails={plannerPlanDetails}
                     onContinue={() => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules))}
-                    isCatalogReady={airtableStatus.state === 'ready'}
+                    isCatalogReady={airtableStatus.state !== 'loading'}
                   />
                 </div>
               </aside>

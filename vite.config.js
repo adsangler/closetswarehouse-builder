@@ -1,8 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { buildResolvedParts } from './api/_part-pricing.js';
+import { normalizeQuoteSubmission, validateNormalizedQuote } from './api/_quote-normalize.js';
+import { isInternalAirtableApiEnabled, sanitizePublicKitRecords } from './api/_public-records.js';
+import { upsertShopifyCustomerPlan } from './api/_shopify.js';
 
 const airtableTables = {
   '/api/kits': 'AIRTABLE_KITS_TABLE',
@@ -28,11 +32,19 @@ function airtableProxy(env) {
         const token = env.AIRTABLE_TOKEN;
         const baseId = env.AIRTABLE_BASE_ID;
         const tableName = env[tableEnvKey];
+        const isPublicKitRequest = pathname === '/api/kits';
 
         if (!token || !baseId || !tableName) {
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ error: `Missing Airtable env config for ${pathname}` }));
+          return;
+        }
+
+        if (!isPublicKitRequest && !isInternalAirtableApiEnabled(env)) {
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Not found' }));
           return;
         }
 
@@ -64,7 +76,7 @@ function airtableProxy(env) {
           } while (offset);
 
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ records }));
+          res.end(JSON.stringify({ records: isPublicKitRequest ? sanitizePublicKitRecords(records) : records }));
         } catch (error) {
           res.statusCode = 502;
           res.setHeader('Content-Type', 'application/json');
@@ -163,6 +175,76 @@ function readRequestBody(req) {
   });
 }
 
+function createQuoteId(date = new Date()) {
+  const timestamp = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+  const suffix = randomBytes(3).toString('hex').toUpperCase();
+
+  return `CWQ-${timestamp}-${suffix}`;
+}
+
+function compactFields(fields) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+}
+
+function getQuoteFieldNames(env) {
+  return {
+    quoteId: env.AIRTABLE_QUOTES_ID_FIELD || 'Quote ID',
+    planUrl: env.AIRTABLE_QUOTES_PLAN_URL_FIELD || 'Plan URL',
+    planType: env.AIRTABLE_QUOTES_PLAN_TYPE_FIELD || 'Plan Type',
+    submittedAt: env.AIRTABLE_QUOTES_SUBMITTED_AT_FIELD || 'Submitted At',
+    shopifyCustomerId: env.AIRTABLE_QUOTES_SHOPIFY_CUSTOMER_ID_FIELD || 'Shopify Customer ID',
+    shopifyCustomerEmail: env.AIRTABLE_QUOTES_SHOPIFY_CUSTOMER_EMAIL_FIELD || 'Shopify Customer Email',
+  };
+}
+
+function buildLegacyQuoteFields(quote) {
+  const customerName = [quote.customer?.firstName, quote.customer?.lastName].filter(Boolean).join(' ').trim() || quote.customer?.name || '';
+
+  return compactFields({
+    Name: customerName,
+    'First Name': quote.customer?.firstName || '',
+    'Last Name': quote.customer?.lastName || '',
+    Email: quote.customer?.email || '',
+    Phone: quote.customer?.phone || '',
+    Status: 'New',
+    Source: 'Closet planner',
+    'Wall Width': quote.wallWidth,
+    Height: quote.height,
+    'Assembled Width': quote.assembledWidth,
+    'Required Width': quote.requiredWidth,
+    'Estimated Price': quote.estimatedPrice,
+    Signature: quote.signature,
+    Modules: quote.modules?.map((module) => `${module.wall ? `${module.wall}:` : ''}${module.code}-${module.width}`).join(', '),
+    'Quote JSON': JSON.stringify(quote),
+  });
+}
+
+function buildEnrichedQuoteFields(env, quote) {
+  const fieldNames = getQuoteFieldNames(env);
+
+  return {
+    ...buildLegacyQuoteFields(quote),
+    ...compactFields({
+      [fieldNames.quoteId]: quote.quoteId,
+      [fieldNames.planUrl]: quote.planUrl,
+      [fieldNames.planType]: quote.planType || quote.internalType || 'closet plan',
+      [fieldNames.submittedAt]: quote.submittedAt,
+      [fieldNames.shopifyCustomerId]: quote.shopifyCustomer?.customerId,
+      [fieldNames.shopifyCustomerEmail]: quote.shopifyCustomer?.customerEmail,
+    }),
+  };
+}
+
+function applyServerEnv(env, keys) {
+  keys.forEach((key) => {
+    if (env[key] && !process.env[key]) {
+      process.env[key] = env[key];
+    }
+  });
+}
+
 async function createAirtableQuote(env, quote) {
   const token = env.AIRTABLE_TOKEN;
   const baseId = env.AIRTABLE_BASE_ID;
@@ -182,21 +264,7 @@ async function createAirtableQuote(env, quote) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        fields: {
-          Name: quote.customer?.name || '',
-          Email: quote.customer?.email || '',
-          Phone: quote.customer?.phone || '',
-          Status: 'New',
-          Source: 'Closet planner',
-          'Wall Width': quote.wallWidth,
-          Height: quote.height,
-          'Assembled Width': quote.assembledWidth,
-          'Required Width': quote.requiredWidth,
-          'Estimated Price': quote.estimatedPrice,
-          Signature: quote.signature,
-          Modules: quote.modules?.map((module) => `${module.code}-${module.width}`).join(', '),
-          'Quote JSON': JSON.stringify(quote),
-        },
+        fields: buildEnrichedQuoteFields(env, quote),
       }),
     });
   } catch {
@@ -208,10 +276,207 @@ async function createAirtableQuote(env, quote) {
   }
 
   if (!response.ok) {
+    const text = await response.text();
+
+    if (/UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(text)) {
+      const fallback = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fields: buildLegacyQuoteFields(quote) }),
+      });
+
+      if (fallback.ok) {
+        return fallback.json();
+      }
+    }
+
     throw new Error(`Airtable quote capture returned ${response.status}`);
   }
 
   return response.json();
+}
+
+async function updateAirtableQuoteShopifyCustomer(env, recordId, quote, shopifyCustomer) {
+  const token = env.AIRTABLE_TOKEN;
+  const baseId = env.AIRTABLE_BASE_ID;
+  const tableName = env.AIRTABLE_QUOTES_TABLE;
+
+  if (!token || !baseId || !tableName || !recordId || !shopifyCustomer?.customerId) {
+    return null;
+  }
+
+  const response = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}/${recordId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fields: buildEnrichedQuoteFields(env, { ...quote, shopifyCustomer }),
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.json();
+}
+
+async function fetchAirtableQuoteByReference(env, { quoteId, email }) {
+  const token = env.AIRTABLE_TOKEN;
+  const baseId = env.AIRTABLE_BASE_ID;
+  const tableName = env.AIRTABLE_QUOTES_TABLE;
+
+  if (!token || !baseId || !tableName) {
+    return null;
+  }
+
+  const normalizedQuoteId = String(quoteId || '').trim();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  if (!normalizedQuoteId || !normalizedEmail) {
+    throw new Error('Quote ID and email are required');
+  }
+
+  const fieldNames = getQuoteFieldNames(env);
+  const formula = `AND({${fieldNames.quoteId}} = '${normalizedQuoteId.replace(/'/g, "\\'")}', LOWER({Email}) = '${normalizedEmail.replace(/'/g, "\\'")}')`;
+  const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
+  url.searchParams.set('pageSize', '1');
+  url.searchParams.set('filterByFormula', formula);
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Airtable quote lookup returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const record = payload.records?.[0];
+
+  if (!record) {
+    return null;
+  }
+
+  let quoteJson = null;
+  try {
+    quoteJson = JSON.parse(record.fields?.['Quote JSON'] || 'null');
+  } catch {
+    quoteJson = null;
+  }
+
+  return {
+    id: record.id,
+    quoteId: record.fields?.[fieldNames.quoteId] || normalizedQuoteId,
+    customer: {
+      name: record.fields?.Name || quoteJson?.customer?.name || '',
+      email: record.fields?.Email || quoteJson?.customer?.email || '',
+      phone: record.fields?.Phone || quoteJson?.customer?.phone || '',
+    },
+    planUrl: record.fields?.[fieldNames.planUrl] || quoteJson?.planUrl || '',
+    planType: record.fields?.[fieldNames.planType] || quoteJson?.planType || quoteJson?.internalType || '',
+    submittedAt: record.fields?.[fieldNames.submittedAt] || quoteJson?.submittedAt || '',
+    quote: quoteJson,
+  };
+}
+
+function parseQuoteRecord(env, record, fallbackQuoteId = '') {
+  const fieldNames = getQuoteFieldNames(env);
+  let quoteJson = null;
+
+  try {
+    quoteJson = JSON.parse(record.fields?.['Quote JSON'] || 'null');
+  } catch {
+    quoteJson = null;
+  }
+
+  return {
+    id: record.id,
+    quoteId: record.fields?.[fieldNames.quoteId] || quoteJson?.quoteId || fallbackQuoteId,
+    customer: {
+      name: record.fields?.Name || quoteJson?.customer?.name || '',
+      email: record.fields?.Email || quoteJson?.customer?.email || '',
+      phone: record.fields?.Phone || quoteJson?.customer?.phone || '',
+    },
+    planUrl: record.fields?.[fieldNames.planUrl] || quoteJson?.planUrl || '',
+    planType: record.fields?.[fieldNames.planType] || quoteJson?.planType || quoteJson?.internalType || '',
+    submittedAt: record.fields?.[fieldNames.submittedAt] || quoteJson?.submittedAt || '',
+    status: record.fields?.Status || '',
+    estimatedPrice: record.fields?.['Estimated Price'] || quoteJson?.estimatedPrice || 0,
+    quote: quoteJson,
+  };
+}
+
+async function fetchAirtableQuotesByShopifyCustomerId(env, shopifyCustomerId) {
+  const token = env.AIRTABLE_TOKEN;
+  const baseId = env.AIRTABLE_BASE_ID;
+  const tableName = env.AIRTABLE_QUOTES_TABLE;
+
+  if (!token || !baseId || !tableName) {
+    return [];
+  }
+
+  const rawCustomerId = String(shopifyCustomerId || '').trim();
+
+  if (!rawCustomerId) {
+    throw new Error('Shopify customer ID is required');
+  }
+
+  const fieldNames = getQuoteFieldNames(env);
+  const numericCustomerId = rawCustomerId.match(/(\d+)$/)?.[1] || rawCustomerId;
+  const gidCustomerId = rawCustomerId.startsWith('gid://') ? rawCustomerId : `gid://shopify/Customer/${numericCustomerId}`;
+  const formula = `OR({${fieldNames.shopifyCustomerId || 'Shopify Customer ID'}} = '${rawCustomerId.replace(/'/g, "\\'")}', {${fieldNames.shopifyCustomerId || 'Shopify Customer ID'}} = '${gidCustomerId.replace(/'/g, "\\'")}')`;
+  const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
+  url.searchParams.set('pageSize', '100');
+  url.searchParams.set('filterByFormula', formula);
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Airtable customer quote lookup returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+
+  return (payload.records || []).map((record) => parseQuoteRecord(env, record));
+}
+
+function verifyShopifyAppProxySignature(env, requestUrl) {
+  const secret = env.SHOPIFY_API_SECRET || process.env.SHOPIFY_API_SECRET;
+
+  if (!secret) {
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  const signature = requestUrl.searchParams.get('signature');
+
+  if (!signature) {
+    return false;
+  }
+
+  const params = new URLSearchParams(requestUrl.search);
+  params.delete('signature');
+
+  const message = [...params.entries()]
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('');
+  const digest = createHmac('sha256', secret).update(message).digest('hex');
+  const expected = Buffer.from(digest, 'utf8');
+  const actual = Buffer.from(signature, 'utf8');
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 async function sendConfirmationEmail(env, quote) {
@@ -260,8 +525,76 @@ function quoteRequestProxy(env) {
       server.middlewares.use(async (req, res, next) => {
         const pathname = req.url?.split('?')[0];
 
+        if (pathname === '/api/customer-quotes') {
+          if (req.method !== 'GET') {
+            res.statusCode = 405;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Method not allowed' }));
+            return;
+          }
+
+          try {
+            const requestUrl = new URL(req.url || '', 'http://localhost');
+
+            if (!verifyShopifyAppProxySignature(env, requestUrl)) {
+              res.statusCode = 401;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Unauthorized customer quote request' }));
+              return;
+            }
+
+            const customerId = requestUrl.searchParams.get('logged_in_customer_id') || requestUrl.searchParams.get('customerId');
+
+            if (!customerId) {
+              res.statusCode = 401;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Customer login is required' }));
+              return;
+            }
+
+            const quotes = await fetchAirtableQuotesByShopifyCustomerId(env, customerId);
+
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+              ok: true,
+              customerId,
+              quotes: quotes.map(({ quote, ...summary }) => summary),
+            }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: error.message }));
+          }
+          return;
+        }
+
         if (pathname !== '/api/quote-requests') {
           next();
+          return;
+        }
+
+        if (req.method === 'GET') {
+          try {
+            const requestUrl = new URL(req.url || '', 'http://localhost');
+            const quote = await fetchAirtableQuoteByReference(env, {
+              quoteId: requestUrl.searchParams.get('quoteId'),
+              email: requestUrl.searchParams.get('email'),
+            });
+
+            if (!quote) {
+              res.statusCode = 404;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Quote not found' }));
+              return;
+            }
+
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true, quote }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: error.message }));
+          }
           return;
         }
 
@@ -275,23 +608,53 @@ function quoteRequestProxy(env) {
         try {
           const body = await readRequestBody(req);
           const quote = JSON.parse(body || '{}');
-          const submittedAt = new Date().toISOString();
-          const quoteId = `quote-${submittedAt.replace(/[:.]/g, '-')}`;
-          const capturedQuote = { ...quote, quoteId, submittedAt };
+          const submittedDate = new Date();
+          const submittedAt = submittedDate.toISOString();
+          const quoteId = createQuoteId(submittedDate);
+          const capturedQuote = normalizeQuoteSubmission(quote, { quoteId, submittedAt });
+          const validationError = validateNormalizedQuote(capturedQuote);
 
+          if (validationError) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: validationError }));
+            return;
+          }
+
+          applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
           const airtableRecord = await createAirtableQuote(env, capturedQuote);
+          let shopifyCustomer = null;
+
+          try {
+            shopifyCustomer = await upsertShopifyCustomerPlan(capturedQuote);
+          } catch {
+            shopifyCustomer = null;
+          }
+
+          const capturedQuoteWithCustomer = { ...capturedQuote, shopifyCustomer };
+
+          if (airtableRecord?.id && shopifyCustomer?.customerId) {
+            await updateAirtableQuoteShopifyCustomer(env, airtableRecord.id, capturedQuote, shopifyCustomer);
+          }
+
           const captureMode = airtableRecord ? 'airtable' : 'local';
 
           if (!airtableRecord) {
             const outDir = path.resolve('assets/drafts/quote-requests');
             await fs.mkdir(outDir, { recursive: true });
-            await fs.writeFile(path.join(outDir, `${quoteId}.json`), JSON.stringify(capturedQuote, null, 2), 'utf8');
+            await fs.writeFile(path.join(outDir, `${quoteId}.json`), JSON.stringify(capturedQuoteWithCustomer, null, 2), 'utf8');
           }
 
-          const email = await sendConfirmationEmail(env, capturedQuote);
+          const email = await sendConfirmationEmail(env, capturedQuoteWithCustomer);
 
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ ok: true, quoteId, captureMode, email }));
+          res.end(JSON.stringify({
+            ok: true,
+            quoteId,
+            captureMode,
+            shopifyCustomer: shopifyCustomer ? { configured: shopifyCustomer.configured, created: shopifyCustomer.created } : null,
+            email,
+          }));
         } catch (error) {
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
@@ -366,6 +729,7 @@ function photoDraftsProxy() {
 function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) {
   const towers = (towerSpecs || []).map((tower) => `${tower.code} ${tower.width}-inch`).join(' + ');
   const cabinetWidth = Number(assembledWidth) || 0;
+  const cabinetAspectRatio = (cabinetWidth / (Number(height) || 1)).toFixed(4);
   const finishedCavityWidth = Number((cabinetWidth + 2).toFixed(2));
   const finishedCavityHeight = Number(height) + 1;
   const towerRules = (towerSpecs || []).map((tower, index) => {
@@ -378,8 +742,8 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
       S3D: 'no rod; exactly three proud overlay drawers, two small drawers above one large drawer, each with one centered horizontal brushed-nickel straight bar pull; upper shelves evenly divide the space above the drawer deck; one adjustable shelf centered in the lower open space.',
       H3D: 'exactly one upper chrome rod above the drawer deck; exactly three proud overlay drawers, two small above one large, each with one centered horizontal brushed-nickel straight bar pull; one adjustable shelf centered in the lower open space.',
       S2D: 'no rod; exactly two small proud overlay drawers, each with one centered horizontal brushed-nickel straight bar pull; upper shelves evenly divide the space above the drawer deck; one adjustable shelf centered in the lower open space.',
-      S7: 'no rods and no drawers; exactly seven equal usable open compartments bounded by exactly eight horizontal boards total including top and bottom.',
-      S8: 'no rods and no drawers; exactly eight equal usable open compartments bounded by exactly nine horizontal boards total including top and bottom.',
+      S7: 'no rods and no drawers; exactly SEVEN storage compartments above the toe kick, bounded by exactly EIGHT horizontal boards total: 1 top fixed frame board + exactly 6 adjustable internal shelf boards + 1 bottom shelf board. Count all visible horizontal boards from top to bottom and stop at 8. The toe-kick board is vertical and never counts as a shelf or compartment. Do not add an eighth storage compartment or a ninth horizontal board.',
+      S8: 'no rods and no drawers; exactly EIGHT storage compartments above the toe kick, bounded by exactly NINE horizontal boards total: 1 top fixed frame board + exactly 7 adjustable internal shelf boards + 1 bottom shelf board. Count all visible horizontal boards from top to bottom and stop at 9. The toe-kick board is vertical and never counts as a shelf or compartment. Do not add a ninth storage compartment or a tenth horizontal board.',
     };
 
     return `${prefix} ${rules[code] || 'preserve the supplied render exactly.'}`;
@@ -395,7 +759,8 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
   return [
     `Create a photorealistic square Shopify product hero for ${handle}.`,
     `The supplied image is the exact geometry source of truth: ${towers}, ${height}-inch height. Preserve every panel, shared divider, shelf, rod, drawer, handle, hanger, and recessed toe kick exactly.`,
-    'MANDATORY TOE-KICK CONSTRUCTION: preserve the complete 5-inch-high toe-kick zone below the bottom shelf across every tower bay. The bottom shelf must remain visibly elevated 5 inches above the floor. Show the vertical kick board recessed about 2 inches behind the cabinet front plane, with a clear continuous dark shadow line under the bottom shelf. The cabinet must not extend flush to the floor, float above the floor, use furniture legs, or lose/cover/crop this recessed base.',
+    `DIMENSION LOCK FOR EVERY PHOTO IN THIS SKU SET: the cabinet outside silhouette is exactly ${cabinetWidth} inches wide by ${height} inches high, a width-to-height ratio of exactly ${cabinetAspectRatio}. Preserve that same physical silhouette ratio in both the clean product image and the installed image. Use a straight-on, level, near-orthographic catalog camera with vertical sides parallel and horizontal shelves level. Do not widen, narrow, stretch, compress, taper, or perspective-distort the cabinet to fit the room or door opening. Architectural trim and doors must fit around the locked cabinet dimensions, never resize the cabinet.`,
+    `MANDATORY TOE-KICK CONSTRUCTION: preserve the complete 5-inch-high toe-kick zone below the bottom shelf across every tower bay. It must measure exactly 5 inches vertically, which is ${(5 / Number(height) * 100).toFixed(1)}% of this ${height}-inch cabinet height; do not make it shorter or visually compress it. The bottom shelf must remain visibly elevated exactly 5 inches above the floor. Every bay must contain one SOLID, OPAQUE, WHITE MELAMINE VERTICAL KICK BOARD filling the entire rectangular area from the floor up to the underside of the bottom shelf and from the left panel to the right panel. Set that solid board about 2 inches behind the cabinet front plane. It is a real cabinet part, not background wall: no wall, floor, open cavity, or empty darkness may be visible through the 5-inch toe-kick zone. The side panels are not furniture legs and must never appear as two legs around an open bottom. Lighting may create only soft natural depth shading on the solid kick board. Do not add a black line, dark stripe, trim strip, groove, gap, or separate horizontal product part at the toe kick. The cabinet must not extend flush to the floor, float above the floor, use furniture legs, or lose, cover, crop, or miniaturize this recessed base.`,
     ...towerRules,
     'Important image-reading rule: faint white shapes, repeated hanger shapes, wall projections, and translucent shapes in the source are CAST SHADOWS OR REFLECTIONS, not shelves, towers, rods, cabinets, or drawers. Never turn a shadow or reflection into physical geometry.',
     installedScene
@@ -404,15 +769,15 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
           `The cabinet outside assembled width is exactly ${cabinetWidth} inches. Although the construction cavity can be ${finishedCavityWidth} inches before trim, the VISIBLE FINISHED OPENING in the photograph must equal the cabinet outside width exactly: ${cabinetWidth} inches. Hide all installation allowance completely behind the front casing. The cabinet's left outside panel must visually touch the finished left return, and its right outside panel must visually touch the finished right return. Show no visible filler width at all.`,
           `The cabinet height is exactly ${height} inches. Although the construction cavity can be ${finishedCavityHeight} inches before trim, the VISIBLE FINISHED OPENING height in the photograph must equal the cabinet height exactly: ${height} inches. Hide all top installation allowance behind the front header/casing. The cabinet top board must visually touch the underside of the header across its full width.`,
           'Move the finished jambs, casing, header, track, and door panels tightly inward until the visible opening traces the cabinet perimeter. The interior face of each jamb must be no wider than the 0.75-inch cabinet side-panel edge. Show zero exposed back wall beside or above the cabinet, zero dark side channels, zero broad filler panels, and zero unused reach-in floor area around the product.',
-          'At the bottom of the fitted opening, keep the entire 5-inch recessed toe-kick visible from left to right. Do not use reach-in trim, flooring, a threshold, shadows, or the door track to conceal it. The finished side returns stop at the cabinet sides and must not cover the toe-kick opening.',
+          'At the bottom of the fitted opening, keep the entire 5-inch recessed toe-kick visible from left to right. Do not use reach-in trim, flooring, a threshold, shadows, or the door track to conceal it. The finished side returns stop at the cabinet sides and must not cover the toe-kick opening. Render only natural soft shading in the recess; never draw a black horizontal line or stripe.',
           'Critical visual test: if any strip of interior wall is visible between an outside cabinet panel and a door jamb, or between the cabinet top and header, the opening is still too large and must be tightened further.',
         ].join(' ')
       : walkInScene
         ? 'Show the exact system as a walk-in closet product hero with a minimal warm wall and floor environment.'
         : 'Show the exact system alone as a clean centered product hero with a minimal warm wall and floor environment and no doors.',
-    'Use a 1:1 composition. Center the complete product and let it occupy 80-88% of the frame height. Keep the full top, sides, and toe kicks visible.',
+    'Use a 1:1 composition. Center the complete product and let it occupy 80-88% of the frame height. Keep the full top, sides, and toe kicks visible. Across the photo set, keep the cabinet at the same visual scale and preserve the exact same cabinet width-to-height proportion; only the surrounding installation context may change.',
     'White satin melamine, soft warm daylight, realistic chrome and brushed-nickel hardware, straight verticals, subtle shadows. Replace the source render lattice-style hanger placeholders with realistically proportional matte-black adult clothes hangers on the visible front rod plane.',
-    'No invented modules, extra shelves, missing shelves, duplicate divider, altered widths, inset drawers, round knobs, oversized hangers, deep-set rods, props, furniture, artwork, text, logo, or watermark.',
+    'No invented modules, extra shelves, missing shelves, duplicate divider, altered widths, inset drawers, round knobs, oversized hangers, deep-set rods, open bottom cavity, furniture-style legs, props, furniture, artwork, text, logo, or watermark. Before finalizing, explicitly count every horizontal board in each tower and reject the image internally if the count differs from the tower rule above.',
   ].join('\n');
 }
 

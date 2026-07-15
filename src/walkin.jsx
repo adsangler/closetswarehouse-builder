@@ -8,6 +8,9 @@ const panelThickness = 0.75;
 const closetDepth = 14;
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
 const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
+const contactUrl = `${storefrontBaseUrl}/pages/contact`;
+const phoneDisplay = '(954) 247-8032';
+const phoneHref = 'tel:+19542478032';
 const cornerReachGap = 12;
 const cornerStopDistance = closetDepth + cornerReachGap;
 const closetHeights = [84, 96];
@@ -32,6 +35,38 @@ function ConsultationCta({ compact = false }) {
     >
       Need help? Schedule a free design consultation
     </a>
+  );
+}
+
+function buildQuoteContactUrl(quoteId, intent = 'contact') {
+  const url = new URL(contactUrl);
+  const reference = String(quoteId || '').trim();
+
+  if (reference) {
+    url.searchParams.set('quote', reference);
+    url.searchParams.set('plan_reference', reference);
+    url.searchParams.set('contact[body]', `Plan reference: ${reference}`);
+  }
+
+  url.searchParams.set('contact_method', intent);
+  return url.toString();
+}
+
+function SavedPlanActions({ quoteId }) {
+  return (
+    <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
+      <p className="text-sm font-bold text-emerald-800">
+        Saved. Reference {quoteId}. Your plan link can now be found when you login to your closetswarehouse.com account. Call or email us to finalize your order.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <a href={phoneHref} target="_top" className="rounded bg-stone-950 px-3 py-2 text-center text-sm font-bold text-white hover:bg-stone-800">
+          Call {phoneDisplay}
+        </a>
+        <a href={buildQuoteContactUrl(quoteId, 'contact')} target="_top" className="rounded bg-brand-orange px-3 py-2 text-center text-sm font-bold text-white hover:bg-orange-700">
+          Contact
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -2156,7 +2191,7 @@ function getRequestedWalkInPlan() {
 
 function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   const [previewMode, setPreviewMode] = useState('plan');
-  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
   const planUrl = useMemo(() => buildWalkInPlanUrl(room, corners, runs), [room, corners, runs]);
@@ -2202,7 +2237,8 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
 
       setSubmitStatus({
         state: 'success',
-        message: `Saved. Reference ${payload.quoteId}. Your plan link was attached to your Shopify customer record.`,
+        message: '',
+        quoteId: payload.quoteId,
       });
     } catch (error) {
       setSubmitStatus({
@@ -2261,16 +2297,25 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
           <aside className="grid min-w-0 gap-3 self-start">
             <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
-              <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
-              <div className="mt-3 grid gap-2">
-                <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
-              </div>
-              <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-                Save to account
-              </button>
-              {submitStatus.message && (
+              {submitStatus.state === 'success' ? (
+                <div className="mt-3">
+                  <SavedPlanActions quoteId={submitStatus.quoteId} />
+                </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                    <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                    <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                    <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
+                  </div>
+                  <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    Save to account
+                  </button>
+                </>
+              )}
+              {submitStatus.state === 'error' && submitStatus.message && (
                 <p className={`mt-2 rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
                   {submitStatus.message}
                 </p>
@@ -2321,9 +2366,9 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   );
 }
 
-function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady }) {
+function SummaryPanel({ room, corners, runs, evaluation, pricing }) {
   const [showForm, setShowForm] = useState(false);
-  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const materials = useMemo(() => buildWalkInMaterials(runs), [runs]);
   const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
@@ -2371,7 +2416,8 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
 
       setSubmitStatus({
         state: 'success',
-        message: `Received. Reference ${payload.quoteId}. We will get back to you within one business day.`,
+        message: '',
+        quoteId: payload.quoteId,
       });
     } catch (error) {
       setSubmitStatus({
@@ -2393,9 +2439,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
         ))}
       </dl>
 
-      {!isCatalogReady && <p className="mt-3 rounded bg-stone-50 px-3 py-2 text-sm font-bold text-stone-600">Checking product catalog...</p>}
-
-      {isCatalogReady && shouldShowProductLinks && (
+      {shouldShowProductLinks && (
         <div className="mt-3 rounded border border-emerald-200 bg-emerald-50 p-3">
           <div className="text-xs font-bold uppercase text-emerald-700">Existing products found</div>
           <p className="mt-1 text-sm font-semibold text-stone-700">All three wall runs match products. Use these product pages for checkout.</p>
@@ -2416,7 +2460,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
         </div>
       )}
 
-      {isCatalogReady && !shouldShowProductLinks && (
+      {!shouldShowProductLinks && (
         <div className="mt-3 rounded border border-stone-200 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -2443,13 +2487,20 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
 
           {showForm && (
             <form className="mt-3 grid gap-2" onSubmit={submitForVerification}>
-              <input type="text" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} placeholder="Name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-              <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-              <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-              <button type="submit" disabled={submitStatus.state === 'loading'} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white disabled:opacity-50">
-                Verify estimate
-              </button>
-              {submitStatus.message && (
+              {submitStatus.state === 'success' ? (
+                <SavedPlanActions quoteId={submitStatus.quoteId} />
+              ) : (
+                <>
+                  <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                  <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                  <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                  <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
+                  <button type="submit" disabled={submitStatus.state === 'loading'} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    Verify estimate
+                  </button>
+                </>
+              )}
+              {submitStatus.state === 'error' && submitStatus.message && (
                 <p className={`rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
                   {submitStatus.message}
                 </p>

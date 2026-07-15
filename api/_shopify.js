@@ -52,6 +52,17 @@ function splitCustomerName(name = '') {
   };
 }
 
+function getCustomerNameParts(customer = {}) {
+  if (customer.firstName || customer.lastName) {
+    return {
+      firstName: String(customer.firstName || '').trim(),
+      lastName: String(customer.lastName || '').trim(),
+    };
+  }
+
+  return splitCustomerName(customer.name);
+}
+
 function getCustomerMetafields(quote) {
   const value = {
     quoteId: quote.quoteId,
@@ -111,7 +122,7 @@ function getUserErrorMessage(payload, key) {
 }
 
 async function createCustomer(quote) {
-  const { firstName, lastName } = splitCustomerName(quote.customer?.name);
+  const { firstName, lastName } = getCustomerNameParts(quote.customer);
   const data = await shopifyGraphql(
     `mutation createCustomer($input: CustomerInput!) {
       customerCreate(input: $input) {
@@ -151,7 +162,7 @@ async function createCustomer(quote) {
 }
 
 async function updateCustomer(customerId, quote) {
-  const { firstName, lastName } = splitCustomerName(quote.customer?.name);
+  const { firstName, lastName } = getCustomerNameParts(quote.customer);
   const data = await shopifyGraphql(
     `mutation updateCustomer($input: CustomerInput!) {
       customerUpdate(input: $input) {
