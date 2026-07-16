@@ -858,12 +858,81 @@ function RoomSummaryBar({ room, corners, onEdit, compact = false }) {
   );
 }
 
+function MeasurementGuide() {
+  return (
+    <details className="mt-5 rounded border border-stone-200 bg-stone-50 p-4">
+      <summary className="cursor-pointer text-sm font-bold text-brand-orange underline decoration-brand-orange/40 underline-offset-4">
+        How to properly measure your space
+      </summary>
+      <div className="mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700">
+        <section>
+          <h2 className="text-base font-bold text-stone-950">Measure Your Closet Before Using the Design Tool</h2>
+          <p className="mt-1">Accurate measurements help the Closets Warehouse design tools identify the right closet configurations for your space.</p>
+          <p className="mt-2">Use the <a className="font-bold text-brand-orange underline" href="https://closetswarehouse.com/pages/reach-in-closet-design-tool" target="_blank" rel="noreferrer">Reach-In Closet Design Tool</a> for one main closet wall.</p>
+          <p className="mt-2">Use the <a className="font-bold text-brand-orange underline" href="https://closetswarehouse.com/pages/walk-in-closet-design-tool" target="_blank" rel="noreferrer">Walk-In Closet Design Tool</a> for a back wall and optional left and right walls.</p>
+          <p className="mt-2 font-bold text-stone-950">Measure everything in inches.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">1. Sketch the Space</h3>
+          <p>Draw a simple overhead view and mark walls and corners, doors and door swing, closet openings, windows, outlets and switches, vents and air returns, baseboards, soffits, columns, and angled walls.</p>
+          <p className="mt-2">For a walk-in closet, label the Back, Left, and Right walls. Enter each wall separately into the <a className="font-bold text-brand-orange underline" href="https://closetswarehouse.com/pages/walk-in-closet-design-tool" target="_blank" rel="noreferrer">Walk-In Closet Design Tool</a>.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">2. Measure Every Wall</h3>
+          <p>Measure each usable wall near the floor, in the middle, and near the ceiling. Use the smallest measurement and never round up.</p>
+          <p className="mt-2">For a reach-in closet, enter the usable back-wall measurement into the <a className="font-bold text-brand-orange underline" href="https://closetswarehouse.com/pages/reach-in-closet-design-tool" target="_blank" rel="noreferrer">Reach-In Closet Design Tool</a>.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">3. Measure the Height</h3>
+          <p>Measure from the finished floor to the ceiling in several locations and use the smallest measurement. Confirm there is enough room to bring the closet panels into the space and stand them upright during installation.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">4. Check Doors and Openings</h3>
+          <p>Measure opening width and height, distance from the opening to the nearest corner, door trim, and direction the door opens. Make sure doors and drawers can open fully without hitting the closet system.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">5. Record All Obstructions</h3>
+          <p>Measure the location, width, and height of outlets, switches, vents, windows, access panels, baseboards, soffits, and other obstructions. The design tool cannot detect items that are not included in your planning.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">6. Allow for Hangers and Clothing</h3>
+          <p>Closets Warehouse systems are approximately 14 inches deep. Hangers and hanging clothes will normally extend approximately 10 to 12 inches beyond the front of the system. Plan for approximately 24 to 26 inches of total space from the wall, including the closet system, hangers, and clothing.</p>
+          <p className="mt-2">For walk-in closets, check the remaining walkway after accounting for hanging clothes on both sides.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">7. Choose Your Storage Needs</h3>
+          <p>Before selecting configurations, decide how much space you need for double hanging, long hanging, shelves, shoes, drawers, luggage, and accessories. Compare different layouts using the <a className="font-bold text-brand-orange underline" href="https://closetswarehouse.com/pages/reach-in-closet-design-tool" target="_blank" rel="noreferrer">Reach-In Closet Design Tool</a> or <a className="font-bold text-brand-orange underline" href="https://closetswarehouse.com/pages/walk-in-closet-design-tool" target="_blank" rel="noreferrer">Walk-In Closet Design Tool</a>.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">8. Check the Corners</h3>
+          <p>Hanging sections usually work better near walk-in closet corners. Avoid placing drawers near corners unless they can open fully. Corner shelves often reduce usable space and increase cost.</p>
+        </section>
+
+        <section>
+          <h3 className="font-bold text-stone-950">Before Submitting Your Design</h3>
+          <p>Confirm every measurement was checked twice, the smallest measurements were used, every wall was entered correctly, doors and drawers can open fully, hanging clothing will not block the walkway, the 10-to-12-inch clothing extension was considered, baseboards and obstructions were included, and the complete room layout works.</p>
+          <p className="mt-2">Take photos of every wall and obstruction. For unusual spaces or questions about the layout, schedule a free consultation before ordering.</p>
+        </section>
+      </div>
+    </details>
+  );
+}
+
 function ClosetTypeStart({ onWalkIn }) {
   return (
     <main className="grid min-h-screen place-items-center bg-brand-ui p-6 text-brand-black">
-      <section className="w-full max-w-3xl rounded border border-stone-200 bg-white p-6 shadow-sm">
+      <section className="w-full max-w-4xl rounded border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
         <h1 className="mt-1 text-3xl font-bold text-stone-950">Walk-in Shape Planner</h1>
+        <MeasurementGuide />
         <div className="mt-4 flex justify-start">
           <ConsultationCta />
         </div>
