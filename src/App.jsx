@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/drei';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
@@ -3013,13 +3013,65 @@ function ReachInRoomSetup({
   );
 }
 
-function MeasurementGuide() {
+function MeasurementGuide({ compact = false }) {
+  const guideContentRef = useRef(null);
+
+  const printGuide = () => {
+    const guideHtml = guideContentRef.current?.innerHTML;
+    if (!guideHtml) return;
+
+    const printWindow = window.open('', '_blank', 'width=720,height=900');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    printWindow.document.write(`<!doctype html>
+      <html>
+        <head>
+          <title>How to properly measure your space</title>
+          <style>
+            body { color: #1c1917; font-family: Arial, sans-serif; line-height: 1.5; margin: 32px; }
+            h1, h2, h3 { color: #1c1917; }
+            h2 { font-size: 20px; margin: 0 0 8px; }
+            h3 { font-size: 15px; margin: 20px 0 6px; }
+            p { margin: 6px 0; }
+            a { color: #c2410c; font-weight: 700; }
+          </style>
+        </head>
+        <body>${guideHtml}</body>
+      </html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
-    <details className="mb-4 rounded border border-stone-200 bg-stone-50 p-4">
-      <summary className="cursor-pointer text-sm font-bold text-brand-orange underline decoration-brand-orange/40 underline-offset-4">
+    <details className={compact ? 'group relative' : 'mb-4 rounded border border-stone-200 bg-stone-50 p-4'}>
+      <summary
+        className={
+          compact
+            ? 'cursor-pointer list-none rounded border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-brand-orange hover:border-brand-orange sm:text-sm [&::-webkit-details-marker]:hidden'
+            : 'cursor-pointer text-sm font-bold text-brand-orange underline decoration-brand-orange/40 underline-offset-4'
+        }
+      >
         How to properly measure your space
       </summary>
-      <div className="mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700">
+      <div
+        className={
+          compact
+            ? 'absolute right-0 z-50 mt-2 max-h-[70vh] w-[min(88vw,42rem)] overflow-y-auto rounded border border-stone-200 bg-white p-4 text-left text-sm font-semibold leading-6 text-stone-700 shadow-xl'
+            : 'mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700'
+        }
+      >
+        <button
+          type="button"
+          onClick={printGuide}
+          className="mb-4 rounded bg-stone-950 px-3 py-2 text-xs font-bold text-white hover:bg-stone-800"
+        >
+          Print instructions
+        </button>
+        <div ref={guideContentRef} className="space-y-4">
         <section>
           <h2 className="text-base font-bold text-stone-950">Measure Your Closet Before Using the Design Tool</h2>
           <p className="mt-1">Accurate measurements help the Closets Warehouse design tools identify the right closet configurations for your space.</p>
@@ -3076,6 +3128,7 @@ function MeasurementGuide() {
           <p>Confirm every measurement was checked twice, the smallest measurements were used, every wall was entered correctly, doors and drawers can open fully, hanging clothing will not block the walkway, the 10-to-12-inch clothing extension was considered, baseboards and obstructions were included, and the complete room layout works.</p>
           <p className="mt-2">Take photos of every wall and obstruction. For unusual spaces or questions about the layout, schedule a free consultation before ordering.</p>
         </section>
+        </div>
       </div>
     </details>
   );
@@ -3089,8 +3142,8 @@ function ClosetTypeStart({ onReachIn }) {
           <h1 className="text-xl font-bold text-stone-950">Reach-in Closet Planner</h1>
           <p className="mt-1 text-sm font-semibold text-stone-500">Enter closet dimensions to start your reach-in design.</p>
         </div>
-        <MeasurementGuide />
-        <div className="mb-4 flex justify-start">
+        <div className="mb-4 flex flex-wrap justify-start gap-2">
+          <MeasurementGuide compact />
           <ConsultationCta />
         </div>
         <div>
@@ -3135,6 +3188,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
           <p className="text-xs font-semibold text-stone-500">Step 1: closet dimensions and opening</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          <MeasurementGuide compact />
           <ConsultationCta compact />
         </div>
       </header>
@@ -3605,6 +3659,7 @@ export default function App({ internalRenderer = false }) {
           {internalRenderer ? 'Internal Image Renderer' : 'Reach-in Closet Planner'}
         </h1>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+          {!internalRenderer && appMode === 'planner' && <MeasurementGuide compact />}
           {!internalRenderer && appMode === 'planner' && <ConsultationCta compact />}
           {internalRenderer && (
             <>

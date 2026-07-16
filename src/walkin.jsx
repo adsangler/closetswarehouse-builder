@@ -784,6 +784,7 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
           <p className="text-xs font-semibold text-stone-500">Step 1: room dimensions</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          <MeasurementGuide compact />
           <ConsultationCta compact />
         </div>
       </header>
@@ -858,13 +859,65 @@ function RoomSummaryBar({ room, corners, onEdit, compact = false }) {
   );
 }
 
-function MeasurementGuide() {
+function MeasurementGuide({ compact = false }) {
+  const guideContentRef = React.useRef(null);
+
+  const printGuide = () => {
+    const guideHtml = guideContentRef.current?.innerHTML;
+    if (!guideHtml) return;
+
+    const printWindow = window.open('', '_blank', 'width=720,height=900');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    printWindow.document.write(`<!doctype html>
+      <html>
+        <head>
+          <title>How to properly measure your space</title>
+          <style>
+            body { color: #1c1917; font-family: Arial, sans-serif; line-height: 1.5; margin: 32px; }
+            h1, h2, h3 { color: #1c1917; }
+            h2 { font-size: 20px; margin: 0 0 8px; }
+            h3 { font-size: 15px; margin: 20px 0 6px; }
+            p { margin: 6px 0; }
+            a { color: #c2410c; font-weight: 700; }
+          </style>
+        </head>
+        <body>${guideHtml}</body>
+      </html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
-    <details className="mt-5 rounded border border-stone-200 bg-stone-50 p-4">
-      <summary className="cursor-pointer text-sm font-bold text-brand-orange underline decoration-brand-orange/40 underline-offset-4">
+    <details className={compact ? 'group relative' : 'mt-5 rounded border border-stone-200 bg-stone-50 p-4'}>
+      <summary
+        className={
+          compact
+            ? 'cursor-pointer list-none rounded border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-brand-orange hover:border-brand-orange sm:text-sm [&::-webkit-details-marker]:hidden'
+            : 'cursor-pointer text-sm font-bold text-brand-orange underline decoration-brand-orange/40 underline-offset-4'
+        }
+      >
         How to properly measure your space
       </summary>
-      <div className="mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700">
+      <div
+        className={
+          compact
+            ? 'absolute right-0 z-50 mt-2 max-h-[70vh] w-[min(88vw,42rem)] overflow-y-auto rounded border border-stone-200 bg-white p-4 text-left text-sm font-semibold leading-6 text-stone-700 shadow-xl'
+            : 'mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700'
+        }
+      >
+        <button
+          type="button"
+          onClick={printGuide}
+          className="mb-4 rounded bg-stone-950 px-3 py-2 text-xs font-bold text-white hover:bg-stone-800"
+        >
+          Print instructions
+        </button>
+        <div ref={guideContentRef} className="space-y-4">
         <section>
           <h2 className="text-base font-bold text-stone-950">Measure Your Closet Before Using the Design Tool</h2>
           <p className="mt-1">Accurate measurements help the Closets Warehouse design tools identify the right closet configurations for your space.</p>
@@ -921,6 +974,7 @@ function MeasurementGuide() {
           <p>Confirm every measurement was checked twice, the smallest measurements were used, every wall was entered correctly, doors and drawers can open fully, hanging clothing will not block the walkway, the 10-to-12-inch clothing extension was considered, baseboards and obstructions were included, and the complete room layout works.</p>
           <p className="mt-2">Take photos of every wall and obstruction. For unusual spaces or questions about the layout, schedule a free consultation before ordering.</p>
         </section>
+        </div>
       </div>
     </details>
   );
@@ -932,8 +986,8 @@ function ClosetTypeStart({ onWalkIn }) {
       <section className="w-full max-w-4xl rounded border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
         <h1 className="mt-1 text-3xl font-bold text-stone-950">Walk-in Shape Planner</h1>
-        <MeasurementGuide />
-        <div className="mt-4 flex justify-start">
+        <div className="mt-4 flex flex-wrap justify-start gap-2">
+          <MeasurementGuide compact />
           <ConsultationCta />
         </div>
         <div className="mt-6">
@@ -2778,6 +2832,7 @@ function WalkInPlanner() {
           <p className="text-xs font-semibold text-stone-500">Left, back, and right wall layout</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          <MeasurementGuide compact />
           <ConsultationCta compact />
         </div>
       </header>
