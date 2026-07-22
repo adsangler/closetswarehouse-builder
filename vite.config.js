@@ -1011,8 +1011,6 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
   const towers = (towerSpecs || []).map((tower) => `${tower.code} ${tower.width}-inch`).join(' + ');
   const cabinetWidth = Number(assembledWidth) || 0;
   const cabinetAspectRatio = (cabinetWidth / (Number(height) || 1)).toFixed(4);
-  const finishedCavityWidth = Number((cabinetWidth + 2).toFixed(2));
-  const finishedCavityHeight = Number(height) + 1;
   const towerRules = (towerSpecs || []).map((tower, index) => {
     const code = String(tower.code || '').toUpperCase();
     const prefix = `Tower ${index + 1}, ${code}, ${tower.width}-inch nominal bay:`;
@@ -1023,12 +1021,13 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
       S3D: 'no rod; exactly three proud overlay drawers, two small drawers above one large drawer, each with one centered horizontal brushed-nickel straight bar pull; upper shelves evenly divide the space above the drawer deck; one adjustable shelf centered in the lower open space.',
       H3D: 'exactly one upper chrome rod above the drawer deck; exactly three proud overlay drawers, two small above one large, each with one centered horizontal brushed-nickel straight bar pull; one adjustable shelf centered in the lower open space.',
       S2D: 'no rod; exactly two small proud overlay drawers, each with one centered horizontal brushed-nickel straight bar pull; upper shelves evenly divide the space above the drawer deck; one adjustable shelf centered in the lower open space.',
-      S7: 'no rods and no drawers; exactly SEVEN storage compartments above the toe kick, bounded by exactly EIGHT horizontal boards total: 1 top fixed frame board + exactly 6 adjustable internal shelf boards + 1 bottom shelf board. Count all visible horizontal boards from top to bottom and stop at 8. The toe-kick board is vertical and never counts as a shelf or compartment. Do not add an eighth storage compartment or a ninth horizontal board.',
-      S8: 'no rods and no drawers; exactly EIGHT storage compartments above the toe kick, bounded by exactly NINE horizontal boards total: 1 top fixed frame board + exactly 7 adjustable internal shelf boards + 1 bottom shelf board. Count all visible horizontal boards from top to bottom and stop at 9. The toe-kick board is vertical and never counts as a shelf or compartment. Do not add a ninth storage compartment or a tenth horizontal board.',
+      S7: 'no rods and no drawers. Place exactly SIX thin adjustable shelf slabs between the fixed top and fixed bottom boundaries—SIX, not seven. Those six adjustable slabs divide the cabinet into exactly SEVEN open storage spaces. The top frame and bottom boundary are enclosure parts, not additional adjustable shelves. The vertical toe-kick board is not a shelf or storage space.',
+      S8: 'no rods and no drawers. Place exactly SEVEN thin adjustable shelf slabs between the fixed top and fixed bottom boundaries—SEVEN, not eight. Those seven adjustable slabs divide the cabinet into exactly EIGHT open storage spaces. The top frame and bottom boundary are enclosure parts, not additional adjustable shelves. The vertical toe-kick board is not a shelf or storage space.',
     };
 
     return `${prefix} ${rules[code] || 'preserve the supplied render exactly.'}`;
   });
+  const hasShelfOnlyTower = (towerSpecs || []).some((tower) => ['S7', 'S8'].includes(String(tower.code || '').toUpperCase()));
   const installedScene = shot.scene === 'reach-in';
   const walkInScene = shot.scene === 'walk-in';
   const doorRule = shot.bifoldDoorSets === 1
@@ -1039,7 +1038,15 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
 
   return [
     `Create a photorealistic square Shopify product hero for ${handle}.`,
+    ...(towerSpecs || []).map((tower) => String(tower.code || '').toUpperCase() === 'S8'
+      ? 'HIGHEST-PRIORITY S8 COUNT: exactly 7 adjustable shelf slabs and exactly 8 open storage spaces. Never show 8 adjustable shelf slabs or 9 open spaces.'
+      : String(tower.code || '').toUpperCase() === 'S7'
+        ? 'HIGHEST-PRIORITY S7 COUNT: exactly 6 adjustable shelf slabs and exactly 7 open storage spaces. Never show 7 adjustable shelf slabs or 8 open spaces.'
+        : ''),
     `The supplied image is the exact geometry source of truth: ${towers}, ${height}-inch height. Preserve every panel, shared divider, shelf, rod, drawer, handle, hanger, and recessed toe kick exactly.`,
+    hasShelfOnlyTower
+      ? 'SHELF GEOMETRY FREEZE: this is a surface-and-lighting edit of the supplied cabinet, not a cabinet redesign. Trace each existing horizontal board edge from the supplied image at the identical pixel height. Keep one output board for each source board and no others. You may change only material realism, lighting, shadows, wall, and floor around those locked edges. Never interpolate, subdivide, duplicate, remove, or relocate a shelf. Empty open bays and shadows are not shelves.'
+      : '',
     `DIMENSION LOCK FOR EVERY PHOTO IN THIS SKU SET: the cabinet outside silhouette is exactly ${cabinetWidth} inches wide by ${height} inches high, a width-to-height ratio of exactly ${cabinetAspectRatio}. Preserve that same physical silhouette ratio in both the clean product image and the installed image. Use a straight-on, level, near-orthographic catalog camera with vertical sides parallel and horizontal shelves level. Do not widen, narrow, stretch, compress, taper, or perspective-distort the cabinet to fit the room or door opening. Architectural trim and doors must fit around the locked cabinet dimensions, never resize the cabinet.`,
     `MANDATORY TOE-KICK CONSTRUCTION: preserve the complete 5-inch-high toe-kick zone below the bottom shelf across every tower bay. It must measure exactly 5 inches vertically, which is ${(5 / Number(height) * 100).toFixed(1)}% of this ${height}-inch cabinet height; do not make it shorter or visually compress it. The bottom shelf must remain visibly elevated exactly 5 inches above the floor. Every bay must contain one SOLID, OPAQUE, WHITE MELAMINE VERTICAL KICK BOARD filling the entire rectangular area from the floor up to the underside of the bottom shelf and from the left panel to the right panel. Set that solid board about 2 inches behind the cabinet front plane. It is a real cabinet part, not background wall: no wall, floor, open cavity, or empty darkness may be visible through the 5-inch toe-kick zone. The side panels are not furniture legs and must never appear as two legs around an open bottom. Lighting may create only soft natural depth shading on the solid kick board. Do not add a black line, dark stripe, trim strip, groove, gap, or separate horizontal product part at the toe kick. The cabinet must not extend flush to the floor, float above the floor, use furniture legs, or lose, cover, crop, or miniaturize this recessed base.`,
     ...towerRules,
@@ -1047,18 +1054,41 @@ function buildPhotoPrompt({ handle, height, assembledWidth, towerSpecs, shot }) 
     installedScene
       ? [
           `Install the exact system in a precisely measured fitted reach-in opening. ${doorRule} Keep every door fully folded open.`,
-          `The cabinet outside assembled width is exactly ${cabinetWidth} inches. Although the construction cavity can be ${finishedCavityWidth} inches before trim, the VISIBLE FINISHED OPENING in the photograph must equal the cabinet outside width exactly: ${cabinetWidth} inches. Hide all installation allowance completely behind the front casing. The cabinet's left outside panel must visually touch the finished left return, and its right outside panel must visually touch the finished right return. Show no visible filler width at all.`,
-          `The cabinet height is exactly ${height} inches. Although the construction cavity can be ${finishedCavityHeight} inches before trim, the VISIBLE FINISHED OPENING height in the photograph must equal the cabinet height exactly: ${height} inches. Hide all top installation allowance behind the front header/casing. The cabinet top board must visually touch the underside of the header across its full width.`,
+          `ZERO-GAP WIDTH LOCK: the kit's assembled outside width is exactly ${cabinetWidth} inches, so the finished opening between the inside faces of the left and right jambs is also exactly ${cabinetWidth} inches. Use 0.0 inches of visible clearance on the left and 0.0 inches on the right. The left jamb visually touches the cabinet's left outside panel and the right jamb visually touches the right outside panel. Do not show installation allowance, filler, interior wall, shadow channel, or floor strip beside the kit.`,
+          `ZERO-GAP HEIGHT LOCK: the cabinet height is exactly ${height} inches and the visible finished opening height is also exactly ${height} inches. Use 0.0 inches of visible clearance above the cabinet. The top board visually touches the underside of the finished header across its full width. Do not show installation allowance, filler, wall, or shadow channel above the kit.`,
           'Move the finished jambs, casing, header, track, and door panels tightly inward until the visible opening traces the cabinet perimeter. The interior face of each jamb must be no wider than the 0.75-inch cabinet side-panel edge. Show zero exposed back wall beside or above the cabinet, zero dark side channels, zero broad filler panels, and zero unused reach-in floor area around the product.',
           'At the bottom of the fitted opening, keep the entire 5-inch recessed toe-kick visible from left to right. Do not use reach-in trim, flooring, a threshold, shadows, or the door track to conceal it. The finished side returns stop at the cabinet sides and must not cover the toe-kick opening. Render only natural soft shading in the recess; never draw a black horizontal line or stripe.',
-          'Critical visual test: if any strip of interior wall is visible between an outside cabinet panel and a door jamb, or between the cabinet top and header, the opening is still too large and must be tightened further.',
+          `REACH-IN TOE-KICK SCALE LOCK: measure vertically from the finished floor to the underside of the bottom shelf; that distance is exactly 5 inches and no more. On this ${height}-inch cabinet it occupies exactly ${(5 / Number(height) * 100).toFixed(2)}% of the cabinet height. Do not enlarge it for visibility, perspective, door clearance, casing, baseboard, flooring, or a threshold. The bottom shelf in the reach-in photo must sit at the identical relative height as in the supplied geometry and the matching product-only photo. Reject any result where the base zone looks taller than 5 inches or resembles a lower storage compartment.`,
+          `Critical visual test: trace the ${cabinetWidth}-inch by ${height}-inch cabinet perimeter. The finished opening must trace that same perimeter exactly. If even a narrow strip of interior wall or floor is visible between an outside cabinet panel and a jamb, or between the cabinet top and header, the opening is too large and the image must be rejected.`,
         ].join(' ')
       : walkInScene
-        ? 'Show the exact system as a walk-in closet product hero with a minimal warm wall and floor environment.'
+        ? 'Show the exact system as a walk-in closet product hero with only one plain warm wall and one plain floor plane. Do not add adjacent closet cabinetry, shelves, rods, drawers, doors, furniture, or room features anywhere around the product.'
         : 'Show the exact system alone as a clean centered product hero with a minimal warm wall and floor environment and no doors.',
     'Use a 1:1 composition. Center the complete product and let it occupy 80-88% of the frame height. Keep the full top, sides, and toe kicks visible. Across the photo set, keep the cabinet at the same visual scale and preserve the exact same cabinet width-to-height proportion; only the surrounding installation context may change.',
     'White satin melamine, soft warm daylight, realistic chrome and brushed-nickel hardware, straight verticals, subtle shadows. Replace the source render lattice-style hanger placeholders with realistically proportional matte-black adult clothes hangers on the visible front rod plane.',
-    'No invented modules, extra shelves, missing shelves, duplicate divider, altered widths, inset drawers, round knobs, oversized hangers, deep-set rods, open bottom cavity, furniture-style legs, props, furniture, artwork, text, logo, or watermark. Before finalizing, explicitly count every horizontal board in each tower and reject the image internally if the count differs from the tower rule above.',
+    'No invented modules, extra shelves, missing shelves, duplicate divider, altered widths, inset drawers, round knobs, oversized hangers, deep-set rods, open bottom cavity, furniture-style legs, adjacent closet systems, props, furniture, doors, artwork, text, logo, or watermark. Before finalizing, compare every horizontal edge directly against the supplied render and reject the image internally if any shelf exists at a height where the source has no shelf.',
+  ].join('\n');
+}
+
+function buildRealPhotoShelfPrompt({ handle, height, assembledWidth }) {
+  const ratio = (Number(assembledWidth) / Number(height)).toFixed(4);
+  return [
+    `Edit this real-photo-based cabinet into a square Shopify hero for ${handle}.`,
+    'Keep the cabinet photographic. Preserve real white melamine texture, shelf-pin rows, edge detail, and natural shadows; never turn it into CGI or a 3D render.',
+    'Use the approved Closets Warehouse house scenery: warm lightly textured off-white wall, slim white baseboard, pale natural wood floor, soft daylight and a subtle sun patch from the left, with a slight view of the cabinet right-side depth.',
+    `DIMENSION LOCK: the nominal shelf bay is 24 inches, the assembled outside cabinet width is exactly ${assembledWidth} inches, and the height is exactly ${height} inches. The outside width-to-height ratio must be exactly ${ratio}. Keep the tower narrow and tall; do not widen it.`,
+    'S8 LOCK: exactly seven internal adjustable shelf slabs between the fixed top and fixed bottom shelf, creating exactly eight visible open storage compartments. The recessed solid white 5-inch toe-kick is not a compartment.',
+    'Center the complete single tower in a 1:1 composition at about 84% frame height. No adjacent closet, props, products, clothing, text, logo, watermark, open base, or black toe-kick line.',
+  ].join('\n');
+}
+
+function buildRealPhotoShelfCorrectionPrompt({ height, assembledWidth }) {
+  const ratio = (Number(assembledWidth) / Number(height)).toFixed(4);
+  return [
+    'Final geometry correction pass on this photographic cabinet. Preserve the room style, photographic materials, lighting, camera direction, and scenery.',
+    'Show exactly seven internal adjustable shelf slabs and exactly eight open storage compartments above the bottom fixed shelf. Count eight open rectangles from top to bottom and stop at eight.',
+    `The cabinet outside silhouette must be exactly ${assembledWidth} inches wide by ${height} inches high, ratio ${ratio}. Narrow the cabinet if necessary; it must not resemble a 30-inch or wider tower.`,
+    'Preserve the solid recessed 5-inch white toe-kick. Do not add a ninth compartment, remove a shelf, add props, or change the result into CGI.',
   ].join('\n');
 }
 
@@ -1089,6 +1119,7 @@ function photoGenerationProxy(env) {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const pathname = req.url?.split('?')[0];
+        let activeRequestId = '';
 
         if (pathname !== '/api/generate-photos') {
           next();
@@ -1106,6 +1137,9 @@ function photoGenerationProxy(env) {
           const payload = JSON.parse((await readRequestBody(req)) || '{}');
           const sourceMatch = String(payload.geometryDataUrl || '').match(/^data:image\/png;base64,(.+)$/);
           const shots = Array.isArray(payload.shots) ? payload.shots : [];
+          const generationProfile = payload.generationProfile === 'final' ? 'final' : 'draft';
+          const outputSize = generationProfile === 'final' ? '2048x2048' : '1024x1024';
+          const outputQuality = generationProfile === 'final' ? 'high' : 'low';
           const handle = String(payload.handle || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
           if (!handle || !sourceMatch || shots.length === 0) {
@@ -1115,14 +1149,34 @@ function photoGenerationProxy(env) {
             return;
           }
 
+          const containsShelfOnlyTower = Array.isArray(payload.towerSpecs)
+            && payload.towerSpecs.some((tower) => ['S7', 'S8'].includes(String(tower?.code || '').toUpperCase()));
+          const useRealPhotoShelfMethod = containsShelfOnlyTower && Number(payload.height) >= 96;
+
+          if (containsShelfOnlyTower && !useRealPhotoShelfMethod) {
+            res.statusCode = 422;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+              error: 'The exact reach-in scene renderer for 84-inch shelf towers is still being built. No image request was sent and no generation credit was used.',
+              charged: false,
+            }));
+            return;
+          }
           await Promise.all([fs.mkdir(draftsDir, { recursive: true }), fs.mkdir(requestsDir, { recursive: true })]);
           const sourceBuffer = Buffer.from(sourceMatch[1], 'base64');
           const requestId = `${handle}-${Date.now()}`;
+          activeRequestId = requestId;
           const sourcePath = path.join(requestsDir, `${requestId}-geometry.png`);
           await fs.writeFile(sourcePath, sourceBuffer);
           await fs.writeFile(
             path.join(requestsDir, `${requestId}.json`),
-            JSON.stringify({ ...payload, geometryDataUrl: undefined, requestId, createdAt: new Date().toISOString() }, null, 2),
+            JSON.stringify({
+              ...payload,
+              geometryDataUrl: undefined,
+              requestId,
+              renderMode: useRealPhotoShelfMethod ? 'real-photo-two-pass' : 'ai-style-pass',
+              createdAt: new Date().toISOString(),
+            }, null, 2),
             'utf8',
           );
 
@@ -1143,18 +1197,24 @@ function photoGenerationProxy(env) {
 
           const generated = [];
           for (const shot of shots) {
-            const prompt = buildPhotoPrompt({ ...payload, handle, shot });
+            const prompt = useRealPhotoShelfMethod
+              ? buildRealPhotoShelfPrompt({ ...payload, handle, shot })
+              : buildPhotoPrompt({ ...payload, handle, shot });
             let response;
             let result;
             let imageBase64;
 
             if (directOpenAiKey) {
+              const realPhotoSourcePath = path.resolve('references/S8-real-photo-source.png');
+              const editSourceBuffer = useRealPhotoShelfMethod
+                ? await fs.readFile(realPhotoSourcePath).catch(() => sourceBuffer)
+                : sourceBuffer;
               const form = new FormData();
               form.append('model', 'gpt-image-2');
-              form.append('image', new Blob([sourceBuffer], { type: 'image/png' }), `${handle}-geometry.png`);
+              form.append('image', new Blob([editSourceBuffer], { type: 'image/png' }), `${handle}-${useRealPhotoShelfMethod ? 'real-photo' : 'geometry'}.png`);
               form.append('prompt', prompt);
-              form.append('size', '2048x2048');
-              form.append('quality', 'high');
+              form.append('size', outputSize);
+              form.append('quality', outputQuality);
               form.append('output_format', 'png');
 
               response = await fetch('https://api.openai.com/v1/images/edits', {
@@ -1164,6 +1224,23 @@ function photoGenerationProxy(env) {
               });
               result = await response.json();
               imageBase64 = result.data?.[0]?.b64_json;
+
+              if (response.ok && imageBase64 && useRealPhotoShelfMethod) {
+                const correctionForm = new FormData();
+                correctionForm.append('model', 'gpt-image-2');
+                correctionForm.append('image', new Blob([Buffer.from(imageBase64, 'base64')], { type: 'image/png' }), `${handle}-styled-photo.png`);
+                correctionForm.append('prompt', buildRealPhotoShelfCorrectionPrompt(payload));
+                correctionForm.append('size', outputSize);
+                correctionForm.append('quality', outputQuality);
+                correctionForm.append('output_format', 'png');
+                response = await fetch('https://api.openai.com/v1/images/edits', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${directOpenAiKey}` },
+                  body: correctionForm,
+                });
+                result = await response.json();
+                imageBase64 = result.data?.[0]?.b64_json;
+              }
             } else {
               response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
                 method: 'POST',
@@ -1198,12 +1275,20 @@ function photoGenerationProxy(env) {
 
             const filename = await getNextDraftFilename(draftsDir, shot.filename || `${handle}-${shot.id}.png`);
             await fs.writeFile(path.join(draftsDir, filename), Buffer.from(imageBase64, 'base64'));
-            generated.push({ filename, shot: shot.id });
+            generated.push({ filename, shot: shot.id, renderMode: useRealPhotoShelfMethod ? 'real-photo-two-pass' : 'ai-style-pass' });
           }
 
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ ok: true, requestId, generated }));
+          res.end(JSON.stringify({ ok: true, requestId, generated, renderMode: useRealPhotoShelfMethod ? 'real-photo-two-pass' : 'ai-style-pass' }));
         } catch (error) {
+          if (activeRequestId) {
+            await fs.writeFile(
+              path.join(requestsDir, `${activeRequestId}-error.json`),
+              JSON.stringify({ requestId: activeRequestId, error: error.message, failedAt: new Date().toISOString() }, null, 2),
+              'utf8',
+            ).catch(() => {});
+          }
+          console.error(`[photo-generation] ${activeRequestId || 'untracked request'}:`, error);
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ error: error.message }));

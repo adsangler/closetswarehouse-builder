@@ -7,6 +7,7 @@ Use this internal renderer only for product image creation, render checks, and S
 - Load actual products from Airtable through the internal product selector.
 - Use the parametric render as the geometry source of truth before any realistic image pass.
 - Preserve the SKU width, tower order, shelf count, rod placement, drawer placement, toe-kick, and shared divider logic from the render.
+- Use the exact Three.js render as the geometry source of truth for every generated draft.
 - Do not use generated photos to decide geometry.
 
 ## Photo Style
@@ -23,9 +24,13 @@ Use this internal renderer only for product image creation, render checks, and S
 - Let the product occupy about 80-88% of the image height while retaining a clean safety margin around its top, sides, and toe kicks.
 - Keep only architectural context that explains the installation. Minimize unrelated walls, floors, windows, furniture, artwork, rugs, plants, and room decor.
 - For reach-in products, retain enough casing, header, and open door panels to identify the door type, but crop the room tightly around the opening.
+- Size the visible finished reach-in opening to the kit's assembled outside width and cabinet height with 0.0 inches of visible side or top clearance. Never mention or visualize construction clearance in the image prompt.
 - Keep the complete cabinet visible. Never crop its top, sides, toe kicks, or important top-back read.
-- The toe-kick is mandatory visible product geometry: retain the complete 5-inch-high zone below the bottom shelf, a kick board recessed about 2 inches from the front plane, and the continuous shadow line under the bottom shelf. Never replace it with a flush plinth, legs, or an empty/floating base.
+- The toe-kick is mandatory visible product geometry: retain the complete 5-inch-high zone below the bottom shelf and a solid, opaque white melamine kick board filling each bay from floor to bottom shelf, recessed about 2 inches from the front plane. No background wall or floor may show through this zone. Use only soft natural recess shading; never add a black line, stripe, groove, or separate trim piece. Never replace it with a flush plinth, furniture legs, or an empty/floating base.
+- In an 84-inch reach-in photo, the toe-kick is exactly 5.95% of cabinet height. Door casing, thresholds, perspective, and flooring must not make it appear taller than the product-only view.
 - Use the same framing scale and visual center across the featured-image catalog so collection cards remain consistent.
+- Lock every image in a SKU photo set to the same outside cabinet width-to-height ratio. Use a straight-on, level, near-orthographic camera with parallel vertical sides; reach-in trim and doors fit around the cabinet and must never widen or compress it.
+- For S7, show exactly 8 horizontal boards creating 7 storage compartments above the toe kick. For S8, show exactly 9 horizontal boards creating 8 storage compartments above the toe kick. The vertical kick board is not a shelf or storage compartment.
 
 ## Automatic Photo Sets
 

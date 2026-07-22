@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-three/drei": "latest",
     "@react-three/fiber": "latest",
+    "@react-three/gpu-pathtracer": "^0.3.2",
     "file-saver": "latest",
     "jszip": "latest",
     "react": "latest",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/drei';
+import { Pathtracer } from '@react-three/gpu-pathtracer';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
 
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
@@ -1103,15 +1104,15 @@ function ClosetSystem({ drawing, photoMode = false }) {
   );
 }
 
-function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom = null }) {
+function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom = null, pathTraced = false }) {
   return (
     <>
       <color attach="background" args={[photoMode ? '#f4efe7' : '#fbfaf6']} />
-      {photoMode && <hemisphereLight args={['#fff8ea', '#d3c2a1', 0.56]} />}
-      <ambientLight intensity={photoMode ? 0.92 : 0.82} />
+      {photoMode && <hemisphereLight args={['#fff8ea', '#b7a78e', 0.34]} />}
+      <ambientLight intensity={photoMode ? 0.32 : 0.82} />
       <directionalLight
         position={photoMode ? [-48, 88, 70] : [-34, 78, 42]}
-        intensity={photoMode ? 2.45 : 2.65}
+        intensity={photoMode ? 1.7 : 2.65}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-60}
@@ -1119,14 +1120,22 @@ function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom
         shadow-camera-top={112}
         shadow-camera-bottom={-12}
       />
-      <directionalLight position={[72, 64, 72]} intensity={photoMode ? 1.15 : 0.95} />
-      <directionalLight position={[0, 54, -44]} intensity={photoMode ? 0.52 : 0.58} />
-      {photoMode && <spotLight position={[34, 72, 98]} angle={0.42} penumbra={0.74} intensity={0.42} castShadow />}
+      <directionalLight position={[72, 64, 72]} intensity={photoMode ? 0.48 : 0.95} />
+      <directionalLight position={[0, 54, -44]} intensity={photoMode ? 0.22 : 0.58} />
+      {photoMode && <spotLight position={[34, 72, 98]} angle={0.42} penumbra={0.74} intensity={0.3} castShadow />}
       <Room drawing={drawing} photoMode={photoMode} wallWidth={wallWidth} reachInRoom={reachInRoom} />
       <ClosetSystem drawing={drawing} photoMode={photoMode} />
-      <ContactShadows position={[0, 0.02, 4]} opacity={photoMode ? 0.28 : 0.24} scale={88} blur={photoMode ? 5.2 : 2.8} far={14} />
+      {!pathTraced && <ContactShadows position={[0, 0.02, 4]} opacity={photoMode ? 0.28 : 0.24} scale={88} blur={photoMode ? 5.2 : 2.8} far={14} />}
       <OrbitControls makeDefault enableDamping target={[0, drawing.height / 2, 0]} minDistance={120} maxDistance={320} />
     </>
+  );
+}
+
+function PathTracedPhotoScene({ drawing, wallWidth = null, reachInRoom = null }) {
+  return (
+    <Pathtracer minSamples={2} samples={72} bounces={5} tiles={2}>
+      <RenderScene drawing={drawing} photoMode wallWidth={wallWidth} reachInRoom={reachInRoom} pathTraced />
+    </Pathtracer>
   );
 }
 
@@ -1852,10 +1861,37 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
   );
 }
 
+function captureGenerationSource(canvas, maxDimension, square = false) {
+  if (square) {
+    const output = document.createElement('canvas');
+    const outputSize = maxDimension || Math.min(canvas.width, canvas.height);
+    const sourceSize = Math.min(canvas.width, canvas.height);
+    const sourceX = Math.max(0, (canvas.width - sourceSize) / 2);
+    const sourceY = Math.max(0, (canvas.height - sourceSize) / 2);
+    output.width = outputSize;
+    output.height = outputSize;
+    output.getContext('2d').drawImage(canvas, sourceX, sourceY, sourceSize, sourceSize, 0, 0, outputSize, outputSize);
+    return output.toDataURL('image/png');
+  }
+
+  if (!maxDimension || Math.max(canvas.width, canvas.height) <= maxDimension) return canvas.toDataURL('image/png');
+  const scale = maxDimension / Math.max(canvas.width, canvas.height);
+  const output = document.createElement('canvas');
+  output.width = Math.max(1, Math.round(canvas.width * scale));
+  output.height = Math.max(1, Math.round(canvas.height * scale));
+  output.getContext('2d').drawImage(canvas, 0, 0, output.width, output.height);
+  return output.toDataURL('image/png');
+}
+
 function GeneratePhotosButton({ drawing, installationType, onGenerated }) {
   const [status, setStatus] = useState('');
+  const [statusType, setStatusType] = useState('idle');
   const [busy, setBusy] = useState(false);
+  const [generationProfile, setGenerationProfile] = useState('draft');
   const shots = getPhotoExportPlan(drawing, installationType);
+  const realPhotoShelfMethod = (drawing.towers || drawing.towerSpecs || [])
+    .some((tower) => ['S7', 'S8'].includes(String(tower.code || '').toUpperCase()))
+    && Number(drawing.height) >= 96;
 
   const generatePhotos = async () => {
     const canvas = document.querySelector('canvas');
@@ -1865,7 +1901,10 @@ function GeneratePhotosButton({ drawing, installationType, onGenerated }) {
     }
 
     setBusy(true);
-    setStatus(`Generating ${shots.length} ${shots.length === 1 ? 'photo' : 'photos'}...`);
+    setStatusType('working');
+    setStatus(realPhotoShelfMethod
+      ? `Creating ${shots.length} real-photo-based ${shots.length === 1 ? 'draft' : 'drafts'} with geometry correction...`
+      : `Generating ${shots.length} ${shots.length === 1 ? 'photo' : 'photos'}...`);
 
     try {
       const response = await fetch('/api/generate-photos', {
@@ -1878,16 +1917,25 @@ function GeneratePhotosButton({ drawing, installationType, onGenerated }) {
           towerSpecs: (drawing.towers || drawing.towerSpecs || []).map((tower) => ({ code: tower.code, width: tower.width })),
           installationType,
           shots,
-          geometryDataUrl: canvas.toDataURL('image/png'),
+          generationProfile,
+          geometryDataUrl: captureGenerationSource(
+            canvas,
+            realPhotoShelfMethod || generationProfile === 'final' ? 2048 : 1024,
+            realPhotoShelfMethod,
+          ),
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Photo generation failed.');
 
-      setStatus(`${payload.generated.length} ${payload.generated.length === 1 ? 'photo' : 'photos'} generated.`);
+      setStatus(payload.renderMode === 'real-photo-two-pass'
+        ? `${payload.generated.length} real-photo-based ${payload.generated.length === 1 ? 'draft' : 'drafts'} saved after geometry correction.`
+        : `${payload.generated.length} ${payload.generated.length === 1 ? 'photo' : 'photos'} generated.`);
+      setStatusType('success');
       onGenerated?.();
     } catch (error) {
       setStatus(error.message);
+      setStatusType('error');
     } finally {
       setBusy(false);
     }
@@ -1895,15 +1943,38 @@ function GeneratePhotosButton({ drawing, installationType, onGenerated }) {
 
   return (
     <div className="flex items-center gap-2">
+      {realPhotoShelfMethod && (
+        <span className="rounded border border-sky-300 bg-sky-50 px-2 py-1.5 text-xs font-black text-sky-800">
+          Real photo · 2-pass
+        </span>
+      )}
+      <select
+        value={generationProfile}
+        onChange={(event) => setGenerationProfile(event.target.value)}
+        disabled={busy}
+        aria-label="Photo generation quality"
+        className="rounded border border-stone-300 bg-white px-2 py-1.5 text-xs font-bold text-stone-700 disabled:opacity-60"
+      >
+        <option value="draft">Economy draft · 1024 low</option>
+        <option value="final">Final quality · 2048 high</option>
+      </select>
       <button
         type="button"
         onClick={generatePhotos}
         disabled={busy}
         className="rounded bg-brand-orange px-3 py-1.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-wait disabled:opacity-60"
       >
-        {busy ? 'Generating...' : `Generate ${shots.length} ${shots.length === 1 ? 'photo' : 'photos'}`}
+        {busy
+          ? (realPhotoShelfMethod ? 'Creating real photo...' : 'Generating...')
+          : realPhotoShelfMethod
+            ? `Create ${shots.length} real-photo ${shots.length === 1 ? 'draft' : 'drafts'}`
+            : `Generate ${shots.length} ${generationProfile === 'draft' ? 'draft' : 'final'} ${shots.length === 1 ? 'photo' : 'photos'}`}
       </button>
-      {status && <span className="max-w-72 text-xs font-semibold text-stone-600">{status}</span>}
+      {status && (
+        <span className={`max-w-md rounded px-2 py-1 text-xs font-bold ${statusType === 'error' ? 'bg-red-50 text-red-700' : statusType === 'success' ? 'bg-emerald-50 text-emerald-700' : 'text-stone-600'}`}>
+          {status}
+        </span>
+      )}
     </div>
   );
 }
@@ -3861,7 +3932,9 @@ export default function App({ internalRenderer = false }) {
           ) : (
             <section className="relative h-full min-h-0 bg-white">
               {photoMode && (
-                <span className="absolute left-3 top-3 z-10 rounded bg-stone-950/80 px-3 py-1 text-xs font-bold text-white">Geometry source · not final photo</span>
+                <span className="absolute left-3 top-3 z-10 rounded bg-stone-950/80 px-3 py-1 text-xs font-bold text-white">
+                  Ray-traced exact geometry · allow a few seconds to refine
+                </span>
               )}
               <Canvas
                 key={`${viewMode}-${drawing.handle}`}
@@ -3879,7 +3952,9 @@ export default function App({ internalRenderer = false }) {
                   gl.toneMappingExposure = photoMode ? 0.95 : 1;
                 }}
               >
-                <RenderScene drawing={drawing} photoMode={photoMode} />
+                {photoMode
+                  ? <PathTracedPhotoScene drawing={drawing} />
+                  : <RenderScene drawing={drawing} photoMode={false} />}
               </Canvas>
             </section>
           )}
