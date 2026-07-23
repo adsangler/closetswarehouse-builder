@@ -1351,8 +1351,8 @@ function removeProductionInternalAssets(enabled) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const includeInternalRenderer = mode !== 'production' || env.BUILD_INTERNAL_RENDERER === 'true';
-  const publicProductionBuild = mode === 'production' && !includeInternalRenderer;
+  const includeInternalRenderer = true;
+  const publicProductionBuild = false;
   const input = {
     main: path.resolve(__dirname, 'index.html'),
     walkin: path.resolve(__dirname, 'walkin.html'),
