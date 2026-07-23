@@ -1092,6 +1092,24 @@ function buildRealPhotoShelfCorrectionPrompt({ height, assembledWidth }) {
   ].join('\n');
 }
 
+function buildReachInFitCorrectionPrompt({ height, assembledWidth, shot }) {
+  const cabinetWidth = Number(assembledWidth) || 0;
+  const cabinetHeight = Number(height) || 0;
+  const doorRule = Number(shot?.bifoldDoorSets) === 1
+    ? 'Keep exactly one two-panel bi-fold door unit, folded fully open against one jamb. Do not add a door on the other side.'
+    : 'Keep exactly two two-panel bi-fold door units, one folded fully open against each jamb.';
+
+  return [
+    'FINAL ARCHITECTURAL FIT CORRECTION. Edit only the reach-in opening, jambs, casing, header, track, doors, and surrounding wall. The closet cabinet itself is locked and must remain pixel-for-pixel unchanged: do not redraw, resize, stretch, crop, simplify, or alter any cabinet panel, shelf, drawer, pull, divider, bottom shelf, or toe-kick.',
+    `The cabinet outside dimensions are exactly ${cabinetWidth} inches wide by ${cabinetHeight} inches high. Rebuild the finished opening to exactly those same inside dimensions: ${cabinetWidth} inches between the inner jamb faces and ${cabinetHeight} inches from the finished floor to the header underside.`,
+    'Move the left inner jamb face inward until it directly meets the cabinet left outside face. Move the right inner jamb face inward until it directly meets the cabinet right outside face. Move the header underside downward until it directly meets the cabinet top. These three contacts must be continuous, with zero visible clearance.',
+    'There must be NO visible interior wall, filler panel, vertical shadow channel, floor strip, baseboard, or unused closet cavity between either cabinet side and its jamb. There must be NO visible wall, filler, soffit, or shadow channel between the cabinet top and the header. The only wall visible may be outside the finished casing.',
+    'Do not cover the cabinet with gray panels or fillers. Do not hide or enlarge the recessed 5-inch toe-kick. Keep the floor-to-bottom-shelf distance exactly 5 inches and keep the solid recessed white kick board visible.',
+    doorRule,
+    'Verification before output: trace the cabinet outer left edge, top edge, and outer right edge. The opening inner boundary must coincide with those three lines. If any strip of empty closet space remains beside or above the cabinet, continue moving the architecture inward until it disappears.',
+  ].join('\n');
+}
+
 async function getNextDraftFilename(draftsDir, requestedFilename) {
   const base = String(requestedFilename || 'photo.png').replace(/\.png$/i, '').replace(/-draft-v\d+$/i, '');
   const rejectedDir = path.resolve('assets/drafts/rejected/auto-generation');
@@ -1237,6 +1255,23 @@ function photoGenerationProxy(env) {
                   method: 'POST',
                   headers: { Authorization: `Bearer ${directOpenAiKey}` },
                   body: correctionForm,
+                });
+                result = await response.json();
+                imageBase64 = result.data?.[0]?.b64_json;
+              }
+
+              if (response.ok && imageBase64 && shot.scene === 'reach-in') {
+                const fitForm = new FormData();
+                fitForm.append('model', 'gpt-image-2');
+                fitForm.append('image', new Blob([Buffer.from(imageBase64, 'base64')], { type: 'image/png' }), `${handle}-reach-in-before-fit.png`);
+                fitForm.append('prompt', buildReachInFitCorrectionPrompt({ ...payload, shot }));
+                fitForm.append('size', outputSize);
+                fitForm.append('quality', outputQuality);
+                fitForm.append('output_format', 'png');
+                response = await fetch('https://api.openai.com/v1/images/edits', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${directOpenAiKey}` },
+                  body: fitForm,
                 });
                 result = await response.json();
                 imageBase64 = result.data?.[0]?.b64_json;
