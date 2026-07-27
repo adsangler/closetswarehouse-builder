@@ -10,15 +10,16 @@ const fallbackByCode = {
 };
 
 const allowedCodes = new Set(Object.keys(fallbackByCode));
-const allowedWidthsByCode = {
-  LH: new Set([24, 30]),
-  DH: new Set([24, 30]),
-  HS: new Set([24, 30]),
-  S3D: new Set([24]),
-  H3D: new Set([24]),
-  S2D: new Set([24]),
-  S7: new Set([18, 24, 30]),
-  S8: new Set([18, 24, 30]),
+const allowedWidths = new Set([18, 24, 30]);
+const towerNames = {
+  LH: 'Long Hang',
+  DH: 'Double Hang',
+  HS: 'Hang & Shelves',
+  S3D: 'Shelves & 3 Drawers',
+  H3D: 'Hang & 3 Drawers',
+  S2D: 'Shelves & 2 Drawers',
+  S7: '7-Shelf',
+  S8: '8-Shelf',
 };
 
 function cleanText(value, maxLength = 120) {
@@ -58,21 +59,28 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function getModuleLabel(code, rawLabel) {
+  const label = cleanText(rawLabel, 80);
+  return label && !/^[A-Z0-9]+(?:\s+\d+)?\"?$/.test(label) ? label : towerNames[code] || 'Closet tower';
+}
+
 function cleanModule(module = {}, index = 0) {
   const code = cleanText(module.code, 12).toUpperCase();
   const width = cleanNumber(module.width);
-  const allowedWidths = allowedWidthsByCode[code];
 
-  if (!allowedCodes.has(code) || !allowedWidths?.has(width)) {
+  if (!allowedCodes.has(code) || !allowedWidths.has(width)) {
     return null;
   }
+
+  const label = getModuleLabel(code, module.label || module.name);
 
   return {
     ...(module.wall ? { wall: cleanText(module.wall, 20) } : {}),
     index: Number.isInteger(module.index) ? module.index : index,
     code,
     width,
-    label: cleanText(module.label, 80),
+    label,
+    displayName: `${label} / ${width}" bay`,
   };
 }
 
@@ -103,6 +111,7 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     .filter(Boolean);
   const clientEstimatedPrice = cleanNumber(rawQuote.estimatedPrice);
   const serverEstimatedPrice = estimateModules(modules);
+  const estimatedPrice = clientEstimatedPrice > 0 ? clientEstimatedPrice : serverEstimatedPrice;
 
   return {
     ...rawQuote,
@@ -118,9 +127,10 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     internalType: cleanText(rawQuote.internalType || rawQuote.planType || 'closet plan', 80),
     planUrl: cleanUrl(rawQuote.planUrl),
     modules,
-    estimatedPrice: serverEstimatedPrice,
+    estimatedPrice,
     clientEstimatedPrice,
-    pricingSource: 'server-fallback',
+    serverEstimatedPrice,
+    pricingSource: clientEstimatedPrice > 0 ? 'planner-estimate' : 'server-fallback',
     signature: cleanText(rawQuote.signature, 500),
   };
 }

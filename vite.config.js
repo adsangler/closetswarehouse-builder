@@ -227,6 +227,11 @@ function emailMatches(left, right) {
 
 function buildLegacyQuoteFields(quote) {
   const customerName = [quote.customer?.firstName, quote.customer?.lastName].filter(Boolean).join(' ').trim() || quote.customer?.name || '';
+  const formatModuleDisplay = (module) => {
+    const wall = module.wall ? `${module.wall}: ` : '';
+    const label = module.displayName || (module.label && module.width ? `${module.label} / ${module.width}" bay` : module.label) || `${module.width || ''}" bay`;
+    return `${wall}${label}`;
+  };
 
   return compactFields({
     Name: customerName,
@@ -242,7 +247,7 @@ function buildLegacyQuoteFields(quote) {
     'Required Width': quote.requiredWidth,
     'Estimated Price': quote.estimatedPrice,
     Signature: quote.signature,
-    Modules: quote.modules?.map((module) => `${module.wall ? `${module.wall}:` : ''}${module.code}-${module.width}`).join(', '),
+    Modules: quote.modules?.map(formatModuleDisplay).join(', '),
     'Quote JSON': JSON.stringify(quote),
   });
 }
@@ -726,7 +731,11 @@ async function sendConfirmationEmail(env, quote) {
     quote.planUrl ? `Plan URL: ${quote.planUrl}` : '',
     '',
     'Modules:',
-    ...(quote.modules || []).map((module) => `${module.wall ? `${module.wall}: ` : ''}${module.index + 1}. ${module.code}-${module.width}`),
+    ...(quote.modules || []).map((module, index) => {
+      const wall = module.wall ? `${module.wall}: ` : '';
+      const label = module.displayName || (module.label && module.width ? `${module.label} / ${module.width}" bay` : module.label) || `${module.width || ''}" bay`;
+      return `${module.index ?? index + 1}. ${wall}${label}`;
+    }),
   ].filter(Boolean);
 
   const response = await fetch(env.EMAIL_WEBHOOK_URL, {

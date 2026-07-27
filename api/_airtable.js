@@ -80,6 +80,12 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function formatModuleDisplay(module) {
+  const wall = module.wall ? `${module.wall}: ` : '';
+  const label = module.displayName || (module.label && module.width ? `${module.label} / ${module.width}" bay` : module.label) || `${module.width || ''}" bay`;
+  return `${wall}${label}`;
+}
+
 function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
 }
@@ -241,7 +247,7 @@ function buildLegacyQuoteFields(quote) {
     'Required Width': quote.requiredWidth,
     'Estimated Price': quote.estimatedPrice,
     Signature: quote.signature,
-    Modules: quote.modules?.map((module) => `${module.wall ? `${module.wall}:` : ''}${module.code}-${module.width}`).join(', '),
+    Modules: quote.modules?.map(formatModuleDisplay).join(', '),
     'Quote JSON': JSON.stringify(quote),
   });
 }
@@ -508,7 +514,7 @@ export async function sendConfirmationEmail(quote) {
     quote.planUrl ? `Plan URL: ${quote.planUrl}` : '',
     '',
     'Modules:',
-    ...(quote.modules || []).map((module) => `${module.wall ? `${module.wall}: ` : ''}${module.index + 1}. ${module.code}-${module.width}`),
+    ...(quote.modules || []).map((module, index) => `${module.index ?? index + 1}. ${formatModuleDisplay(module)}`),
   ].filter(Boolean);
 
   const response = await fetch(process.env.EMAIL_WEBHOOK_URL, {

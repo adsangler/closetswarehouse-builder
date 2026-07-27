@@ -81,6 +81,10 @@ function getReachInDetails(quote = {}) {
   ].filter(([, value]) => value);
 }
 
+function getModuleDisplayName(module = {}) {
+  return module.displayName || (module.label && module.width ? `${module.label} / ${module.width}" bay` : module.label) || '';
+}
+
 function renderDefinitionList(items = []) {
   if (!items.length) {
     return '';
@@ -111,7 +115,6 @@ function renderModulesTable(modules = []) {
           <th>Wall</th>
           <th>Configuration</th>
           <th>Width</th>
-          <th>Description</th>
         </tr>
       </thead>
       <tbody>
@@ -119,9 +122,8 @@ function renderModulesTable(modules = []) {
           <tr>
             <td>${escapeHtml(module.index || index + 1)}</td>
             <td>${escapeHtml(module.wall || '')}</td>
-            <td>${escapeHtml(module.code || module.sku || '')}</td>
+            <td>${escapeHtml(getModuleDisplayName(module))}</td>
             <td>${escapeHtml(formatInches(module.width) || module.width || '')}</td>
-            <td>${escapeHtml(module.label || module.name || '')}</td>
           </tr>
         `).join('')}
       </tbody>
