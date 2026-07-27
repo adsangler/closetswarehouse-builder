@@ -31,7 +31,7 @@ function cleanEmail(value) {
 }
 
 function cleanUrl(value) {
-  const text = cleanText(value, 500);
+  const text = cleanText(value, 12000);
 
   if (!/^https?:\/\//i.test(text)) {
     return '';
