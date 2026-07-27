@@ -2136,6 +2136,21 @@ function buildWalkInMaterials(runs) {
   ];
 }
 
+function encodePlanPayload(payload) {
+  return btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodePlanPayload(encodedPlan) {
+  const normalized = String(encodedPlan || '')
+    .trim()
+    .replace(/\s/g, '+')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+
+  return JSON.parse(atob(padded));
+}
+
 function buildWalkInPlanUrl(room, corners, runs) {
   if (typeof window === 'undefined') {
     return '';
@@ -2144,7 +2159,7 @@ function buildWalkInPlanUrl(room, corners, runs) {
   const url = new URL(window.location.href);
   url.searchParams.set('type', 'walk-in');
   url.searchParams.delete('estimate');
-  url.searchParams.set('plan', btoa(JSON.stringify({ room, corners, runs })));
+  url.searchParams.set('plan', encodePlanPayload({ room, corners, runs }));
   return url.toString();
 }
 
@@ -2323,7 +2338,7 @@ function getRequestedWalkInPlan() {
   }
 
   try {
-    return JSON.parse(atob(encodedPlan));
+    return decodePlanPayload(encodedPlan);
   } catch {
     return null;
   }
