@@ -60,8 +60,8 @@ function cleanNumber(value) {
 }
 
 function getModuleLabel(code, rawLabel) {
-  const label = cleanText(rawLabel, 80);
-  return label && !/^[A-Z0-9]+(?:\s+\d+)?\"?$/.test(label) ? label : towerNames[code] || 'Closet tower';
+  const label = cleanText(rawLabel, 80).replace(/\s+\d+(?:\.\d+)?\"?$/g, '');
+  return towerNames[code] || (label && !/^[A-Z0-9]+$/.test(label) ? label : 'Closet tower');
 }
 
 function cleanModule(module = {}, index = 0) {

@@ -82,8 +82,18 @@ function normalizeEmail(value) {
 
 function formatModuleDisplay(module) {
   const wall = module.wall ? `${module.wall}: ` : '';
-  const label = module.displayName || (module.label && module.width ? `${module.label} / ${module.width}" bay` : module.label) || `${module.width || ''}" bay`;
-  return `${wall}${label}`;
+  const width = module.width ? `${module.width}"` : '';
+  const label = String(module.label || module.name || module.displayName || '')
+    .replace(/\s*\/\s*\d+(?:\.\d+)?\"?\s*bay$/i, '')
+    .replace(/\s+\d+(?:\.\d+)?\"?$/g, '')
+    .trim();
+  const displayName = [label || 'Closet tower', width ? `${width} bay` : ''].filter(Boolean).join(' / ');
+  return `${wall}${displayName}`;
+}
+
+function getModulePosition(module = {}, fallbackIndex = 0) {
+  const rawIndex = Number(module.index);
+  return Number.isFinite(rawIndex) ? rawIndex + 1 : fallbackIndex + 1;
 }
 
 function normalizePhone(value) {
@@ -514,7 +524,7 @@ export async function sendConfirmationEmail(quote) {
     quote.planUrl ? `Plan URL: ${quote.planUrl}` : '',
     '',
     'Modules:',
-    ...(quote.modules || []).map((module, index) => `${module.index ?? index + 1}. ${formatModuleDisplay(module)}`),
+    ...(quote.modules || []).map((module, index) => `${getModulePosition(module, index)}. ${formatModuleDisplay(module)}`),
   ].filter(Boolean);
 
   const response = await fetch(process.env.EMAIL_WEBHOOK_URL, {
