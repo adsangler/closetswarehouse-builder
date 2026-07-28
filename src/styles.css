@@ -17,22 +17,15 @@ body,
 
 body {
   font-family: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .app-shell {
   display: flex;
-  height: 100vh;
-  height: 100dvh;
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
   flex-direction: column;
-  overflow: hidden;
-}
-
-.app-shell.app-shell-scroll {
-  overflow-y: auto;
 }
 
 .app-header {
@@ -42,32 +35,43 @@ body {
 
 .app-workspace {
   flex: 1 1 auto;
-  height: 100%;
-  min-height: 0;
-}
-
-.app-shell-scroll .app-workspace {
-  height: auto;
   min-height: calc(100dvh - 4rem);
 }
 
+html[data-embedded-planner="true"],
+html[data-embedded-planner="true"] body,
+html[data-embedded-planner="true"] #root {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+html[data-embedded-planner="true"] .app-shell,
+html[data-embedded-planner="true"] .app-workspace {
+  min-height: 0 !important;
+}
+
+html[data-embedded-planner="true"] .min-h-screen {
+  min-height: 0 !important;
+}
+
+html[data-embedded-planner="true"] .h-screen {
+  height: auto !important;
+}
+
 @media (max-width: 1023px) {
-  body {
-    overflow: auto;
-  }
-
-  .app-shell {
-    overflow: auto;
-  }
-
   .app-workspace {
-    height: auto;
     min-height: calc(100dvh - 4rem);
   }
 }
 
 .print-plan-reference {
   display: none;
+}
+
+.print-break-avoid {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 @media print {

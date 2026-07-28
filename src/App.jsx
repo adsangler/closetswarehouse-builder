@@ -4,7 +4,7 @@ import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/d
 import { Pathtracer } from '@react-three/gpu-pathtracer';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
 
-const storefrontBaseUrl = 'https://www.closetswarehouse.com';
+const storefrontBaseUrl = 'https://closetswarehouse.com';
 const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
 const contactUrl = `${storefrontBaseUrl}/pages/contact`;
 const phoneDisplay = '(954) 247-8032';
@@ -41,7 +41,7 @@ function buildQuoteContactUrl(quoteId, intent = 'contact') {
   return url.toString();
 }
 
-function SavedPlanActions({ quoteId }) {
+function SavedPlanActions({ quoteId, planType = 'Closet plan' }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
@@ -77,6 +77,7 @@ function PrintablePlanReference({ quoteId, planType = 'Closet plan' }) {
 }
 
 const fallbackKit = {
+  source: 'fallback',
   handle: 'H3D-S8-51-96-14-W',
   title: 'K12-K14 Hang & Drawers + 8-Shelf',
   kitId: 'K12-K14',
@@ -217,7 +218,7 @@ function getPlannerCode(configCode, height) {
 }
 
 function getWidthOptions(configCode) {
-  return [18, 24, 30];
+  return ['SHELF', 'LH', 'DH', 'HS'].includes(configCode) ? [18, 24, 30] : [24];
 }
 
 function createPlannerModule(configCode, height, width = null) {
@@ -347,6 +348,7 @@ function kitRecordToDrawing(record) {
   const shopifyHandle = getShopifyHandle(fields, sku);
 
   return {
+    source: 'airtable',
     handle: sku,
     title: formatTowerTitle(towerSpecs),
     kitId: fields.KitID || record.id,
@@ -373,6 +375,7 @@ function kitHandleToDrawing(handle) {
   const assembledWidth = getAssembledWidth(towerSpecs);
 
   return {
+    source: 'request',
     handle: sku,
     title: formatTowerTitle(towerSpecs),
     kitId: sku,
@@ -460,6 +463,105 @@ function navigateInsideFrame(path) {
   window.self.location.assign(new URL(path, window.self.location.href).toString());
 }
 
+function useParentFrameAutoHeight() {
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.parent === window) {
+      return undefined;
+    }
+
+    document.documentElement.dataset.embeddedPlanner = 'true';
+    let frameId = 0;
+    let lastHeight = 0;
+    const sendHeight = () => {
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() => {
+        const root = document.getElementById('root');
+        const height = Math.ceil(
+          Math.max(
+            document.documentElement.scrollHeight,
+            document.body?.scrollHeight || 0,
+            root?.scrollHeight || 0,
+            root?.getBoundingClientRect().height || 0,
+          ),
+        );
+
+        if (Math.abs(height - lastHeight) < 2) {
+          return;
+        }
+
+        lastHeight = height;
+        window.parent.postMessage(
+          {
+            type: 'closetswarehouse:frame-height',
+            height,
+            path: window.location.pathname,
+          },
+          '*',
+        );
+      });
+    };
+    const sendWheelEscape = (event) => {
+      const scrollingElement = document.scrollingElement || document.documentElement;
+      const maxScrollTop = Math.max(0, scrollingElement.scrollHeight - scrollingElement.clientHeight);
+      const atTop = scrollingElement.scrollTop <= 1;
+      const atBottom = scrollingElement.scrollTop >= maxScrollTop - 1;
+      const wantsUp = event.deltaY < 0;
+      const wantsDown = event.deltaY > 0;
+
+      if ((atTop && wantsUp) || (atBottom && wantsDown)) {
+        window.parent.postMessage(
+          {
+            type: 'closetswarehouse:frame-wheel',
+            deltaY: event.deltaY,
+            path: window.location.pathname,
+          },
+          '*',
+        );
+      }
+    };
+
+    const observer = new ResizeObserver(sendHeight);
+    observer.observe(document.documentElement);
+    if (document.body) {
+      observer.observe(document.body);
+    }
+
+    const mutationObserver = new MutationObserver(sendHeight);
+    mutationObserver.observe(document.documentElement, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+
+    let ticks = 0;
+    const intervalId = window.setInterval(() => {
+      ticks += 1;
+      sendHeight();
+      if (ticks >= 20) {
+        window.clearInterval(intervalId);
+      }
+    }, 500);
+
+    sendHeight();
+    window.addEventListener('load', sendHeight);
+    window.addEventListener('resize', sendHeight);
+    window.addEventListener('wheel', sendWheelEscape, { passive: true });
+    window.visualViewport?.addEventListener('resize', sendHeight);
+
+    return () => {
+      delete document.documentElement.dataset.embeddedPlanner;
+      cancelAnimationFrame(frameId);
+      window.clearInterval(intervalId);
+      observer.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener('load', sendHeight);
+      window.removeEventListener('resize', sendHeight);
+      window.removeEventListener('wheel', sendWheelEscape);
+      window.visualViewport?.removeEventListener('resize', sendHeight);
+    };
+  }, []);
+}
+
 function createDrawing(baseDrawing) {
   const towers = [];
   let cursor = panelThickness;
@@ -503,30 +605,83 @@ function createPlannerDrawing(height, modules) {
 }
 
 function calculateCustomEstimate(modules, productCatalog, height) {
+  const coverage = getLiveModuleProductCoverage(modules, productCatalog, height);
+
+  if (coverage.missing.length > 0) {
+    return 0;
+  }
+
+  const baseTotal = coverage.total;
+  const sharedPanelCredit = Math.max(0, modules.length - 1) * 32;
+
+  return Number(Math.max(0, baseTotal - sharedPanelCredit).toFixed(2));
+}
+
+function getLiveModuleProductCoverage(modules, productCatalog, height) {
   const singleProductsBySignature = new Map(
     productCatalog
       .filter((product) => product.towerSpecs.length === 1 && product.price > 0)
       .map((product) => [product.matchSignature, product]),
   );
-  const baseTotal = modules.reduce((sum, module) => {
+
+  return modules.reduce((coverage, module) => {
     const singleSignature = buildMatchSignature(height, [{ code: module.code, width: module.width }]);
     const singleProduct = singleProductsBySignature.get(singleSignature);
-    const fallbackByCode = {
-      LH: 225,
-      DH: 245,
-      HS: 260,
-      S3D: 545,
-      H3D: 560,
-      S2D: 450,
-      S7: 275,
-      S8: 315,
-    };
 
-    return sum + (singleProduct?.price || fallbackByCode[module.code] || 275);
-  }, 0);
-  const sharedPanelCredit = Math.max(0, modules.length - 1) * 32;
+    if (singleProduct) {
+      coverage.total += singleProduct.price;
+    } else {
+      coverage.missing.push(`${towerNames[module.code] || module.code} ${module.width}" at ${height}"`);
+    }
 
-  return Number(Math.max(0, baseTotal - sharedPanelCredit).toFixed(2));
+    return coverage;
+  }, { total: 0, missing: [] });
+}
+
+function getCatalogWidthOptionsForCode(targetCode, widthOptions, height, productCatalog) {
+  const liveWidths = new Set();
+
+  productCatalog.forEach((product) => {
+    if (Number(product.height) !== Number(height) || product.towerSpecs.length !== 1) {
+      return;
+    }
+
+    const tower = product.towerSpecs[0];
+    if (normalizeTowerCode(tower.code) === targetCode) {
+      liveWidths.add(Number(tower.width));
+    }
+  });
+
+  return widthOptions.filter((width) => liveWidths.has(Number(width)));
+}
+
+function getReachInSupportedWidthOptions(modules, moduleIndex, widthOptions, height, productBySignature, productCatalog, isCatalogReady) {
+  if (!isCatalogReady) {
+    return widthOptions;
+  }
+
+  const targetModule = modules[moduleIndex];
+  const targetCode = getPlannerCode(targetModule.configCode || targetModule.code, height);
+  const catalogWidthOptions = getCatalogWidthOptionsForCode(targetCode, widthOptions, height, productCatalog);
+
+  if (catalogWidthOptions.length > 0) {
+    return catalogWidthOptions;
+  }
+
+  return widthOptions.filter((width) => {
+    const candidateModules = modules.map((module, index) => (index === moduleIndex ? { ...module, width } : module));
+    const towerSpecs = candidateModules.map((module) => ({
+      code: getPlannerCode(module.configCode || module.code, height),
+      width: Number(module.width),
+    }));
+    const signature = buildMatchSignature(height, towerSpecs);
+    const appearsInLiveProduct = productCatalog.some((product) =>
+      product.height === height &&
+      product.towerSpecs.some((tower) => normalizeTowerCode(tower.code) === targetCode && Number(tower.width) === Number(width)),
+    );
+
+    return Boolean(productBySignature.get(signature) || appearsInLiveProduct || getLiveModuleProductCoverage(towerSpecs, productCatalog, height).missing.length === 0);
+  });
 }
 
 function shouldPreferProductCandidate(candidate, existing) {
@@ -1500,41 +1655,56 @@ function HeightSelector({ height, onChange }) {
   );
 }
 
-function ModulePalette({ height, onAdd }) {
+function ModulePalette({ height, onAdd, productCatalog, isCatalogReady }) {
   const [dragCode, setDragCode] = useState('');
+  const [selectedWidths, setSelectedWidths] = useState({});
 
   return (
     <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
       {plannerConfigs.map((config) => {
         const code = getPlannerCode(config.code, height);
-        const widths = getWidthOptions(config.code).join(' / ');
-        const tooltip = `${config.title}: ${config.note}. Available widths: ${widths}".`;
+        const catalogWidths = getCatalogWidthOptionsForCode(code, getWidthOptions(config.code), height, productCatalog);
+        const widthOptions = isCatalogReady && catalogWidths.length > 0 ? catalogWidths : getWidthOptions(config.code);
+        const selectedWidth = widthOptions.includes(Number(selectedWidths[config.code])) ? Number(selectedWidths[config.code]) : widthOptions[0];
+        const tooltip = `${config.title}: ${config.note}. Width choices: ${widthOptions.join(' / ')}".`;
 
         return (
-          <button
+          <article
             key={config.code}
-            type="button"
             draggable
             title={tooltip}
             onDragStart={(event) => {
               setDragCode(config.code);
               event.dataTransfer.setData('text/plain', config.code);
+              event.dataTransfer.setData('application/closet-module-width', String(selectedWidth));
               event.dataTransfer.effectAllowed = 'copy';
             }}
             onDragEnd={() => setDragCode('')}
-            onClick={() => onAdd(config.code)}
-            className={`rounded border bg-white px-1.5 py-1 text-left transition hover:border-brand-orange hover:shadow-sm ${
+            className={`rounded border bg-white p-1.5 transition hover:border-brand-orange hover:shadow-sm ${
               dragCode === config.code ? 'border-brand-orange' : 'border-stone-200'
             }`}
           >
-            <span className="flex items-center gap-1.5">
+            <button type="button" onClick={() => onAdd(config.code, null, selectedWidth)} className="flex w-full items-center gap-1.5 text-left">
               <ConfigMiniIcon code={config.code} />
               <span className="min-w-0">
-                <span className="block truncate text-xs font-bold text-stone-900">{config.title}</span>
-                <span className="mt-0.5 block truncate text-[11px] font-semibold text-brand-orange">{code} / {widths}"</span>
+                <span className="block text-xs font-bold text-stone-900">{config.title}</span>
+                <span className="mt-0.5 block text-[11px] font-semibold text-brand-orange">{code}</span>
               </span>
-            </span>
-          </button>
+            </button>
+            <select
+              value={selectedWidth}
+              onChange={(event) => setSelectedWidths((current) => ({ ...current, [config.code]: Number(event.target.value) }))}
+              onClick={(event) => event.stopPropagation()}
+              className="mt-1 w-full rounded border border-stone-300 bg-white px-1.5 py-1 text-xs font-bold text-stone-700"
+              aria-label={`${config.title} width`}
+            >
+              {widthOptions.map((width) => (
+                <option key={width} value={width}>
+                  {width}" bay
+                </option>
+              ))}
+            </select>
+          </article>
         );
       })}
     </div>
@@ -1592,7 +1762,8 @@ function PlannerWall({ modules, height, wallWidth, onDropModule, onRemove, onMov
     }
 
     if (configCode) {
-      onDropModule(configCode, targetIndex);
+      const width = Number(event.dataTransfer.getData('application/closet-module-width'));
+      onDropModule(configCode, targetIndex, Number.isFinite(width) ? width : null);
     }
   };
 
@@ -1640,7 +1811,7 @@ function PlannerWall({ modules, height, wallWidth, onDropModule, onRemove, onMov
                       className="grid h-7 w-7 place-items-center justify-self-start rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
                       title="Move tower left"
                     >
-                      👈
+                      &lt;
                     </button>
                     <button
                       type="button"
@@ -1649,7 +1820,7 @@ function PlannerWall({ modules, height, wallWidth, onDropModule, onRemove, onMov
                       className="grid h-7 w-7 place-items-center justify-self-end rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
                       title="Move tower right"
                     >
-                      👉
+                      &gt;
                     </button>
                   </div>
                 );
@@ -2153,15 +2324,13 @@ function buildDetailedReachInParts(modules, height) {
     return [];
   }
 
-  add(`VL-24-${height}-W`, `Left vertical panel 24" x ${height}"`, 1, 'Outer left side panel.', 'Panels');
-  add(`VR-24-${height}-W`, `Right vertical panel 24" x ${height}"`, 1, 'Outer right side panel.', 'Panels');
-  add(`VD-24-${height}-W`, `Shared divider panel 24" x ${height}"`, Math.max(0, modules.length - 1), 'One shared divider at each tower joint; no doubled side panels.', 'Panels');
+  add(`VL-14-${height}-W`, `Left vertical panel 14" x ${height}"`, 1, 'Outer left side panel.', 'Panels');
+  add(`VR-14-${height}-W`, `Right vertical panel 14" x ${height}"`, 1, 'Outer right side panel.', 'Panels');
+  add(`VD-14-${height}-W`, `Shared divider panel 14" x ${height}"`, Math.max(0, modules.length - 1), 'One shared divider at each tower joint; no doubled side panels.', 'Panels');
 
   const drawing = createDrawing(createPlannerDrawing(height, modules));
   let adjustableShelfCount = 0;
   let rodCount = 0;
-  let smallDrawerCount = 0;
-  let largeDrawerCount = 0;
 
   drawing.towers.forEach((tower) => {
     const layout = buildTowerLayout(drawing, tower);
@@ -2173,17 +2342,15 @@ function buildDetailedReachInParts(modules, height) {
 
     adjustableShelfCount += adjustableShelves;
     rodCount += rods;
-    smallDrawerCount += smallDrawers;
-    largeDrawerCount += largeDrawers;
 
     add(`FS-${tower.width}-14-W`, `Fixed shelf ${tower.width}" x 14"`, fixedShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay structural shelves.`, 'Shelves');
     add(`SH-${tower.width}-14-W`, `Adjustable shelf ${tower.width}" x 14"`, adjustableShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay movable shelves.`, 'Shelves');
     add(`TKK-${tower.width}-5-W`, `Toe-kick kit ${tower.width}" x 5"`, 1, 'Toe-kick kit for this tower bay.', 'Kits');
     add(`RK-${tower.width}-S`, `Rod kit ${tower.width}"`, rods, 'Hanging rod kit for this bay width.', 'Kits');
+    add(`DRK-${tower.width}-5-13-W`, `Small drawer kit ${tower.width}" x 5" x 13"`, smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
+    add(`DRK-${tower.width}-10-13-W`, `Large drawer kit ${tower.width}" x 10" x 13"`, largeDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
   });
 
-  add('DRK-24-5-13-W', 'Small drawer kit 24" x 5" x 13"', smallDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
-  add('DRK-24-10-13-W', 'Large drawer kit 24" x 10" x 13"', largeDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
   add('RDB-S-1', 'Rod bracket set, pair', rodCount, `${rodCount * 2} individual brackets total; one pair per rod.`, 'Hardware');
   const wallBracketCount = modules.length * 2;
   add('WLB-S-1', 'Wall L-bracket', wallBracketCount, 'Two wall safety brackets per tower section.', 'Hardware');
@@ -2373,9 +2540,8 @@ function ReachInClosetDetailsSummary({ planDetails, moduleCount, embedded = fals
   );
 }
 
-function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange }) {
+function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange, productBySignature, productCatalog, isCatalogReady }) {
   const cardGridColumns = modules.map((module) => `minmax(8.5rem, ${module.width}fr)`).join(' ');
-  const denseCards = modules.length >= 5;
 
   if (modules.length === 0) {
     return (
@@ -2394,50 +2560,61 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange }
         <div className="grid min-w-max items-start gap-2 xl:min-w-0" style={{ gridTemplateColumns: cardGridColumns }}>
         {modules.map((module, index) => {
           const widthOptions = getWidthOptions(module.configCode);
+          const supportedWidthOptions = getReachInSupportedWidthOptions(modules, index, widthOptions, height, productBySignature, productCatalog, isCatalogReady);
 
           return (
             <article key={module.id} className="min-w-0 rounded border border-stone-200 bg-stone-50 p-2 xl:[grid-column:auto]">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-1">
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-bold text-stone-950" title={towerNames[module.code] || module.code}>
-                    {towerNames[module.code] || module.code}
-                  </div>
-                  <div className="text-[11px] font-semibold text-stone-500">{module.code} / {height}"H</div>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-bold text-stone-950" title={towerNames[module.code] || module.code}>
+                  {towerNames[module.code] || module.code}
                 </div>
-                <button type="button" onClick={() => onRemove(module.id)} className="grid h-6 w-6 place-items-center rounded text-sm font-bold leading-none text-red-700 hover:bg-red-100" title="Remove tower">
-                  x
-                </button>
+                <div className="text-[11px] font-semibold text-stone-500">{module.code} / {height}"H</div>
               </div>
-              <div className={`mt-2 grid items-center gap-1 ${denseCards ? 'grid-cols-2' : 'grid-cols-[1fr_auto_auto]'}`}>
+              <div className="mt-2 grid items-center gap-1">
                 <select
                   value={module.width}
                   onChange={(event) => onWidthChange(module.id, Number(event.target.value))}
-                  className={`min-w-0 rounded border border-stone-300 bg-white px-1.5 py-1 text-xs font-bold text-stone-700 ${denseCards ? 'col-span-2' : ''}`}
+                  className="min-w-0 rounded border border-stone-300 bg-white px-1.5 py-1 text-xs font-bold text-stone-700"
                 >
-                  {widthOptions.map((width) => (
+                  {supportedWidthOptions.length === 0 ? (
+                    <option value={module.width}>No width options</option>
+                  ) : supportedWidthOptions.map((width) => (
                     <option key={width} value={width}>
                       {width}" bay
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={() => onMove(index, -1)}
-                  disabled={index === 0}
-                  className={`${denseCards ? 'w-full' : 'w-7'} grid h-7 place-items-center rounded border border-stone-300 bg-white text-sm disabled:opacity-25`}
-                  title="Move tower left"
-                >
-                  👈
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onMove(index, 1)}
-                  disabled={index === modules.length - 1}
-                  className={`${denseCards ? 'w-full' : 'w-7'} grid h-7 place-items-center rounded border border-stone-300 bg-white text-sm disabled:opacity-25`}
-                  title="Move tower right"
-                >
-                  👉
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold uppercase text-stone-500">Move</span>
+                    <button
+                      type="button"
+                      onClick={() => onMove(index, -1)}
+                      disabled={index === 0}
+                      className="grid h-7 w-7 place-items-center rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
+                      title="Move tower left"
+                    >
+                      &lt;
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMove(index, 1)}
+                      disabled={index === modules.length - 1}
+                      className="grid h-7 w-7 place-items-center rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
+                      title="Move tower right"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(module.id)}
+                    className="h-7 rounded border border-red-200 bg-white px-2 text-xs font-bold text-red-700 hover:bg-red-50"
+                    title="Remove tower"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </article>
           );
@@ -2479,7 +2656,8 @@ function getReachInValidationMessages(planDetails) {
 function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogReady }) {
   const hasModules = modules.length > 0;
   const validationMessages = getReachInValidationMessages(planDetails);
-  const canVerifyEstimate = Boolean(planDetails?.fits);
+  const catalogMessages = evaluation.catalogWarnings || [];
+  const canVerifyEstimate = Boolean(planDetails?.fits && isCatalogReady && evaluation.catalogSupported);
 
   if (!hasModules) {
     return (
@@ -2504,21 +2682,33 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
               {money(evaluation.displayPrice)} <span className="text-xs font-bold uppercase tracking-wide text-emerald-700">kit price</span>
             </span>
           )}
-          {evaluation.match.productUrl && canVerifyEstimate && (
+          {evaluation.match.productUrl ? (
             <a
               href={evaluation.match.productUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white transition hover:bg-orange-700"
             >
               Buy This System
             </a>
+          ) : (
+            <span className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              Product page is not connected yet.
+            </span>
           )}
-          <button type="button" onClick={onContinue} disabled={!canVerifyEstimate} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
-            Verify estimate
-          </button>
         </div>
         {validationMessages.length > 0 && (
           <div className="mt-3 grid gap-2">
             {validationMessages.map((warning) => (
+              <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                {warning}
+              </div>
+            ))}
+          </div>
+        )}
+        {catalogMessages.length > 0 && (
+          <div className="mt-3 grid gap-2">
+            {catalogMessages.map((warning) => (
               <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
                 {warning}
               </div>
@@ -2532,9 +2722,15 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
   return (
       <section className="rounded border border-stone-200 bg-white p-3">
         <h2 className="text-base font-bold text-stone-950">Ready For Review</h2>
-        <p className="mt-2 text-sm text-stone-700">Review the material and order details before submitting for verification.</p>
+        <p className="mt-2 text-sm text-stone-700">
+          {!isCatalogReady
+            ? 'Checking availability before this layout can be quoted.'
+            : evaluation.catalogSupported
+            ? 'Review the material and order details before submitting for verification.'
+            : 'This layout is not available for online quoting yet.'}
+        </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-lg font-bold text-stone-950">{money(evaluation.estimatedPrice)} estimated</span>
+        <span className="text-lg font-bold text-stone-950">{!isCatalogReady ? 'Checking availability...' : evaluation.catalogSupported ? `${money(evaluation.estimatedPrice)} estimated` : 'Not available yet'}</span>
         <button type="button" onClick={onContinue} disabled={!canVerifyEstimate} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
           Verify estimate
         </button>
@@ -2542,6 +2738,15 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
       {validationMessages.length > 0 && (
         <div className="mt-3 grid gap-2">
           {validationMessages.map((warning) => (
+            <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              {warning}
+            </div>
+          ))}
+        </div>
+      )}
+      {catalogMessages.length > 0 && (
+        <div className="mt-3 grid gap-2">
+          {catalogMessages.map((warning) => (
             <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
               {warning}
             </div>
@@ -2559,6 +2764,11 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
 
   const submitForVerification = async (event) => {
     event.preventDefault();
+    if (!evaluation.catalogSupported) {
+      setSubmitStatus({ state: 'error', message: 'This layout is not available for online verification yet.' });
+      return;
+    }
+
     setSubmitStatus({ state: 'loading', message: 'Submitting for verification...' });
 
     try {
@@ -2704,11 +2914,12 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
   const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules), [planDetails, modules]);
   const validationMessages = getReachInValidationMessages(planDetails);
-  const canSavePlan = Boolean(planDetails?.fits);
+  const catalogMessages = evaluation.catalogWarnings || [];
+  const canSavePlan = Boolean(planDetails?.fits && evaluation.catalogSupported);
   const submitForVerification = async (event) => {
     event.preventDefault();
     if (!canSavePlan) {
-      setSubmitStatus({ state: 'error', message: 'Please fix the closet configuration before saving this estimate.' });
+      setSubmitStatus({ state: 'error', message: evaluation.catalogSupported ? 'Please fix the closet configuration before saving this estimate.' : 'This layout is not available for online saving yet.' });
       return;
     }
 
@@ -2757,7 +2968,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   };
 
   return (
-    <main className="print-flow h-screen overflow-y-auto bg-brand-ui p-2 text-brand-black sm:p-4">
+    <main className="print-flow min-h-screen bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
         <PrintablePlanReference quoteId={submitStatus.quoteId} planType="Reach-in saved plan" />
         <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
@@ -2769,9 +2980,18 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
             </div>
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
-              <div className="text-2xl font-bold text-stone-950">{money(evaluation.displayPrice || evaluation.estimatedPrice) || '$0.00'}</div>
+              <div className="text-2xl font-bold text-stone-950">{evaluation.catalogSupported && money(evaluation.displayPrice || evaluation.estimatedPrice) ? money(evaluation.displayPrice || evaluation.estimatedPrice) : 'Not available yet'}</div>
             </div>
           </div>
+          {catalogMessages.length > 0 && (
+            <div className="mt-3 grid gap-2">
+              {catalogMessages.map((warning) => (
+                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                  {warning}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <a href={planUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">Open editable plan</a>
             <a href="/" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50">Start new plan</a>
@@ -2779,7 +2999,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
           </div>
         </header>
 
-        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="grid min-w-0 gap-4">
           <div className="grid min-w-0 gap-4">
             <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-3 flex justify-end">
@@ -2815,10 +3035,19 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
                 </div>
               )}
             </section>
+            <section className="print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-base font-bold text-stone-950">Front View</h2>
+                <span className="text-xs font-semibold text-stone-500">Elevation for plan review</span>
+              </div>
+              <div className="h-[430px] min-w-0 overflow-hidden rounded border border-stone-100 bg-white">
+                <TechnicalDrawing drawing={drawing} />
+              </div>
+            </section>
             <PartsList parts={parts} />
           </div>
 
-          <aside className="grid min-w-0 gap-3 self-start">
+          <aside className="order-first grid min-w-0 gap-3 self-start">
             <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
               {submitStatus.state === 'success' ? (
@@ -2920,7 +3149,6 @@ function ReachInRoomSetup({
   onOpeningLeftChange,
   openingRight,
   onOpeningRightChange,
-  onCenterOpening,
   planDetails,
 }) {
   const inputClass = 'w-20 flex-none rounded border border-stone-300 px-2 py-1.5 text-sm font-bold text-stone-950';
@@ -3042,13 +3270,6 @@ function ReachInRoomSetup({
             </div>
           </div>
           <div className="flex flex-col justify-end gap-1">
-            <button
-              type="button"
-              onClick={onCenterOpening}
-              className="h-8 whitespace-nowrap rounded border border-stone-300 bg-white px-2 text-xs font-bold text-stone-700 hover:border-brand-orange"
-            >
-              Center opening
-            </button>
             <div className={`whitespace-nowrap text-xs font-semibold ${planDetails.openingMatchesWall ? 'text-stone-500' : 'text-red-700'}`}>
               Total {formatInches(planDetails.openingTotal)} / {formatInches(planDetails.wallWidth)}
             </div>
@@ -3131,7 +3352,7 @@ function MeasurementGuide({ compact = false }) {
       <div
         className={
           compact
-            ? 'absolute right-0 z-50 mt-2 max-h-[70vh] w-[min(88vw,42rem)] overflow-y-auto rounded border border-stone-200 bg-white p-4 text-left text-sm font-semibold leading-6 text-stone-700 shadow-xl'
+            ? 'fixed left-3 right-3 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-y-auto rounded border border-stone-200 bg-white p-4 text-left text-sm font-semibold leading-6 text-stone-700 shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-[70vh] sm:w-[min(88vw,42rem)]'
             : 'mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700'
         }
       >
@@ -3252,13 +3473,13 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
   }
 
   return (
-    <main className="h-screen overflow-y-auto bg-brand-ui text-brand-black">
-      <header className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4">
-        <div>
+    <main className="min-h-screen bg-brand-ui text-brand-black">
+      <header className="flex min-h-16 flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-lg font-bold text-stone-950">Reach-in Closet Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Step 1: closet dimensions and opening</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
           <MeasurementGuide compact />
           <ConsultationCta compact />
         </div>
@@ -3306,6 +3527,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
 }
 
 export default function App({ internalRenderer = false }) {
+  useParentFrameAutoHeight();
   const requestedKitHandle = useMemo(getRequestedKitHandle, []);
   const requestedFallbackKit = useMemo(() => kitHandleToDrawing(requestedKitHandle) || fallbackKit, [requestedKitHandle]);
   const exposeCaptureData = useMemo(shouldExposeCaptureData, []);
@@ -3322,7 +3544,7 @@ export default function App({ internalRenderer = false }) {
   const [appMode, setAppMode] = useState(internalRenderer ? requestedMode : 'planner');
   const [airtableStatus, setAirtableStatus] = useState({
     state: 'loading',
-    message: 'Checking Airtable...',
+    message: 'Checking availability...',
   });
   const startsInReachIn = internalRenderer || requestedType !== 'walk-in' || requestedMode === 'renderer' || Boolean(requestedReachInPlan);
   const [closetType, setClosetType] = useState(startsInReachIn ? 'reach-in' : '');
@@ -3333,13 +3555,16 @@ export default function App({ internalRenderer = false }) {
   const [photoInstallationType, setPhotoInstallationType] = useState('reach-in');
   const [photoWorkspaceTab, setPhotoWorkspaceTab] = useState('generated');
   const [photoGalleryVersion, setPhotoGalleryVersion] = useState(0);
+  const initialWallWidth = requestedPlanDetails.wallWidth || 96;
+  const initialOpeningWidth = requestedPlanDetails.openingWidth || 70;
+  const initialOpeningReturn = Number(Math.max(0, (Number(initialWallWidth) - Number(initialOpeningWidth)) / 2).toFixed(2));
   const [plannerHeight, setPlannerHeight] = useState(requestedPlanDetails.height || 84);
   const [ceilingHeight, setCeilingHeight] = useState(requestedPlanDetails.ceilingHeight || 108);
-  const [wallWidth, setWallWidth] = useState(requestedPlanDetails.wallWidth || 96);
+  const [wallWidth, setWallWidth] = useState(initialWallWidth);
   const [reachInDepth, setReachInDepth] = useState(requestedPlanDetails.roomDepthInput || requestedPlanDetails.roomDepth || 24);
-  const [reachInOpeningWidth, setReachInOpeningWidth] = useState(requestedPlanDetails.openingWidth || 30);
-  const [reachInOpeningLeft, setReachInOpeningLeft] = useState(requestedPlanDetails.openingLeft || 33);
-  const [reachInOpeningRight, setReachInOpeningRight] = useState(requestedPlanDetails.openingRight || 33);
+  const [reachInOpeningWidth, setReachInOpeningWidth] = useState(initialOpeningWidth);
+  const [reachInOpeningLeft, setReachInOpeningLeft] = useState(requestedPlanDetails.openingLeft ?? initialOpeningReturn);
+  const [reachInOpeningRight, setReachInOpeningRight] = useState(requestedPlanDetails.openingRight ?? initialOpeningReturn);
   const [reachInDoorType, setReachInDoorType] = useState(requestedPlanDetails.doorType || 'regular');
   const [plannerPreviewMode, setPlannerPreviewMode] = useState('plan');
   const [plannerModules, setPlannerModules] = useState(() => requestedPlanModules || [createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24), createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24)]);
@@ -3405,7 +3630,7 @@ export default function App({ internalRenderer = false }) {
   }, [requestedFallbackKit, requestedKitHandle]);
 
   const productCatalog = useMemo(() => {
-    const catalog = kitOptions.length ? kitOptions : [fallbackKit];
+    const catalog = kitOptions.filter((product) => product.source === 'airtable');
 
     return catalog.filter((product) => product.matchSignature && product.status !== 'archived');
   }, [kitOptions]);
@@ -3431,20 +3656,30 @@ export default function App({ internalRenderer = false }) {
         match: null,
         displayPrice: 0,
         estimatedPrice: 0,
+        catalogSupported: false,
+        catalogWarnings: [],
       };
     }
 
     const signature = buildMatchSignature(plannerHeight, plannerModules);
     const match = productBySignature.get(signature) || null;
-    const calculatedPrice = calculateCustomEstimate(plannerModules, productCatalog, plannerHeight);
+    const moduleCoverage = getLiveModuleProductCoverage(plannerModules, productCatalog, plannerHeight);
+    const catalogSupported = Boolean(match || moduleCoverage.missing.length === 0);
+    const catalogWarnings =
+      airtableStatus.state === 'loading' || catalogSupported
+        ? []
+        : moduleCoverage.missing.map((moduleName) => `${moduleName} is not available for online quoting yet.`);
+    const calculatedPrice = match?.price || calculateCustomEstimate(plannerModules, productCatalog, plannerHeight);
 
     return {
       signature,
       match,
       displayPrice: calculatedPrice,
       estimatedPrice: calculatedPrice,
+      catalogSupported,
+      catalogWarnings,
     };
-  }, [plannerHeight, plannerModules, productBySignature, productCatalog]);
+  }, [airtableStatus.state, plannerHeight, plannerModules, productBySignature, productCatalog]);
   const plannerPlanDetails = useMemo(() => {
     const assembledWidth = plannerModules.length ? getAssembledWidth(plannerModules) : 0;
     const requiredWidth = plannerModules.length ? getRequiredWidth(assembledWidth) : 0;
@@ -3510,13 +3745,13 @@ export default function App({ internalRenderer = false }) {
     };
   }, [ceilingHeight, plannerHeight, plannerModules, reachInDepth, reachInDoorType, reachInOpeningLeft, reachInOpeningRight, reachInOpeningWidth, wallWidth]);
 
-  const addPlannerModule = (configCode, targetIndex = null) => {
+  const addPlannerModule = (configCode, targetIndex = null, width = null) => {
     setPlannerStep('design');
     setPlannerModules((currentModules) => {
       const nextModules = [...currentModules];
       const insertAt = Number.isInteger(targetIndex) ? Math.max(0, Math.min(targetIndex, nextModules.length)) : nextModules.length;
 
-      nextModules.splice(insertAt, 0, createPlannerModule(configCode, plannerHeight));
+      nextModules.splice(insertAt, 0, createPlannerModule(configCode, plannerHeight, width));
       return nextModules;
     });
   };
@@ -3568,10 +3803,13 @@ export default function App({ internalRenderer = false }) {
           return module;
         }
 
+        const widthOptions = getWidthOptions(module.configCode);
+        const nextWidth = widthOptions.includes(Number(width)) ? Number(width) : widthOptions[0];
+
         return {
           ...module,
-          width,
-          label: `${towerNames[module.code] || module.code} ${width}"`,
+          width: nextWidth,
+          label: `${towerNames[module.code] || module.code} ${nextWidth}"`,
         };
       }),
     );
@@ -3597,6 +3835,24 @@ export default function App({ internalRenderer = false }) {
     balanceOpeningReturns(wallWidth, value);
   };
 
+  const updateReachInOpeningLeft = (value) => {
+    const remainingWidth = Math.max(0, (Number(wallWidth) || 0) - (Number(reachInOpeningWidth) || 0));
+    const nextLeft = Number(Math.min(Math.max(0, Number(value) || 0), remainingWidth).toFixed(2));
+    const nextRight = Number(Math.max(0, remainingWidth - nextLeft).toFixed(2));
+
+    setReachInOpeningLeft(nextLeft);
+    setReachInOpeningRight(nextRight);
+  };
+
+  const updateReachInOpeningRight = (value) => {
+    const remainingWidth = Math.max(0, (Number(wallWidth) || 0) - (Number(reachInOpeningWidth) || 0));
+    const nextRight = Number(Math.min(Math.max(0, Number(value) || 0), remainingWidth).toFixed(2));
+    const nextLeft = Number(Math.max(0, remainingWidth - nextRight).toFixed(2));
+
+    setReachInOpeningLeft(nextLeft);
+    setReachInOpeningRight(nextRight);
+  };
+
   const selectReachIn = () => {
     setAppMode('planner');
     setClosetType('reach-in');
@@ -3608,7 +3864,6 @@ export default function App({ internalRenderer = false }) {
   const enterReachInConfiguration = () => {
     setReachInRoomCaptured(true);
     window.requestAnimationFrame(() => {
-      document.querySelector('.app-shell')?.scrollTo({ top: 0, behavior: 'smooth' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   };
@@ -3691,10 +3946,9 @@ export default function App({ internalRenderer = false }) {
     openingWidth: reachInOpeningWidth,
     onOpeningWidthChange: updateReachInOpeningWidth,
     openingLeft: reachInOpeningLeft,
-    onOpeningLeftChange: setReachInOpeningLeft,
+    onOpeningLeftChange: updateReachInOpeningLeft,
     openingRight: reachInOpeningRight,
-    onOpeningRightChange: setReachInOpeningRight,
-    onCenterOpening: () => balanceOpeningReturns(wallWidth, reachInOpeningWidth),
+    onOpeningRightChange: updateReachInOpeningRight,
   };
 
   if (requestedEstimatePage && requestedReachInPlan) {
@@ -3724,12 +3978,12 @@ export default function App({ internalRenderer = false }) {
   }
 
   return (
-    <main className="app-shell app-shell-scroll bg-brand-ui text-brand-black">
-      <header className="app-header flex items-center justify-between gap-3 border-b border-stone-200 bg-white px-4">
+    <main className="app-shell bg-brand-ui text-brand-black">
+      <header className="app-header flex flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-0">
         <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">
           {internalRenderer ? 'Internal Image Renderer' : 'Reach-in Closet Planner'}
         </h1>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
           {!internalRenderer && appMode === 'planner' && <MeasurementGuide compact />}
           {!internalRenderer && appMode === 'planner' && <ConsultationCta compact />}
           {internalRenderer && (
@@ -3822,7 +4076,8 @@ export default function App({ internalRenderer = false }) {
                   event.preventDefault();
                   const configCode = event.dataTransfer.getData('text/plain');
                   if (configCode) {
-                    addPlannerModule(configCode);
+                    const width = Number(event.dataTransfer.getData('application/closet-module-width'));
+                    addPlannerModule(configCode, null, Number.isFinite(width) ? width : null);
                   }
                 }}
               >
@@ -3830,7 +4085,12 @@ export default function App({ internalRenderer = false }) {
                   <section className="rounded border border-stone-200 bg-white p-2">
                     <h2 className="text-sm font-bold text-stone-950">Configure your closet</h2>
                     <p className="mb-1 mt-0.5 text-xs text-stone-500">Click or drag a configuration.</p>
-                    <ModulePalette height={plannerHeight} onAdd={addPlannerModule} />
+                    <ModulePalette
+                      height={plannerHeight}
+                      onAdd={addPlannerModule}
+                      productCatalog={productCatalog}
+                      isCatalogReady={airtableStatus.state !== 'loading'}
+                    />
                   </section>
                   <ModuleControlStrip
                     modules={plannerModules}
@@ -3838,6 +4098,9 @@ export default function App({ internalRenderer = false }) {
                     onRemove={removePlannerModule}
                     onMove={movePlannerModule}
                     onWidthChange={updatePlannerModuleWidth}
+                    productBySignature={productBySignature}
+                    productCatalog={productCatalog}
+                    isCatalogReady={airtableStatus.state !== 'loading'}
                   />
                   {internalRenderer ? (
                     <div className="xl:col-span-2">

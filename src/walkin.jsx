@@ -52,7 +52,106 @@ function buildQuoteContactUrl(quoteId, intent = 'contact') {
   return url.toString();
 }
 
-function SavedPlanActions({ quoteId }) {
+function useParentFrameAutoHeight() {
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.parent === window) {
+      return undefined;
+    }
+
+    document.documentElement.dataset.embeddedPlanner = 'true';
+    let frameId = 0;
+    let lastHeight = 0;
+    const sendHeight = () => {
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() => {
+        const root = document.getElementById('root');
+        const height = Math.ceil(
+          Math.max(
+            document.documentElement.scrollHeight,
+            document.body?.scrollHeight || 0,
+            root?.scrollHeight || 0,
+            root?.getBoundingClientRect().height || 0,
+          ),
+        );
+
+        if (Math.abs(height - lastHeight) < 2) {
+          return;
+        }
+
+        lastHeight = height;
+        window.parent.postMessage(
+          {
+            type: 'closetswarehouse:frame-height',
+            height,
+            path: window.location.pathname,
+          },
+          '*',
+        );
+      });
+    };
+    const sendWheelEscape = (event) => {
+      const scrollingElement = document.scrollingElement || document.documentElement;
+      const maxScrollTop = Math.max(0, scrollingElement.scrollHeight - scrollingElement.clientHeight);
+      const atTop = scrollingElement.scrollTop <= 1;
+      const atBottom = scrollingElement.scrollTop >= maxScrollTop - 1;
+      const wantsUp = event.deltaY < 0;
+      const wantsDown = event.deltaY > 0;
+
+      if ((atTop && wantsUp) || (atBottom && wantsDown)) {
+        window.parent.postMessage(
+          {
+            type: 'closetswarehouse:frame-wheel',
+            deltaY: event.deltaY,
+            path: window.location.pathname,
+          },
+          '*',
+        );
+      }
+    };
+
+    const observer = new ResizeObserver(sendHeight);
+    observer.observe(document.documentElement);
+    if (document.body) {
+      observer.observe(document.body);
+    }
+
+    const mutationObserver = new MutationObserver(sendHeight);
+    mutationObserver.observe(document.documentElement, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+
+    let ticks = 0;
+    const intervalId = window.setInterval(() => {
+      ticks += 1;
+      sendHeight();
+      if (ticks >= 20) {
+        window.clearInterval(intervalId);
+      }
+    }, 500);
+
+    sendHeight();
+    window.addEventListener('load', sendHeight);
+    window.addEventListener('resize', sendHeight);
+    window.addEventListener('wheel', sendWheelEscape, { passive: true });
+    window.visualViewport?.addEventListener('resize', sendHeight);
+
+    return () => {
+      delete document.documentElement.dataset.embeddedPlanner;
+      cancelAnimationFrame(frameId);
+      window.clearInterval(intervalId);
+      observer.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener('load', sendHeight);
+      window.removeEventListener('resize', sendHeight);
+      window.removeEventListener('wheel', sendWheelEscape);
+      window.visualViewport?.removeEventListener('resize', sendHeight);
+    };
+  }, []);
+}
+
+function SavedPlanActions({ quoteId, planType = 'Closet plan' }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
@@ -187,6 +286,10 @@ function getWalkInProductCode(module, height) {
   return module.code === 'SHELF' ? getShelfCodeForHeight(height) : module.code;
 }
 
+function getWalkInWidthOptions(code) {
+  return ['SHELF', 'LH', 'DH', 'HS'].includes(code) ? allowedModuleWidths : [24];
+}
+
 function getNominalWidthFromSkuToken(token) {
   if (widthTokenPattern.test(token)) {
     return Number(token);
@@ -319,32 +422,85 @@ function getWallTowerSpecs(room, wall, modules) {
 }
 
 function calculateWallEstimate(modules, height, productCatalog) {
+  const coverage = getLiveWallProductCoverage(modules, height, productCatalog);
+
+  if (coverage.missing.length > 0) {
+    return 0;
+  }
+
+  const baseTotal = coverage.total;
+  const sharedPanelCredit = Math.max(0, modules.length - 1) * 32;
+
+  return Number(Math.max(0, baseTotal - sharedPanelCredit).toFixed(2));
+}
+
+function getLiveWallProductCoverage(modules, height, productCatalog) {
   const singleProductsBySignature = new Map(
     productCatalog
       .filter((product) => product.towerSpecs.length === 1 && product.price > 0)
       .map((product) => [product.matchSignature, product]),
   );
-  const baseTotal = modules.reduce((sum, module) => {
+
+  return modules.reduce((coverage, module) => {
     const code = getWalkInProductCode(module, height);
     const width = numberValue(module.width);
     const singleSignature = buildMatchSignature(height, [{ code, width }]);
     const singleProduct = singleProductsBySignature.get(singleSignature);
-    const fallbackByCode = {
-      LH: 225,
-      DH: 245,
-      HS: 260,
-      S3D: 545,
-      H3D: 560,
-      S2D: 450,
-      S7: 275,
-      S8: 315,
-    };
 
-    return sum + (singleProduct?.price || fallbackByCode[code] || 275);
-  }, 0);
-  const sharedPanelCredit = Math.max(0, modules.length - 1) * 32;
+    if (singleProduct) {
+      coverage.total += singleProduct.price;
+    } else {
+      coverage.missing.push(`${towerNames[code] || code} ${width}" at ${height}"`);
+    }
 
-  return Number(Math.max(0, baseTotal - sharedPanelCredit).toFixed(2));
+    return coverage;
+  }, { total: 0, missing: [] });
+}
+
+function getCatalogWidthOptionsForCode(targetCode, widthOptions, height, productCatalog) {
+  const liveWidths = new Set();
+
+  productCatalog.forEach((product) => {
+    if (numberValue(product.height) !== numberValue(height) || product.towerSpecs.length !== 1) {
+      return;
+    }
+
+    const tower = product.towerSpecs[0];
+    if (normalizeTowerCode(tower.code) === targetCode) {
+      liveWidths.add(numberValue(tower.width));
+    }
+  });
+
+  return widthOptions.filter((width) => liveWidths.has(numberValue(width)));
+}
+
+function getWalkInSupportedWidthOptions(modules, moduleIndex, widthOptions, height, productBySignature, productCatalog, isCatalogReady) {
+  if (!isCatalogReady) {
+    return widthOptions;
+  }
+
+  const targetModule = modules[moduleIndex];
+  const targetCode = getWalkInProductCode(targetModule, height);
+  const catalogWidthOptions = getCatalogWidthOptionsForCode(targetCode, widthOptions, height, productCatalog);
+
+  if (catalogWidthOptions.length > 0) {
+    return catalogWidthOptions;
+  }
+
+  return widthOptions.filter((width) => {
+    const candidateModules = modules.map((module, index) => (index === moduleIndex ? { ...module, width } : module));
+    const towerSpecs = candidateModules.map((module) => ({
+      code: getWalkInProductCode(module, height),
+      width: numberValue(module.width),
+    }));
+    const signature = buildMatchSignature(height, towerSpecs);
+    const appearsInLiveProduct = productCatalog.some((product) =>
+      product.height === height &&
+      product.towerSpecs.some((tower) => normalizeTowerCode(tower.code) === targetCode && numberValue(tower.width) === Number(width)),
+    );
+
+    return Boolean(productBySignature.get(signature) || appearsInLiveProduct || getLiveWallProductCoverage(candidateModules, height, productCatalog).missing.length === 0);
+  });
 }
 
 function getWallHeight(room, wall) {
@@ -484,8 +640,9 @@ function evaluatePlan(room, corners, runs) {
     .flat()
     .forEach((module) => {
       const width = numberValue(module.width);
-      if (!allowedModuleWidths.includes(width)) {
-        blocking.push(`${module.label} width must be 18", 24", or 30".`);
+      const widthOptions = getWalkInWidthOptions(module.code);
+      if (!widthOptions.includes(width)) {
+        blocking.push(`${module.label} width must be ${widthOptions.map((option) => `${option}"`).join(' or ')}.`);
       }
     });
 
@@ -544,7 +701,45 @@ function evaluateRoomStep(room) {
 }
 
 function RoomSetup({ room, setRoom, corners, setCorners }) {
-  const updateRoom = (key, value) => setRoom((current) => ({ ...current, [key]: value }));
+  const getOpeningRemaining = (nextRoom) =>
+    Math.max(0, (Number(nextRoom.backWidth) || 0) - (Number(nextRoom.openingWidth) || 0));
+
+  const updateRoom = (key, value) => {
+    setRoom((current) => {
+      const nextRoom = { ...current, [key]: value };
+
+      if (key === 'backWidth' || key === 'openingWidth') {
+        const balancedReturn = Number((getOpeningRemaining(nextRoom) / 2).toFixed(2));
+        return {
+          ...nextRoom,
+          openingLeft: balancedReturn,
+          openingRight: balancedReturn,
+        };
+      }
+
+      if (key === 'openingLeft') {
+        const remainingWidth = getOpeningRemaining(nextRoom);
+        const nextLeft = Number(Math.min(Math.max(0, Number(value) || 0), remainingWidth).toFixed(2));
+        return {
+          ...nextRoom,
+          openingLeft: nextLeft,
+          openingRight: Number(Math.max(0, remainingWidth - nextLeft).toFixed(2)),
+        };
+      }
+
+      if (key === 'openingRight') {
+        const remainingWidth = getOpeningRemaining(nextRoom);
+        const nextRight = Number(Math.min(Math.max(0, Number(value) || 0), remainingWidth).toFixed(2));
+        return {
+          ...nextRoom,
+          openingLeft: Number(Math.max(0, remainingWidth - nextRight).toFixed(2)),
+          openingRight: nextRight,
+        };
+      }
+
+      return nextRoom;
+    });
+  };
   const updateCorner = (key, value) => setCorners((current) => ({ ...current, [key]: value }));
   const updateHeight = (wall, height) => updateRoom(wallHeightKeys[wall], height);
 
@@ -778,17 +973,17 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
 function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, onContinue }) {
   return (
     <main className="app-shell bg-brand-ui text-brand-black">
-      <header className="app-header flex items-center justify-between border-b border-stone-200 bg-white px-4">
-        <div>
+      <header className="app-header flex flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:py-0">
+        <div className="min-w-0">
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Step 1: room dimensions</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
           <MeasurementGuide compact />
           <ConsultationCta compact />
         </div>
       </header>
-      <section className="app-workspace min-h-0 w-full overflow-y-auto">
+      <section className="app-workspace w-full">
         <div className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid gap-4">
             <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} />
@@ -906,7 +1101,7 @@ function MeasurementGuide({ compact = false }) {
       <div
         className={
           compact
-            ? 'absolute right-0 z-50 mt-2 max-h-[70vh] w-[min(88vw,42rem)] overflow-y-auto rounded border border-stone-200 bg-white p-4 text-left text-sm font-semibold leading-6 text-stone-700 shadow-xl'
+            ? 'fixed left-3 right-3 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-y-auto rounded border border-stone-200 bg-white p-4 text-left text-sm font-semibold leading-6 text-stone-700 shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-[70vh] sm:w-[min(88vw,42rem)]'
             : 'mt-4 space-y-4 text-sm font-semibold leading-6 text-stone-700'
         }
       >
@@ -1047,7 +1242,7 @@ function TowerConfigIcon({ code }) {
   );
 }
 
-function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange }) {
+function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange, productBySignature, productCatalog, isCatalogReady }) {
   const [showPicker, setShowPicker] = useState(false);
   const moveLabels =
     wall === 'back'
@@ -1169,6 +1364,8 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
             <div className="flex min-h-[126px] items-stretch">
               {modules.map((module, index) => {
                 const visualWidth = Math.max(86, numberValue(module.width) * 4.2);
+                const widthOptions = getWalkInWidthOptions(module.code);
+                const supportedWidthOptions = getWalkInSupportedWidthOptions(modules, index, widthOptions, wallHeight, productBySignature, productCatalog, isCatalogReady);
 
                 return (
                   <div key={module.id} className="group flex shrink-0 items-stretch">
@@ -1188,7 +1385,9 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
                           onChange={(event) => onWidthChange(wall, module.id, Number(event.target.value))}
                           className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-1.5 py-1 text-xs font-bold text-stone-700"
                         >
-                          {allowedModuleWidths.map((width) => (
+                          {supportedWidthOptions.length === 0 ? (
+                            <option value={module.width}>No width options</option>
+                          ) : supportedWidthOptions.map((width) => (
                             <option key={width} value={width}>
                               {width}" bay
                             </option>
@@ -1388,6 +1587,118 @@ function buildWalkInTowerLayout(height, code) {
     rods: [],
     drawers: [],
   };
+}
+
+function WalkInFrontViews({ room, runs }) {
+  const wallEntries = Object.entries(runs).filter(([, modules]) => modules.length > 0);
+
+  if (wallEntries.length === 0) {
+    return null;
+  }
+
+  const renderWall = ([wall, modules]) => {
+    const height = getWallHeight(room, wall);
+    const runLength = getRunLength(modules);
+    const padding = 30;
+    const viewWidth = 640;
+    const viewHeight = 310;
+    const scale = Math.min((viewWidth - padding * 2) / Math.max(1, runLength), (viewHeight - padding * 2) / Math.max(1, height));
+    const toX = (value) => padding + value * scale;
+    const toY = (value) => padding + (height - value) * scale;
+    const inch = (value) => value * scale;
+    const segments = getModuleSegments(modules);
+    const panelXs = [0, ...segments.slice(1).map((segment) => segment.start - panelThickness), runLength - panelThickness];
+
+    return (
+      <div key={wall} className="min-w-0 rounded border border-stone-100 bg-white p-2">
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-stone-950">{wallLabels[wall]} Wall Front View</h3>
+          <span className="text-xs font-semibold text-stone-500">{formatInches(runLength)} wide x {formatInches(height)} high</span>
+        </div>
+        <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-auto w-full bg-white">
+          <rect x={toX(0)} y={toY(toeKickHeight)} width={inch(runLength)} height={inch(toeKickHeight)} className="fill-stone-200 stroke-stone-500" />
+          {panelXs.map((x, index) => (
+            <rect
+              key={`${wall}-panel-${index}`}
+              x={toX(x)}
+              y={toY(height)}
+              width={inch(panelThickness)}
+              height={inch(height)}
+              className="fill-brand-panel stroke-stone-900"
+            />
+          ))}
+          {segments.map((segment, segmentIndex) => {
+            const code = getWalkInLayoutCode(segment.module, height);
+            const layout = buildWalkInTowerLayout(height, code);
+
+            return (
+              <g key={segment.module.id || `${wall}-segment-${segmentIndex}`}>
+                {layout.shelves.map((shelf, shelfIndex) => (
+                  <rect
+                    key={`${wall}-${segmentIndex}-shelf-${shelfIndex}`}
+                    x={toX(segment.start)}
+                    y={toY(shelf.y + panelThickness)}
+                    width={inch(segment.length)}
+                    height={inch(panelThickness)}
+                    className={shelf.fixed ? 'fill-stone-300 stroke-stone-900' : 'fill-white stroke-stone-600'}
+                  />
+                ))}
+                {layout.rods.map((rod, rodIndex) => (
+                  <g key={`${wall}-${segmentIndex}-rod-${rodIndex}`}>
+                    <line
+                      x1={toX(segment.start + 2)}
+                      y1={toY(rod.y)}
+                      x2={toX(segment.start + segment.length - 2)}
+                      y2={toY(rod.y)}
+                      className="stroke-stone-500"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                    />
+                    <circle cx={toX(segment.start + 1.2)} cy={toY(rod.y)} r="3" className="fill-stone-500" />
+                    <circle cx={toX(segment.start + segment.length - 1.2)} cy={toY(rod.y)} r="3" className="fill-stone-500" />
+                  </g>
+                ))}
+                {layout.drawers.map((drawer, drawerIndex) => (
+                  <g key={`${wall}-${segmentIndex}-drawer-${drawerIndex}`}>
+                    <rect
+                      x={toX(segment.start - drawerSideOverlay)}
+                      y={toY(drawer.centerY + drawer.height / 2)}
+                      width={inch(segment.length + drawerSideOverlay * 2)}
+                      height={inch(drawer.height)}
+                      className="fill-brand-panel stroke-stone-700"
+                    />
+                    <rect
+                      x={toX(segment.start + segment.length / 2 - drawerPullLength / 2)}
+                      y={toY(drawer.centerY) - 2}
+                      width={inch(drawerPullLength)}
+                      height="4"
+                      rx="1"
+                      className="fill-stone-300 stroke-stone-500"
+                    />
+                  </g>
+                ))}
+                <text x={toX(segment.center)} y={toY(18)} textAnchor="middle" className="drawing-bay">
+                  {towerNames[code] || code}
+                </text>
+              </g>
+            );
+          })}
+          <line x1={toX(0)} y1={toY(0)} x2={toX(runLength)} y2={toY(0)} className="stroke-stone-950" strokeWidth="2" />
+          <line x1={toX(0)} y1={toY(height)} x2={toX(runLength)} y2={toY(height)} className="stroke-stone-950" strokeWidth="2" />
+        </svg>
+      </div>
+    );
+  };
+
+  return (
+    <section className="print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-base font-bold text-stone-950">Front Views</h2>
+        <span className="text-xs font-semibold text-stone-500">Elevations for plan review</span>
+      </div>
+      <div className="grid gap-3">{wallEntries.map(renderWall)}</div>
+    </section>
+  );
 }
 
 function TopDownPlan({ room, runs, corners, evaluation }) {
@@ -2185,8 +2496,6 @@ function buildDetailedWalkInParts(room, runs) {
   let towerCount = 0;
   let adjustableShelfCount = 0;
   let rodCount = 0;
-  let smallDrawerCount = 0;
-  let largeDrawerCount = 0;
 
   ['back', 'left', 'right'].forEach((wall) => {
     const modules = runs[wall] || [];
@@ -2197,9 +2506,9 @@ function buildDetailedWalkInParts(room, runs) {
     }
 
     towerCount += modules.length;
-    add(`VL-24-${height}-W`, `Left vertical panel 24" x ${height}"`, 1, `${wallLabels[wall]} outer left side panel.`, 'Panels');
-    add(`VR-24-${height}-W`, `Right vertical panel 24" x ${height}"`, 1, `${wallLabels[wall]} outer right side panel.`, 'Panels');
-    add(`VD-24-${height}-W`, `Shared divider panel 24" x ${height}"`, Math.max(0, modules.length - 1), `${wallLabels[wall]} shared dividers between connected towers.`, 'Panels');
+    add(`VL-14-${height}-W`, `Left vertical panel 14" x ${height}"`, 1, `${wallLabels[wall]} outer left side panel.`, 'Panels');
+    add(`VR-14-${height}-W`, `Right vertical panel 14" x ${height}"`, 1, `${wallLabels[wall]} outer right side panel.`, 'Panels');
+    add(`VD-14-${height}-W`, `Shared divider panel 14" x ${height}"`, Math.max(0, modules.length - 1), `${wallLabels[wall]} shared dividers between connected towers.`, 'Panels');
 
     modules.forEach((module) => {
       const code = getWalkInLayoutCode(module, height);
@@ -2213,18 +2522,16 @@ function buildDetailedWalkInParts(room, runs) {
 
       adjustableShelfCount += adjustableShelves;
       rodCount += rods;
-      smallDrawerCount += smallDrawers;
-      largeDrawerCount += largeDrawers;
 
       add(`FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, fixedShelves, `${wallLabels[wall]} ${towerNames[code] || code} structural shelves.`, 'Shelves');
       add(`SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, adjustableShelves, `${wallLabels[wall]} ${towerNames[code] || code} movable shelves.`, 'Shelves');
       add(`TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `Toe-kick kit for the ${wallLabels[wall].toLowerCase()} run.`, 'Kits');
       add(`RK-${width}-S`, `Rod kit ${width}"`, rods, `${wallLabels[wall]} hanging rod kit.`, 'Kits');
+      add(`DRK-${width}-5-13-W`, `Small drawer kit ${width}" x 5" x 13"`, smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
+      add(`DRK-${width}-10-13-W`, `Large drawer kit ${width}" x 10" x 13"`, largeDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
     });
   });
 
-  add('DRK-24-5-13-W', 'Small drawer kit 24" x 5" x 13"', smallDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
-  add('DRK-24-10-13-W', 'Large drawer kit 24" x 10" x 13"', largeDrawerCount, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
   add('RDB-S-1', 'Rod bracket set, pair', rodCount, `${rodCount * 2} individual brackets total; one pair per rod.`, 'Hardware');
   const wallBracketCount = towerCount * 2;
   add('WLB-S-1', 'Wall L-bracket', wallBracketCount, 'Two wall safety brackets per tower section.', 'Hardware');
@@ -2335,8 +2642,14 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
   const planUrl = useMemo(() => buildWalkInPlanUrl(room, corners, runs), [room, corners, runs]);
+  const catalogMessages = pricing.catalogWarnings || [];
   const submitForVerification = async (event) => {
     event.preventDefault();
+    if (!pricing.catalogSupported) {
+      setSubmitStatus({ state: 'error', message: 'This layout is not available for online saving yet.' });
+      return;
+    }
+
     setSubmitStatus({ state: 'loading', message: 'Saving plan to your account...' });
 
     try {
@@ -2389,7 +2702,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   };
 
   return (
-    <main className="print-flow h-screen overflow-y-auto bg-brand-ui p-2 text-brand-black sm:p-4">
+    <main className="print-flow min-h-screen bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
         <PrintablePlanReference quoteId={submitStatus.quoteId} planType="Walk-in saved plan" />
         <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
@@ -2401,9 +2714,18 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
             </div>
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
-              <div className="text-2xl font-bold text-stone-950">{money(pricing.estimatedPrice) || '$0.00'}</div>
+              <div className="text-2xl font-bold text-stone-950">{pricing.catalogSupported && money(pricing.estimatedPrice) ? money(pricing.estimatedPrice) : 'Not available yet'}</div>
             </div>
           </div>
+          {catalogMessages.length > 0 && (
+            <div className="mt-3 grid gap-2">
+              {catalogMessages.map((warning) => (
+                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                  {warning}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <a href={planUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">Open editable plan</a>
             <a href="/walkin.html?type=walk-in" className="rounded border border-stone-300 px-3 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50">Start new walk-in</a>
@@ -2411,7 +2733,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
           </div>
         </header>
 
-        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="grid min-w-0 gap-4">
           <div className="grid min-w-0 gap-4">
             <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-3 flex justify-end">
@@ -2432,10 +2754,11 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
                 <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
               )}
             </section>
+            <WalkInFrontViews room={room} runs={runs} />
             <PartsList parts={parts} />
           </div>
 
-          <aside className="grid min-w-0 gap-3 self-start">
+          <aside className="order-first grid min-w-0 gap-3 self-start">
             <form className="rounded border border-stone-200 bg-white p-4" onSubmit={submitForVerification}>
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
               {submitStatus.state === 'success' ? (
@@ -2507,16 +2830,23 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   );
 }
 
-function SummaryPanel({ room, corners, runs, evaluation, pricing }) {
+function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady }) {
   const [showForm, setShowForm] = useState(false);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const materials = useMemo(() => buildWalkInMaterials(runs), [runs]);
   const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
   const shouldShowProductLinks = evaluation.complete && pricing.allThreeWallsMatched;
+  const catalogMessages = pricing.catalogWarnings || [];
+  const canVerifyEstimate = Boolean(evaluation.complete && isCatalogReady && pricing.catalogSupported);
 
   const submitForVerification = async (event) => {
     event.preventDefault();
+    if (!pricing.catalogSupported) {
+      setSubmitStatus({ state: 'error', message: 'This layout is not available for online verification yet.' });
+      return;
+    }
+
     setSubmitStatus({ state: 'loading', message: 'Submitting for verification...' });
 
     try {
@@ -2606,11 +2936,11 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-bold uppercase text-stone-500">Estimated walk-in price</div>
-              <div className="text-xl font-bold text-stone-950">{money(pricing.estimatedPrice) || '$0.00'}</div>
+              <div className="text-xl font-bold text-stone-950">{!isCatalogReady ? 'Checking availability...' : pricing.catalogSupported && money(pricing.estimatedPrice) ? money(pricing.estimatedPrice) : 'Not available yet'}</div>
             </div>
             <button
               type="button"
-              disabled={!evaluation.complete}
+              disabled={!canVerifyEstimate}
               onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300"
             >
@@ -2621,10 +2951,19 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing }) {
             {pricing.wallSummaries.map((summary) => (
               <div key={summary.wall} className="flex justify-between rounded bg-stone-50 px-2 py-1.5">
                 <span className="font-semibold text-stone-600">{wallLabels[summary.wall]}</span>
-                <span className="font-bold text-stone-950">{summary.modules.length ? money(summary.estimate) : '-'}</span>
+                <span className="font-bold text-stone-950">{summary.modules.length ? (summary.supported ? money(summary.estimate) : 'Not available yet') : '-'}</span>
               </div>
             ))}
           </div>
+          {catalogMessages.length > 0 && (
+            <div className="mt-3 grid gap-2">
+              {catalogMessages.map((warning) => (
+                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                  {warning}
+                </div>
+              ))}
+            </div>
+          )}
 
           {showForm && (
             <form className="mt-3 grid gap-2" onSubmit={submitForVerification}>
@@ -2661,9 +3000,9 @@ function WalkInPlanner() {
     backWidth: 96,
     leftDepth: 72,
     rightDepth: 72,
-    openingWidth: 30,
-    openingLeft: 33,
-    openingRight: 33,
+    openingWidth: 70,
+    openingLeft: 13,
+    openingRight: 13,
     ceilingHeight: 108,
     backHeight: 96,
     leftHeight: 96,
@@ -2701,6 +3040,8 @@ function WalkInPlanner() {
       const towerSpecs = getWallTowerSpecs(room, wall, modules);
       const signature = modules.length ? buildMatchSignature(height, towerSpecs) : '';
       const match = signature ? productBySignature.get(signature) || null : null;
+      const coverage = getLiveWallProductCoverage(modules, height, productCatalog);
+      const supported = Boolean(!modules.length || match || coverage.missing.length === 0);
       const estimate = match?.price || calculateWallEstimate(modules, height, productCatalog);
 
       return {
@@ -2711,18 +3052,29 @@ function WalkInPlanner() {
         signature,
         match,
         estimate,
+        supported,
+        missingProducts: supported ? [] : coverage.missing,
       };
     });
     const allThreeWallsMatched = wallSummaries.every((summary) => summary.modules.length > 0 && summary.match?.productUrl);
-    const estimatedPrice = Number(wallSummaries.reduce((total, summary) => total + (summary.match?.price || summary.estimate || 0), 0).toFixed(2));
+    const catalogSupported = wallSummaries.every((summary) => summary.supported);
+    const catalogWarnings =
+      catalogReady && !catalogSupported
+        ? wallSummaries.flatMap((summary) =>
+            summary.missingProducts.map((moduleName) => `${wallLabels[summary.wall]} ${moduleName} is not available for online quoting yet.`),
+          )
+        : [];
+    const estimatedPrice = catalogSupported ? Number(wallSummaries.reduce((total, summary) => total + (summary.match?.price || summary.estimate || 0), 0).toFixed(2)) : 0;
 
     return {
       wallSummaries,
       allThreeWallsMatched,
+      catalogSupported,
+      catalogWarnings,
       estimatedPrice,
       signature: wallSummaries.map((summary) => `${summary.wall}:${summary.signature || 'empty'}`).join('|'),
     };
-  }, [productCatalog, productBySignature, room, runs]);
+  }, [catalogReady, productCatalog, productBySignature, room, runs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2784,10 +3136,17 @@ function WalkInPlanner() {
   };
 
   const updateWidth = (wall, id, width) => {
-    const nextWidth = allowedModuleWidths.includes(Number(width)) ? Number(width) : 24;
     setRuns((current) => ({
       ...current,
-      [wall]: current[wall].map((module) => (module.id === id ? { ...module, width: nextWidth } : module)),
+      [wall]: current[wall].map((module) => {
+        if (module.id !== id) {
+          return module;
+        }
+
+        const widthOptions = getWalkInWidthOptions(module.code);
+        const nextWidth = widthOptions.includes(Number(width)) ? Number(width) : widthOptions[0];
+        return { ...module, width: nextWidth };
+      }),
     }));
   };
 
@@ -2826,18 +3185,18 @@ function WalkInPlanner() {
 
   return (
     <main className="app-shell bg-brand-ui text-brand-black">
-      <header className="flex min-h-16 items-center justify-between gap-3 border-b border-stone-200 bg-white px-3 py-2 sm:px-4">
-        <div>
+      <header className="flex min-h-16 flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4">
+        <div className="min-w-0">
           <h1 className="text-lg font-bold text-stone-950">Walk-in Shape Planner</h1>
           <p className="text-xs font-semibold text-stone-500">Left, back, and right wall layout</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
           <MeasurementGuide compact />
           <ConsultationCta compact />
         </div>
       </header>
       <section className="app-workspace grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="min-w-0 bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:min-h-0 lg:overflow-y-auto lg:pr-4">
+        <section className="min-w-0 bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:pr-4">
           <div className="mb-3 flex items-center justify-end gap-2">
             {[
               ['plan', 'Plan view'],
@@ -2879,12 +3238,15 @@ function WalkInPlanner() {
                   onRemove={removeModule}
                   onMove={moveModule}
                   onWidthChange={updateWidth}
+                  productBySignature={productBySignature}
+                  productCatalog={productCatalog}
+                  isCatalogReady={catalogReady}
                 />
               ))}
             </div>
           </section>
         </section>
-        <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:min-h-0 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:pr-3">
+        <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:border-l lg:border-t-0 lg:pr-3">
           <div className="space-y-3">
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <ValidationPanel evaluation={evaluation} />
@@ -2897,6 +3259,7 @@ function WalkInPlanner() {
 }
 
 function ShapePlannerApp() {
+  useParentFrameAutoHeight();
   const requestedType = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('type');
   const [closetType, setClosetType] = useState(requestedType === 'reach-in' ? '' : 'walk-in');
 

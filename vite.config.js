@@ -1170,16 +1170,6 @@ function photoGenerationProxy(env) {
           const containsShelfOnlyTower = Array.isArray(payload.towerSpecs)
             && payload.towerSpecs.some((tower) => ['S7', 'S8'].includes(String(tower?.code || '').toUpperCase()));
           const useRealPhotoShelfMethod = containsShelfOnlyTower && Number(payload.height) >= 96;
-
-          if (containsShelfOnlyTower && !useRealPhotoShelfMethod) {
-            res.statusCode = 422;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({
-              error: 'The exact reach-in scene renderer for 84-inch shelf towers is still being built. No image request was sent and no generation credit was used.',
-              charged: false,
-            }));
-            return;
-          }
           await Promise.all([fs.mkdir(draftsDir, { recursive: true }), fs.mkdir(requestsDir, { recursive: true })]);
           const sourceBuffer = Buffer.from(sourceMatch[1], 'base64');
           const requestId = `${handle}-${Date.now()}`;

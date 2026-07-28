@@ -1,22 +1,11 @@
-const fallbackByCode = {
-  LH: 225,
-  DH: 245,
-  HS: 260,
-  S3D: 545,
-  H3D: 560,
-  S2D: 450,
-  S7: 275,
-  S8: 315,
-};
-
-const allowedCodes = new Set(Object.keys(fallbackByCode));
+const allowedCodes = new Set(['LH', 'DH', 'HS', 'S3D', 'H3D', 'S2D', 'S7', 'S8']);
 const allowedWidthsByCode = {
-  LH: new Set([24, 30]),
-  DH: new Set([24, 30]),
+  LH: new Set([18, 24, 30]),
+  DH: new Set([18, 24, 30]),
   HS: new Set([24, 30]),
-  S3D: new Set([24]),
-  H3D: new Set([24]),
-  S2D: new Set([24]),
+  S3D: new Set([24, 30]),
+  H3D: new Set([24, 30]),
+  S2D: new Set([24, 30]),
   S7: new Set([18, 24, 30]),
   S8: new Set([18, 24, 30]),
 };
@@ -76,33 +65,12 @@ function cleanModule(module = {}, index = 0) {
   };
 }
 
-function estimateModules(modules) {
-  const groups = new Map();
-
-  modules.forEach((module) => {
-    const key = module.wall || 'reach-in';
-    const group = groups.get(key) || [];
-    group.push(module);
-    groups.set(key, group);
-  });
-
-  let total = 0;
-
-  groups.forEach((group) => {
-    const baseTotal = group.reduce((sum, module) => sum + (fallbackByCode[module.code] || 275), 0);
-    const sharedPanelCredit = Math.max(0, group.length - 1) * 32;
-    total += Math.max(0, baseTotal - sharedPanelCredit);
-  });
-
-  return Number(total.toFixed(2));
-}
-
 export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt } = {}) {
   const modules = (Array.isArray(rawQuote.modules) ? rawQuote.modules : [])
     .map(cleanModule)
     .filter(Boolean);
   const clientEstimatedPrice = cleanNumber(rawQuote.estimatedPrice);
-  const serverEstimatedPrice = estimateModules(modules);
+  const missingLiveCatalogPrice = clientEstimatedPrice <= 0;
 
   return {
     ...rawQuote,
@@ -118,9 +86,10 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     internalType: cleanText(rawQuote.internalType || rawQuote.planType || 'closet plan', 80),
     planUrl: cleanUrl(rawQuote.planUrl),
     modules,
-    estimatedPrice: serverEstimatedPrice,
+    estimatedPrice: missingLiveCatalogPrice ? 0 : clientEstimatedPrice,
     clientEstimatedPrice,
-    pricingSource: 'server-fallback',
+    pricingSource: missingLiveCatalogPrice ? 'missing-live-catalog-price' : 'client-live-catalog',
+    pricingError: missingLiveCatalogPrice ? 'missing_live_catalog_price' : '',
     signature: cleanText(rawQuote.signature, 500),
   };
 }
@@ -132,6 +101,10 @@ export function validateNormalizedQuote(quote) {
 
   if (!quote.modules?.length) {
     return 'At least one closet tower is required.';
+  }
+
+  if (quote.pricingError || !(Number(quote.estimatedPrice) > 0)) {
+    return 'We could not calculate this plan price from the live catalog. Please adjust the layout or try again.';
   }
 
   return '';
