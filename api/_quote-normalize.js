@@ -1,13 +1,34 @@
-const allowedCodes = new Set(['LH', 'DH', 'HS', 'S3D', 'H3D', 'S2D', 'S7', 'S8']);
+const fallbackByCode = {
+  LH: 225,
+  DH: 245,
+  HS: 260,
+  S3D: 545,
+  H3D: 560,
+  S2D: 450,
+  S7: 275,
+  S8: 315,
+};
+
+const allowedCodes = new Set(Object.keys(fallbackByCode));
 const allowedWidthsByCode = {
   LH: new Set([18, 24, 30]),
   DH: new Set([18, 24, 30]),
-  HS: new Set([24, 30]),
-  S3D: new Set([24, 30]),
-  H3D: new Set([24, 30]),
-  S2D: new Set([24, 30]),
+  HS: new Set([18, 24, 30]),
+  S3D: new Set([24]),
+  H3D: new Set([24]),
+  S2D: new Set([24]),
   S7: new Set([18, 24, 30]),
   S8: new Set([18, 24, 30]),
+};
+const towerNames = {
+  LH: 'Long Hang',
+  DH: 'Double Hang',
+  HS: 'Hang & Shelves',
+  S3D: 'Shelves & 3 Drawers',
+  H3D: 'Hang & 3 Drawers',
+  S2D: 'Shelves & 2 Drawers',
+  S7: '7-Shelf',
+  S8: '8-Shelf',
 };
 
 function cleanText(value, maxLength = 120) {
@@ -19,7 +40,7 @@ function cleanEmail(value) {
 }
 
 function cleanUrl(value) {
-  const text = cleanText(value, 500);
+  const text = cleanText(value, 12000);
 
   if (!/^https?:\/\//i.test(text)) {
     return '';
@@ -47,6 +68,11 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function getModuleLabel(code, rawLabel) {
+  const label = cleanText(rawLabel, 80).replace(/\s+\d+(?:\.\d+)?\"?$/g, '');
+  return towerNames[code] || (label && !/^[A-Z0-9]+$/.test(label) ? label : 'Closet tower');
+}
+
 function cleanModule(module = {}, index = 0) {
   const code = cleanText(module.code, 12).toUpperCase();
   const width = cleanNumber(module.width);
@@ -56,13 +82,37 @@ function cleanModule(module = {}, index = 0) {
     return null;
   }
 
+  const label = getModuleLabel(code, module.label || module.name);
+
   return {
     ...(module.wall ? { wall: cleanText(module.wall, 20) } : {}),
     index: Number.isInteger(module.index) ? module.index : index,
     code,
     width,
-    label: cleanText(module.label, 80),
+    label,
+    displayName: `${label} / ${width}" bay`,
   };
+}
+
+function estimateModules(modules) {
+  const groups = new Map();
+
+  modules.forEach((module) => {
+    const key = module.wall || 'reach-in';
+    const group = groups.get(key) || [];
+    group.push(module);
+    groups.set(key, group);
+  });
+
+  let total = 0;
+
+  groups.forEach((group) => {
+    const baseTotal = group.reduce((sum, module) => sum + (fallbackByCode[module.code] || 275), 0);
+    const sharedPanelCredit = Math.max(0, group.length - 1) * 32;
+    total += Math.max(0, baseTotal - sharedPanelCredit);
+  });
+
+  return Number(total.toFixed(2));
 }
 
 export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt } = {}) {
@@ -70,7 +120,8 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     .map(cleanModule)
     .filter(Boolean);
   const clientEstimatedPrice = cleanNumber(rawQuote.estimatedPrice);
-  const missingLiveCatalogPrice = clientEstimatedPrice <= 0;
+  const serverEstimatedPrice = estimateModules(modules);
+  const estimatedPrice = clientEstimatedPrice > 0 ? clientEstimatedPrice : serverEstimatedPrice;
 
   return {
     ...rawQuote,
@@ -86,10 +137,10 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     internalType: cleanText(rawQuote.internalType || rawQuote.planType || 'closet plan', 80),
     planUrl: cleanUrl(rawQuote.planUrl),
     modules,
-    estimatedPrice: missingLiveCatalogPrice ? 0 : clientEstimatedPrice,
+    estimatedPrice,
     clientEstimatedPrice,
-    pricingSource: missingLiveCatalogPrice ? 'missing-live-catalog-price' : 'client-live-catalog',
-    pricingError: missingLiveCatalogPrice ? 'missing_live_catalog_price' : '',
+    serverEstimatedPrice,
+    pricingSource: clientEstimatedPrice > 0 ? 'planner-estimate' : 'server-fallback',
     signature: cleanText(rawQuote.signature, 500),
   };
 }
@@ -103,7 +154,7 @@ export function validateNormalizedQuote(quote) {
     return 'At least one closet tower is required.';
   }
 
-  if (quote.pricingError || !(Number(quote.estimatedPrice) > 0)) {
+  if (!(Number(quote.estimatedPrice) > 0)) {
     return 'We could not calculate this plan price from the live catalog. Please adjust the layout or try again.';
   }
 

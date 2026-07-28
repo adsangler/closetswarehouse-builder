@@ -422,6 +422,21 @@ function getRequestedMode() {
   return new URLSearchParams(window.location.search).get('mode') === 'renderer' ? 'renderer' : 'planner';
 }
 
+function encodePlanPayload(payload) {
+  return btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodePlanPayload(encodedPlan) {
+  const normalized = String(encodedPlan || '')
+    .trim()
+    .replace(/\s/g, '+')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+
+  return JSON.parse(atob(padded));
+}
+
 function getRequestedReachInPlan() {
   if (typeof window === 'undefined') {
     return null;
@@ -434,7 +449,7 @@ function getRequestedReachInPlan() {
   }
 
   try {
-    return JSON.parse(atob(encodedPlan));
+    return decodePlanPayload(encodedPlan);
   } catch {
     return null;
   }
@@ -448,7 +463,7 @@ function buildReachInPlanUrl(planDetails, modules) {
   const url = new URL(window.location.href);
   url.searchParams.delete('kit');
   url.searchParams.delete('estimate');
-  url.searchParams.set('plan', btoa(JSON.stringify({ planDetails, modules })));
+  url.searchParams.set('plan', encodePlanPayload({ planDetails, modules }));
   return url.toString();
 }
 

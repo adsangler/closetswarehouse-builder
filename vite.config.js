@@ -227,6 +227,16 @@ function emailMatches(left, right) {
 
 function buildLegacyQuoteFields(quote) {
   const customerName = [quote.customer?.firstName, quote.customer?.lastName].filter(Boolean).join(' ').trim() || quote.customer?.name || '';
+  const formatModuleDisplay = (module) => {
+    const wall = module.wall ? `${module.wall}: ` : '';
+    const width = module.width ? `${module.width}"` : '';
+    const label = String(module.label || module.name || module.displayName || '')
+      .replace(/\s*\/\s*\d+(?:\.\d+)?\"?\s*bay$/i, '')
+      .replace(/\s+\d+(?:\.\d+)?\"?$/g, '')
+      .trim();
+    const displayName = [label || 'Closet tower', width ? `${width} bay` : ''].filter(Boolean).join(' / ');
+    return `${wall}${displayName}`;
+  };
 
   return compactFields({
     Name: customerName,
@@ -242,7 +252,7 @@ function buildLegacyQuoteFields(quote) {
     'Required Width': quote.requiredWidth,
     'Estimated Price': quote.estimatedPrice,
     Signature: quote.signature,
-    Modules: quote.modules?.map((module) => `${module.wall ? `${module.wall}:` : ''}${module.code}-${module.width}`).join(', '),
+    Modules: quote.modules?.map(formatModuleDisplay).join(', '),
     'Quote JSON': JSON.stringify(quote),
   });
 }
@@ -726,7 +736,18 @@ async function sendConfirmationEmail(env, quote) {
     quote.planUrl ? `Plan URL: ${quote.planUrl}` : '',
     '',
     'Modules:',
-    ...(quote.modules || []).map((module) => `${module.wall ? `${module.wall}: ` : ''}${module.index + 1}. ${module.code}-${module.width}`),
+    ...(quote.modules || []).map((module, index) => {
+      const wall = module.wall ? `${module.wall}: ` : '';
+      const width = module.width ? `${module.width}"` : '';
+      const label = String(module.label || module.name || module.displayName || '')
+        .replace(/\s*\/\s*\d+(?:\.\d+)?\"?\s*bay$/i, '')
+        .replace(/\s+\d+(?:\.\d+)?\"?$/g, '')
+        .trim();
+      const displayName = [label || 'Closet tower', width ? `${width} bay` : ''].filter(Boolean).join(' / ');
+      const rawIndex = Number(module.index);
+      const position = Number.isFinite(rawIndex) ? rawIndex + 1 : index + 1;
+      return `${position}. ${wall}${displayName}`;
+    }),
   ].filter(Boolean);
 
   const response = await fetch(env.EMAIL_WEBHOOK_URL, {

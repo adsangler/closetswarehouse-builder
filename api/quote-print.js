@@ -59,6 +59,11 @@ function formatInches(value) {
   return number ? `${number}"` : '';
 }
 
+function getPosition(module = {}, fallbackIndex = 0) {
+  const rawIndex = Number(module.index);
+  return Number.isFinite(rawIndex) ? rawIndex + 1 : fallbackIndex + 1;
+}
+
 function getCustomerName(record = {}, quote = {}) {
   const customer = quote.customer || record.customer || {};
   return [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
@@ -73,12 +78,68 @@ function getPlanModules(quote = {}) {
 
 function getReachInDetails(quote = {}) {
   const details = quote.planDetails || {};
+  const doorLabels = {
+    regular: 'No door / regular',
+    bifold: 'Bi-fold',
+    sliding: 'Sliding',
+  };
+
   return [
-    ['Wall width', formatInches(details.wallWidth || quote.wallWidth)],
     ['Height', formatInches(details.height || quote.height)],
+    ['Wall width', formatInches(details.wallWidth || quote.wallWidth)],
+    ['Room depth', formatInches(details.roomDepthInput || details.roomDepth)],
+    ['Clear depth', formatInches(details.clearDepth)],
+    ['Ceiling', formatInches(details.ceilingHeight)],
+    ['Opening', formatInches(details.openingWidth)],
+    ['Return walls', [formatInches(details.openingLeft), formatInches(details.openingRight)].filter(Boolean).join(' / ')],
+    ['Door', doorLabels[details.doorType] || details.doorType || 'No door / regular'],
     ['Assembled width', formatInches(details.assembledWidth || quote.assembledWidth)],
     ['Required width', formatInches(details.requiredWidth || quote.requiredWidth)],
+    ['Remaining width', formatInches(details.remainingWidth)],
   ].filter(([, value]) => value);
+}
+
+function getModuleDisplayName(module = {}) {
+  const width = formatInches(module.width) || (module.width ? `${module.width}"` : '');
+  const label = String(module.label || module.name || module.displayName || '')
+    .replace(/\s*\/\s*\d+(?:\.\d+)?\"?\s*bay$/i, '')
+    .replace(/\s+\d+(?:\.\d+)?\"?$/g, '')
+    .trim();
+  const cleanLabel = label || String(module.displayName || '').replace(/\s*\/.*$/g, '').trim();
+
+  return [cleanLabel, width ? `${width} bay` : ''].filter(Boolean).join(' / ');
+}
+
+function renderMaterialsTable(materials = []) {
+  if (!Array.isArray(materials) || !materials.length) {
+    return '';
+  }
+
+  return `
+    <section>
+      <h2>Build Parts</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>SKU</th>
+            <th>Part</th>
+            <th>Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${materials.map((part) => `
+            <tr>
+              <td>${escapeHtml(part.category || '')}</td>
+              <td>${escapeHtml(part.sku || '')}</td>
+              <td>${escapeHtml(part.name || part.label || '')}</td>
+              <td>${escapeHtml(part.quantity || '')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </section>
+  `;
 }
 
 function renderDefinitionList(items = []) {
@@ -111,17 +172,15 @@ function renderModulesTable(modules = []) {
           <th>Wall</th>
           <th>Configuration</th>
           <th>Width</th>
-          <th>Description</th>
         </tr>
       </thead>
       <tbody>
         ${modules.map((module, index) => `
           <tr>
-            <td>${escapeHtml(module.index || index + 1)}</td>
+            <td>${escapeHtml(getPosition(module, index))}</td>
             <td>${escapeHtml(module.wall || '')}</td>
-            <td>${escapeHtml(module.code || module.sku || '')}</td>
+            <td>${escapeHtml(getModuleDisplayName(module))}</td>
             <td>${escapeHtml(formatInches(module.width) || module.width || '')}</td>
-            <td>${escapeHtml(module.label || module.name || '')}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -148,7 +207,7 @@ function renderWalkInDetails(quote = {}) {
         ${runEntries.map(([wall, run]) => `
           <div class="run">
             <h3>${escapeHtml(wall)}</h3>
-            ${renderModulesTable(run.modules.map((module, index) => ({ ...module, wall, index: module.index || index + 1 })))}
+            ${renderModulesTable(run.modules.map((module, index) => ({ ...module, wall, index: Number.isFinite(Number(module.index)) ? Number(module.index) : index })))}
           </div>
         `).join('')}
       </section>
@@ -168,6 +227,7 @@ function renderPrintablePlan({ record, autoPrint = false }) {
   const modules = getPlanModules(quote);
   const isWalkIn = String(quote.internalType || record.planType || '').toLowerCase().includes('walk');
   const editablePlanUrl = record.planUrl || quote.planUrl || '';
+  const materials = Array.isArray(quote.materials) ? quote.materials : [];
 
   return `<!doctype html>
 <html lang="en">
@@ -247,6 +307,8 @@ function renderPrintablePlan({ record, autoPrint = false }) {
           ${renderModulesTable(modules)}
         </section>
       ` : ''}
+
+      ${renderMaterialsTable(materials)}
 
       <p class="footer">Use this saved plan reference for warehouse pickup quoting and support. Prices and availability are subject to confirmation by Closets Warehouse.</p>
     </main>
