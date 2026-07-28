@@ -1113,21 +1113,69 @@ function buildRealPhotoShelfCorrectionPrompt({ height, assembledWidth }) {
   ].join('\n');
 }
 
-function buildReachInFitCorrectionPrompt({ height, assembledWidth, shot }) {
+function buildReachInFitCorrectionPrompt({ height, assembledWidth, towerSpecs, shot }) {
   const cabinetWidth = Number(assembledWidth) || 0;
   const cabinetHeight = Number(height) || 0;
   const doorRule = Number(shot?.bifoldDoorSets) === 1
     ? 'Keep exactly one two-panel bi-fold door unit, folded fully open against one jamb. Do not add a door on the other side.'
     : 'Keep exactly two two-panel bi-fold door units, one folded fully open against each jamb.';
+  const geometryRules = (towerSpecs || []).map((tower, index) => {
+    const code = String(tower.code || '').toUpperCase();
+    const prefix = `Tower ${index + 1} (${code}, ${tower.width}-inch bay):`;
+    const rules = {
+      HS: 'exactly FOUR lower horizontal shelf boards total, counting the bottom fixed shelf. This means exactly THREE boards above the bottom shelf in the lower section—never four. These four boards create exactly THREE lower open shelf compartments. If the input currently shows five lower boards, remove one adjustable board and evenly redistribute the remaining three boards above the bottom shelf. Keep the rod at the top with no shelf or cubby above it.',
+      S7: 'exactly EIGHT horizontal boards total: top fixed frame board, bottom fixed board, and exactly six adjustable boards between them, creating exactly seven usable open compartments. Never add a ninth board.',
+      S8: 'exactly NINE horizontal boards total: top fixed frame board, bottom fixed board, and exactly seven adjustable boards between them, creating exactly eight usable open compartments. Never add a tenth board.',
+      LH: 'one upper adjustable shelf about 18 inches below the top with one rod directly below it; no middle shelf in the long-hang bay.',
+      DH: 'one middle adjustable shelf and exactly two rods; do not add another shelf.',
+      S3D: 'exactly three drawers: two small above one large; preserve all supplied shelves without adding one.',
+      H3D: 'exactly three drawers and one upper rod; preserve all supplied shelves without adding one.',
+      S2D: 'exactly two small drawers; preserve all supplied shelves without adding one.',
+    };
+
+    return `${prefix} ${rules[code] || 'preserve every supplied board exactly.'}`;
+  });
 
   return [
     'FINAL ARCHITECTURAL FIT AND TOE-KICK SCALE CORRECTION. Preserve the closet cabinet geometry pixel-for-pixel except for correcting an oversized toe-kick to its exact measured height. Do not redraw, resize, stretch, crop, simplify, or alter any other cabinet panel, shelf, drawer, pull, or divider.',
+    ...geometryRules,
+    'COUNT VERIFICATION IS REQUIRED AFTER THE ARCHITECTURAL EDIT: count the cabinet horizontal boards again and compare them with the tower-specific rules above. Door edges, casing, shadows, wall seams, and the toe-kick board are not shelves. The architectural fitting pass must never introduce an extra shelf.',
     `The cabinet outside dimensions are exactly ${cabinetWidth} inches wide by ${cabinetHeight} inches high. Rebuild the finished opening to exactly those same inside dimensions: ${cabinetWidth} inches between the inner jamb faces and ${cabinetHeight} inches from the finished floor to the header underside.`,
     'Move the left inner jamb face inward until it directly meets the cabinet left outside face. Move the right inner jamb face inward until it directly meets the cabinet right outside face. Move the header underside downward until it directly meets the cabinet top. These three contacts must be continuous, with zero visible clearance.',
     'There must be NO visible interior wall, filler panel, vertical shadow channel, floor strip, baseboard, or unused closet cavity between either cabinet side and its jamb. There must be NO visible wall, filler, soffit, or shadow channel between the cabinet top and the header. The only wall visible may be outside the finished casing.',
     `TOE-KICK RATIO TEST: the floor-to-underside-of-bottom-shelf distance must be exactly 5 inches, exactly ${(5 / cabinetHeight * 100).toFixed(2)}% of the full ${cabinetHeight}-inch cabinet height. In pixel terms, measure the cabinet from floor to top as H; place the underside of the bottom shelf at H × ${(5 / cabinetHeight).toFixed(5)} above the floor. For an 84-inch cabinet this is only 5.95%—about one seventeenth of its height. If the current toe-kick looks 8%, 10%, or like a lower compartment, move the bottom shelf downward until it is exactly 5.95%. Preserve the solid recessed white kick board and extend the open bay above downward to meet the corrected shelf. Do not cover the cabinet with gray panels or fillers.`,
     doorRule,
     'Verification before output: trace the cabinet outer left edge, top edge, and outer right edge. The opening inner boundary must coincide with those three lines. If any strip of empty closet space remains beside or above the cabinet, continue moving the architecture inward until it disappears.',
+  ].join('\n');
+}
+
+function buildProductGeometryCorrectionPrompt({ height, assembledWidth, towerSpecs }) {
+  const cabinetWidth = Number(assembledWidth) || 0;
+  const cabinetHeight = Number(height) || 0;
+  const silhouetteRatio = cabinetWidth / cabinetHeight;
+  const geometryRules = (towerSpecs || []).map((tower, index) => {
+    const code = String(tower.code || '').toUpperCase();
+    const prefix = `Tower ${index + 1} (${code}, ${tower.width}-inch nominal bay):`;
+    const rules = {
+      HS: 'keep exactly one top rod with no shelf or cubby above it; keep exactly FOUR lower horizontal shelf boards total including the bottom fixed shelf, creating exactly THREE lower shelf compartments.',
+      S7: 'keep exactly six adjustable boards plus the top and bottom fixed boards, creating exactly seven usable open compartments.',
+      S8: 'keep exactly seven adjustable boards plus the top and bottom fixed boards, creating exactly eight usable open compartments.',
+      LH: 'keep one upper shelf about 18 inches below the top, one rod directly below it, and no middle shelf.',
+      DH: 'keep exactly one middle shelf and exactly two rods.',
+      S3D: 'keep exactly three drawers—two small above one large—and preserve the supplied shelves.',
+      H3D: 'keep exactly three drawers—two small above one large—one upper rod, and preserve the supplied shelves.',
+      S2D: 'keep exactly two small drawers and preserve the supplied shelves.',
+    };
+    return `${prefix} ${rules[code] || 'preserve every supplied cabinet component.'}`;
+  });
+
+  return [
+    'FINAL PRODUCT-ONLY DIMENSION CORRECTION. Keep the current photographic room, lighting, white melamine, camera direction, hardware, and all cabinet components. Correct only measurable cabinet silhouette proportions and toe-kick height.',
+    `OUTSIDE SILHOUETTE LOCK: the cabinet outside width is exactly ${cabinetWidth} inches and its height is exactly ${cabinetHeight} inches. The visible outside-width divided by visible floor-to-top height must equal exactly ${silhouetteRatio.toFixed(5)}. Measure the output in pixels: if the cabinet is H pixels tall, its outside left-to-right silhouette must be H × ${silhouetteRatio.toFixed(5)} pixels wide. Do not use the nominal bay width as the outside width.`,
+    ...(towerSpecs || []).map((tower) => `The ${tower.width}-inch measurement is the clear nominal bay width between panels. Side panels add 1.5 inches to a single tower, so an ${tower.width}-inch single bay is ${Number(tower.width) + 1.5} inches wide outside. It must not resemble a different nominal width.`),
+    `TOE-KICK SCALE LOCK: the underside of the bottom shelf must be exactly 5 inches above the floor, exactly ${(5 / cabinetHeight * 100).toFixed(2)}% of the full cabinet height. In pixels, use H × ${(5 / cabinetHeight).toFixed(5)}. If the current base is about 8–10% tall, move the bottom shelf downward until the base is only ${(5 / cabinetHeight * 100).toFixed(2)}%. Preserve the solid recessed white kick board about 2 inches behind the front plane. The base is not a compartment.`,
+    ...geometryRules,
+    'Do not add or remove shelves, rods, drawers, panels, handles, hangers, or compartments. Do not stretch only part of the cabinet, change its height, crop it, or alter the room composition. Verify the outside ratio and toe-kick ratio numerically before output.',
   ].join('\n');
 }
 
@@ -1253,6 +1301,23 @@ function photoGenerationProxy(env) {
               });
               result = await response.json();
               imageBase64 = result.data?.[0]?.b64_json;
+
+              if (response.ok && imageBase64 && shot.scene === 'product') {
+                const productCorrectionForm = new FormData();
+                productCorrectionForm.append('model', 'gpt-image-2');
+                productCorrectionForm.append('image', new Blob([Buffer.from(imageBase64, 'base64')], { type: 'image/png' }), `${handle}-product-before-dimension-correction.png`);
+                productCorrectionForm.append('prompt', buildProductGeometryCorrectionPrompt(payload));
+                productCorrectionForm.append('size', outputSize);
+                productCorrectionForm.append('quality', outputQuality);
+                productCorrectionForm.append('output_format', 'png');
+                response = await fetch('https://api.openai.com/v1/images/edits', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${directOpenAiKey}` },
+                  body: productCorrectionForm,
+                });
+                result = await response.json();
+                imageBase64 = result.data?.[0]?.b64_json;
+              }
 
               if (response.ok && imageBase64 && useRealPhotoShelfMethod) {
                 const correctionForm = new FormData();

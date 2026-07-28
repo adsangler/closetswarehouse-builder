@@ -3993,7 +3993,7 @@ export default function App({ internalRenderer = false }) {
   }
 
   return (
-    <main className="app-shell bg-brand-ui text-brand-black">
+    <main className={`app-shell bg-brand-ui text-brand-black ${internalRenderer ? 'internal-renderer-shell' : ''}`}>
       <header className="app-header flex flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-0">
         <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">
           {internalRenderer ? 'Internal Image Renderer' : 'Reach-in Closet Planner'}
@@ -4203,37 +4203,39 @@ export default function App({ internalRenderer = false }) {
         </section>
       ) : (
         <section
-          className={`app-workspace ${photoMode ? '' : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]'}`}
+          className={`app-workspace renderer-workspace ${photoMode ? '' : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]'}`}
         >
           {photoMode && photoWorkspaceTab === 'generated' ? (
             <GeneratedPhotoGallery drawing={drawing} onSelectHandle={setSelectedHandle} refreshToken={photoGalleryVersion} />
           ) : (
-            <section className="relative h-full min-h-0 bg-white">
+            <section className="renderer-viewport relative h-full min-h-0 bg-white">
               {photoMode && (
                 <span className="absolute left-3 top-3 z-10 rounded bg-stone-950/80 px-3 py-1 text-xs font-bold text-white">
                   Ray-traced exact geometry · allow a few seconds to refine
                 </span>
               )}
-              <Canvas
-                key={`${viewMode}-${drawing.handle}`}
-                className="h-full w-full"
-                orthographic={rendererPhotoMode}
-                camera={camera}
-                dpr={[1, 2]}
-                gl={{ antialias: true, preserveDrawingBuffer: true }}
-                shadows
-                onCreated={({ gl }) => {
-                  gl.shadowMap.enabled = true;
-                  gl.shadowMap.type = PCFSoftShadowMap;
-                  gl.outputColorSpace = SRGBColorSpace;
-                  gl.toneMapping = ACESFilmicToneMapping;
-                  gl.toneMappingExposure = photoMode ? 0.95 : 1;
-                }}
-              >
-                {photoMode
-                  ? <PathTracedPhotoScene drawing={drawing} />
-                  : <RenderScene drawing={drawing} photoMode={false} />}
-              </Canvas>
+              <div className={photoMode ? 'renderer-canvas-frame' : 'h-full w-full'}>
+                <Canvas
+                  key={`${viewMode}-${drawing.handle}`}
+                  className="h-full w-full"
+                  orthographic={rendererPhotoMode}
+                  camera={camera}
+                  dpr={[1, 2]}
+                  gl={{ antialias: true, preserveDrawingBuffer: true }}
+                  shadows
+                  onCreated={({ gl }) => {
+                    gl.shadowMap.enabled = true;
+                    gl.shadowMap.type = PCFSoftShadowMap;
+                    gl.outputColorSpace = SRGBColorSpace;
+                    gl.toneMapping = ACESFilmicToneMapping;
+                    gl.toneMappingExposure = photoMode ? 0.95 : 1;
+                  }}
+                >
+                  {photoMode
+                    ? <PathTracedPhotoScene drawing={drawing} />
+                    : <RenderScene drawing={drawing} photoMode={false} />}
+                </Canvas>
+              </div>
             </section>
           )}
           {!photoMode && (
