@@ -3333,6 +3333,34 @@ function WalkInPlanner() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-base font-bold text-stone-950">Wall Configurations</h2>
             </div>
+            <div className="mb-3 rounded border border-orange-200 bg-orange-50 p-3">
+              <div className="text-xs font-bold uppercase text-stone-600">Return Wall Closets</div>
+              <p className="mt-1 text-xs font-semibold text-stone-600">Enable a return run here at any time, then choose whether the side or return wins the entrance corner.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => toggleReturnWall('leftReturn')}
+                  aria-pressed={enabledWalls.leftReturn}
+                  className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.leftReturn ? 'border-brand-orange bg-white text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
+                >
+                  {enabledWalls.leftReturn ? 'Remove left return wall closet' : 'Add left return wall closet'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleReturnWall('rightReturn')}
+                  aria-pressed={enabledWalls.rightReturn}
+                  className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.rightReturn ? 'border-brand-orange bg-white text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
+                >
+                  {enabledWalls.rightReturn ? 'Remove right return wall closet' : 'Add right return wall closet'}
+                </button>
+              </div>
+              {(enabledWalls.leftReturn || enabledWalls.rightReturn) && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {enabledWalls.leftReturn && <ReturnCornerToggle side="left" value={corners.entranceLeft} onChange={(value) => setCorners((current) => ({ ...current, entranceLeft: value }))} />}
+                  {enabledWalls.rightReturn && <ReturnCornerToggle side="right" value={corners.entranceRight} onChange={(value) => setCorners((current) => ({ ...current, entranceRight: value }))} />}
+                </div>
+              )}
+            </div>
             <div className="grid gap-3">
               {['back', 'left', 'right', ...(enabledWalls.leftReturn ? ['leftReturn'] : []), ...(enabledWalls.rightReturn ? ['rightReturn'] : [])].map((wall) => (
                 <WallRunEditor
