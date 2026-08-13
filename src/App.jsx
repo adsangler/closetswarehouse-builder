@@ -3488,7 +3488,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
   }
 
   return (
-    <main className="min-h-screen bg-brand-ui text-brand-black">
+    <main data-planner-build="h3d-30-v2" className="min-h-screen bg-brand-ui text-brand-black">
       <header className="flex min-h-16 flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-lg font-bold text-stone-950">Reach-in Closet Planner</h1>
@@ -3993,7 +3993,7 @@ export default function App({ internalRenderer = false }) {
   }
 
   return (
-    <main className={`app-shell bg-brand-ui text-brand-black ${internalRenderer ? 'internal-renderer-shell' : ''}`}>
+    <main data-planner-build="h3d-30-v2" className={`app-shell bg-brand-ui text-brand-black ${internalRenderer ? 'internal-renderer-shell' : ''}`}>
       <header className="app-header flex flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-0">
         <h1 className="hidden whitespace-nowrap text-base font-semibold leading-none sm:block">
           {internalRenderer ? 'Internal Image Renderer' : 'Reach-in Closet Planner'}
