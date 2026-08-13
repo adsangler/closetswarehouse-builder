@@ -683,7 +683,7 @@ function getReachInSupportedWidthOptions(modules, moduleIndex, widthOptions, hei
     return catalogWidthOptions;
   }
 
-  return widthOptions.filter((width) => {
+  const supportedWidthOptions = widthOptions.filter((width) => {
     const candidateModules = modules.map((module, index) => (index === moduleIndex ? { ...module, width } : module));
     const towerSpecs = candidateModules.map((module) => ({
       code: getPlannerCode(module.configCode || module.code, height),
@@ -697,6 +697,8 @@ function getReachInSupportedWidthOptions(modules, moduleIndex, widthOptions, hei
 
     return Boolean(productBySignature.get(signature) || appearsInLiveProduct || getLiveModuleProductCoverage(towerSpecs, productCatalog, height).missing.length === 0);
   });
+
+  return supportedWidthOptions.length > 0 ? supportedWidthOptions : widthOptions;
 }
 
 function shouldPreferProductCandidate(candidate, existing) {
