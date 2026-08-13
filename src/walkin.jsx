@@ -2012,7 +2012,11 @@ function WalkInRun3D({ wall, room, runs, corners, backWidth, maxDepth }) {
       ? getModuleSegments(runs.back, corners.backLeft === 'left' ? cornerStopDistance : 0)
       : wall === 'left'
         ? getModuleSegments(runs.left, corners.backLeft === 'back' ? cornerStopDistance : 0)
-        : getModuleSegments(runs.right, corners.backRight === 'back' ? cornerStopDistance : 0);
+        : wall === 'right'
+          ? getModuleSegments(runs.right, corners.backRight === 'back' ? cornerStopDistance : 0)
+          : wall === 'leftReturn'
+            ? getModuleSegments(runs.leftReturn || [], corners.entranceLeft === 'left' ? cornerStopDistance : 0)
+            : getModuleSegments(runs.rightReturn || [], corners.entranceRight === 'right' ? cornerStopDistance : 0);
   const centerX = backWidth / 2;
   const centerZ = maxDepth / 2;
 
@@ -2025,8 +2029,12 @@ function WalkInRun3D({ wall, room, runs, corners, backWidth, maxDepth }) {
             ? [centerAlongWall - centerX, 0, closetDepth / 2 - centerZ]
             : wall === 'left'
               ? [closetDepth / 2 - centerX, 0, centerAlongWall - centerZ]
-              : [backWidth - closetDepth / 2 - centerX, 0, centerAlongWall - centerZ];
-        const rotation = wall === 'back' ? [0, 0, 0] : wall === 'left' ? [0, Math.PI / 2, 0] : [0, -Math.PI / 2, 0];
+              : wall === 'right'
+                ? [backWidth - closetDepth / 2 - centerX, 0, centerAlongWall - centerZ]
+                : wall === 'leftReturn'
+                  ? [centerAlongWall - centerX, 0, numberValue(room.leftDepth) - closetDepth / 2 - centerZ]
+                  : [backWidth - centerAlongWall - centerX, 0, numberValue(room.rightDepth) - closetDepth / 2 - centerZ];
+        const rotation = wall === 'back' ? [0, 0, 0] : wall === 'left' ? [0, Math.PI / 2, 0] : wall === 'right' ? [0, -Math.PI / 2, 0] : [0, Math.PI, 0];
 
         return (
           <group key={`three-${wall}-${module.id}`} position={position} rotation={rotation}>
@@ -2069,6 +2077,8 @@ function WalkInRoom3D({ room, runs, corners }) {
       <WalkInRun3D wall="back" room={room} runs={runs} corners={corners} backWidth={backWidth} maxDepth={maxDepth} />
       <WalkInRun3D wall="left" room={room} runs={runs} corners={corners} backWidth={backWidth} maxDepth={maxDepth} />
       <WalkInRun3D wall="right" room={room} runs={runs} corners={corners} backWidth={backWidth} maxDepth={maxDepth} />
+      <WalkInRun3D wall="leftReturn" room={room} runs={runs} corners={corners} backWidth={backWidth} maxDepth={maxDepth} />
+      <WalkInRun3D wall="rightReturn" room={room} runs={runs} corners={corners} backWidth={backWidth} maxDepth={maxDepth} />
       <ContactShadows position={[0, 0.02, 2]} opacity={0.24} scale={120} blur={3.5} far={18} />
     </group>
   );
