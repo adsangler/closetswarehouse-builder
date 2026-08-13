@@ -884,7 +884,7 @@ function ReturnCornerToggle({ side, value, onChange }) {
   );
 }
 
-function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
+function WalkInRoomDiagram({ room, corners, enabledWalls, roomEvaluation }) {
   const backWidth = Math.max(1, numberValue(room.backWidth));
   const leftDepth = Math.max(1, numberValue(room.leftDepth));
   const rightDepth = Math.max(1, numberValue(room.rightDepth));
@@ -914,6 +914,18 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
   const backRightReach = corners.backRight === 'back'
     ? { x: backWidth - closetDepth, y: closetDepth, width: closetDepth, depth: cornerReachGap }
     : { x: backWidth - closetDepth - cornerReachGap, y: 0, width: cornerReachGap, depth: closetDepth };
+  const entranceReachZones = [
+    ...(enabledWalls?.leftReturn
+      ? [corners.entranceLeft === 'left'
+          ? { x: closetDepth, y: leftDepth - closetDepth, width: cornerReachGap, depth: closetDepth }
+          : { x: 0, y: leftDepth - closetDepth - cornerReachGap, width: closetDepth, depth: cornerReachGap }]
+      : []),
+    ...(enabledWalls?.rightReturn
+      ? [corners.entranceRight === 'right'
+          ? { x: backWidth - closetDepth - cornerReachGap, y: rightDepth - closetDepth, width: cornerReachGap, depth: closetDepth }
+          : { x: backWidth - closetDepth, y: rightDepth - closetDepth - cornerReachGap, width: closetDepth, depth: cornerReachGap }]
+      : []),
+  ];
 
   const renderReachZone = (zone, id) => (
     <g key={id}>
@@ -949,7 +961,7 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
         <line x1={toX(openingStart)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
         {rightDepth < maxDepth && <line x1={toX(openingEnd)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(rightDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
         {backWidth - openingEnd > 0 && <line x1={toX(openingEnd)} y1={toY(rightDepth)} x2={toX(backWidth)} y2={toY(rightDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
-        {[backLeftReach, backRightReach].map(renderReachZone)}
+        {[backLeftReach, backRightReach, ...entranceReachZones].map(renderReachZone)}
         <text x={toX(backWidth / 2)} y={toY(0) - 14} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold">
           Back wall {formatInches(backWidth)}
         </text>
@@ -1019,7 +1031,7 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, enabledWalls, onT
         <div className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid gap-4">
             <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} enabledWalls={enabledWalls} onToggleWall={onToggleWall} />
-            <WalkInRoomDiagram room={room} corners={corners} roomEvaluation={roomEvaluation} />
+            <WalkInRoomDiagram room={room} corners={corners} enabledWalls={enabledWalls} roomEvaluation={roomEvaluation} />
           </div>
           <aside className="rounded border border-stone-200 bg-white p-3">
             <h2 className="text-base font-bold text-stone-950">Step 2</h2>
