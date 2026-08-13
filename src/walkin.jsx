@@ -220,12 +220,18 @@ const wallLabels = {
   back: 'Back wall',
   left: 'Left wall',
   right: 'Right wall',
+  leftReturn: 'Left return wall',
+  rightReturn: 'Right return wall',
 };
+
+const planWalls = ['back', 'left', 'right', 'leftReturn', 'rightReturn'];
 
 const wallHeightKeys = {
   back: 'backHeight',
   left: 'leftHeight',
   right: 'rightHeight',
+  leftReturn: 'leftHeight',
+  rightReturn: 'rightHeight',
 };
 
 function uid() {
@@ -509,8 +515,10 @@ function getUsableLengths(room, corners) {
 
   return {
     back: Math.max(0, backWidth - (corners.backLeft === 'left' ? cornerStopDistance : 0) - (corners.backRight === 'right' ? cornerStopDistance : 0)),
-    left: Math.max(0, leftDepth - (corners.backLeft === 'back' ? cornerStopDistance : 0)),
-    right: Math.max(0, rightDepth - (corners.backRight === 'back' ? cornerStopDistance : 0)),
+    left: Math.max(0, leftDepth - (corners.backLeft === 'back' ? cornerStopDistance : 0) - (corners.entranceLeft === 'leftReturn' ? cornerStopDistance : 0)),
+    right: Math.max(0, rightDepth - (corners.backRight === 'back' ? cornerStopDistance : 0) - (corners.entranceRight === 'rightReturn' ? cornerStopDistance : 0)),
+    leftReturn: Math.max(0, numberValue(room.openingLeft) - (corners.entranceLeft === 'left' ? cornerStopDistance : 0)),
+    rightReturn: Math.max(0, numberValue(room.openingRight) - (corners.entranceRight === 'right' ? cornerStopDistance : 0)),
   };
 }
 
@@ -566,12 +574,14 @@ function evaluatePlan(room, corners, runs) {
   const openingLeft = numberValue(room.openingLeft);
   const openingRight = numberValue(room.openingRight);
   const ceilingHeight = numberValue(room.ceilingHeight);
-  const selectedHeights = ['back', 'left', 'right'].map((wall) => getWallHeight(room, wall));
+  const selectedHeights = planWalls.map((wall) => getWallHeight(room, wall));
   const usable = getUsableLengths(room, corners);
   const runLengths = {
     back: getRunLength(runs.back),
     left: getRunLength(runs.left),
     right: getRunLength(runs.right),
+    leftReturn: getRunLength(runs.leftReturn || []),
+    rightReturn: getRunLength(runs.rightReturn || []),
   };
   const warnings = [];
   const blocking = [];
@@ -597,12 +607,12 @@ function evaluatePlan(room, corners, runs) {
     blocking.push(`Room ceiling height ${formatInches(ceilingHeight)} must be higher than every selected closet height.`);
   }
 
-  if (openingLeft > 0 && openingLeft < closetDepth && runs.left.length > 0) {
-    blocking.push(`Left opening-side wall is only ${formatInches(openingLeft)}; keep at least ${formatInches(closetDepth)} so left-side units do not project into the entrance.`);
+  if (openingLeft > 0 && openingLeft < closetDepth && (runs.leftReturn || []).length > 0) {
+    blocking.push(`Left return wall is only ${formatInches(openingLeft)}; keep at least ${formatInches(closetDepth)} for a return-wall closet.`);
   }
 
-  if (openingRight > 0 && openingRight < closetDepth && runs.right.length > 0) {
-    blocking.push(`Right opening-side wall is only ${formatInches(openingRight)}; keep at least ${formatInches(closetDepth)} so right-side units do not project into the entrance.`);
+  if (openingRight > 0 && openingRight < closetDepth && (runs.rightReturn || []).length > 0) {
+    blocking.push(`Right return wall is only ${formatInches(openingRight)}; keep at least ${formatInches(closetDepth)} for a return-wall closet.`);
   }
 
   Object.entries(runLengths).forEach(([wall, length]) => {
@@ -623,7 +633,7 @@ function evaluatePlan(room, corners, runs) {
 
   getWalkInDrawerWarnings(room, corners, runs).forEach((warning) => warnings.push(warning));
 
-  if (runLengths.back === 0 && runLengths.left === 0 && runLengths.right === 0) {
+  if (Object.values(runLengths).every((length) => length === 0)) {
     blocking.push('Add at least one tower to the design.');
   }
 
@@ -749,6 +759,17 @@ function RoomSetup({ room, setRoom, corners, setCorners, enabledWalls, onToggleW
       </div>
 
       <div className="mt-4 grid gap-2">
+        <div>
+          <h3 className="text-xs font-bold uppercase text-stone-500">Back Corner Choice</h3>
+          <p className="mt-1 text-sm font-semibold text-stone-600">Choose whether the back run or side run wins each back corner.</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <CornerToggle label="Back-left corner" value={corners.backLeft} sideLabel="Left wall continues" onChange={(value) => updateCorner('backLeft', value)} sideValue="left" />
+          <CornerToggle label="Back-right corner" value={corners.backRight} sideLabel="Right wall continues" onChange={(value) => updateCorner('backRight', value)} sideValue="right" />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2">
         <h3 className="text-xs font-bold uppercase text-stone-500">Closet System Height</h3>
         {numberValue(room.ceilingHeight) <= Math.max(...['back', 'left', 'right'].map((wall) => getWallHeight(room, wall))) && (
           <div className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
@@ -786,36 +807,24 @@ function RoomSetup({ room, setRoom, corners, setCorners, enabledWalls, onToggleW
         <div className="grid gap-2 sm:grid-cols-2">
           <button
             type="button"
-            onClick={() => onToggleWall('left')}
-            aria-pressed={enabledWalls.left}
-            className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.left ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
+            onClick={() => onToggleWall('leftReturn')}
+            aria-pressed={enabledWalls.leftReturn}
+            className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.leftReturn ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
           >
-            {enabledWalls.left ? 'Remove left return wall closet' : 'Add left return wall closet'}
+            {enabledWalls.leftReturn ? 'Remove left return wall closet' : 'Add left return wall closet'}
           </button>
           <button
             type="button"
-            onClick={() => onToggleWall('right')}
-            aria-pressed={enabledWalls.right}
-            className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.right ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
+            onClick={() => onToggleWall('rightReturn')}
+            aria-pressed={enabledWalls.rightReturn}
+            className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.rightReturn ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
           >
-            {enabledWalls.right ? 'Remove right return wall closet' : 'Add right return wall closet'}
+            {enabledWalls.rightReturn ? 'Remove right return wall closet' : 'Add right return wall closet'}
           </button>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          {enabledWalls.left && <CornerToggle
-            label="Back-left corner"
-            value={corners.backLeft}
-            sideLabel="Left wall continues"
-            onChange={(value) => updateCorner('backLeft', value)}
-            sideValue="left"
-          />}
-          {enabledWalls.right && <CornerToggle
-            label="Back-right corner"
-            value={corners.backRight}
-            sideLabel="Right wall continues"
-            onChange={(value) => updateCorner('backRight', value)}
-            sideValue="right"
-          />}
+          {enabledWalls.leftReturn && <ReturnCornerToggle side="left" value={corners.entranceLeft} onChange={(value) => updateCorner('entranceLeft', value)} />}
+          {enabledWalls.rightReturn && <ReturnCornerToggle side="right" value={corners.entranceRight} onChange={(value) => updateCorner('entranceRight', value)} />}
         </div>
       </div>
     </section>
@@ -850,6 +859,27 @@ function CornerToggle({ label, value, onChange, sideLabel, sideValue }) {
       <div className="mt-2 rounded bg-white px-2 py-1.5 text-xs font-semibold text-stone-600">
         {selectedText}
       </div>
+    </div>
+  );
+}
+
+function ReturnCornerToggle({ side, value, onChange }) {
+  const sideWallValue = side;
+  const returnValue = `${side}Return`;
+  const sideName = side === 'left' ? 'Left' : 'Right';
+  const sideSelected = value !== returnValue;
+
+  return (
+    <div className="rounded border border-stone-200 bg-stone-50 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-bold text-stone-700">{sideName} entrance corner</div>
+        <span className="rounded bg-white px-2 py-1 text-[11px] font-bold text-stone-500">Additional 14" x 12" reach zone</span>
+      </div>
+      <div className="grid grid-cols-2 rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
+        <button type="button" onClick={() => onChange(sideWallValue)} className={`rounded px-2 py-1.5 ${sideSelected ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}>{sideName} side wins</button>
+        <button type="button" onClick={() => onChange(returnValue)} className={`rounded px-2 py-1.5 ${!sideSelected ? 'bg-brand-orange text-white' : 'text-stone-600 hover:bg-stone-100'}`}>{sideName} return wins</button>
+      </div>
+      <div className="mt-2 rounded bg-white px-2 py-1.5 text-xs font-semibold text-stone-600">{sideSelected ? `${sideName} side continues; return stops short.` : `${sideName} return continues; side stops short.`}</div>
     </div>
   );
 }
@@ -1302,14 +1332,19 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, gra
       <div className="min-h-[128px] min-w-0 rounded border border-dashed border-stone-300 bg-stone-50 p-2 pr-4 sm:pr-2">
         {modules.length === 0 ? (
           <div className="flex h-[108px] items-stretch gap-2">
-            {(grayBefore > 0 || grayAfter > 0) && (
+            {grayBefore > 0 && (
               <div className="grid min-w-[92px] place-items-center rounded border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
-                Corner reach<br />{formatInches(grayBefore || grayAfter)}
+                Corner reach<br />{formatInches(grayBefore)}
               </div>
             )}
             <div className="grid flex-1 place-items-center text-center text-sm font-semibold text-stone-500">
               Choose a configuration above to start this wall.
             </div>
+            {grayAfter > 0 && (
+              <div className="grid min-w-[92px] place-items-center rounded border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
+                Corner reach<br />{formatInches(grayAfter)}
+              </div>
+            )}
           </div>
         ) : (
           <div className="min-w-0 overflow-x-auto pr-2">
@@ -1716,6 +1751,10 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
   const backSegments = getModuleSegments(runs.back, backStart);
   const leftSegments = getModuleSegments(runs.left, leftStart);
   const rightSegments = getModuleSegments(runs.right, rightStart);
+  const leftReturnStart = corners.entranceLeft === 'left' ? cornerStopDistance : 0;
+  const rightReturnStart = corners.entranceRight === 'right' ? cornerStopDistance : 0;
+  const leftReturnSegments = getModuleSegments(runs.leftReturn || [], leftReturnStart);
+  const rightReturnSegments = getModuleSegments(runs.rightReturn || [], rightReturnStart);
   const reachZones = [
     corners.backLeft === 'back'
       ? { id: 'left-corner-reach', x: 0, y: closetDepth, width: closetDepth, height: cornerReachGap, labelX: closetDepth / 2, labelY: closetDepth + cornerReachGap / 2 }
@@ -1740,6 +1779,16 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
           labelY: closetDepth / 2,
         },
   ];
+  if ((runs.leftReturn || []).length > 0) {
+    reachZones.push(corners.entranceLeft === 'left'
+      ? { id: 'left-return-reach', x: closetDepth, y: leftDepth - closetDepth, width: cornerReachGap, height: closetDepth, labelX: closetDepth + cornerReachGap / 2, labelY: leftDepth - closetDepth / 2 }
+      : { id: 'left-side-entrance-reach', x: 0, y: leftDepth - closetDepth - cornerReachGap, width: closetDepth, height: cornerReachGap, labelX: closetDepth / 2, labelY: leftDepth - closetDepth - cornerReachGap / 2 });
+  }
+  if ((runs.rightReturn || []).length > 0) {
+    reachZones.push(corners.entranceRight === 'right'
+      ? { id: 'right-return-reach', x: backWidth - closetDepth - cornerReachGap, y: rightDepth - closetDepth, width: cornerReachGap, height: closetDepth, labelX: backWidth - closetDepth - cornerReachGap / 2, labelY: rightDepth - closetDepth / 2 }
+      : { id: 'right-side-entrance-reach', x: backWidth - closetDepth, y: rightDepth - closetDepth - cornerReachGap, width: closetDepth, height: cornerReachGap, labelX: backWidth - closetDepth / 2, labelY: rightDepth - closetDepth - cornerReachGap / 2 });
+  }
 
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
@@ -1787,8 +1836,20 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
             </text>
           </g>
         ))}
+        {leftReturnSegments.map(({ module, start, length, center }, index) => (
+          <g key={`left-return-segment-${module.id}`}>
+            <rect x={toX(start)} y={toY(leftDepth - closetDepth)} width={length * scale} height={closetDepth * scale} className={index % 2 ? 'fill-orange-200 stroke-orange-800' : 'fill-orange-100 stroke-orange-800'} />
+            <text x={toX(center)} y={toY(leftDepth - closetDepth / 2) + 4} textAnchor="middle" className="fill-stone-900 text-[11px] font-bold">{formatInches(module.width)}</text>
+          </g>
+        ))}
+        {rightReturnSegments.map(({ module, start, length, center }, index) => (
+          <g key={`right-return-segment-${module.id}`}>
+            <rect x={toX(backWidth - start - length)} y={toY(rightDepth - closetDepth)} width={length * scale} height={closetDepth * scale} className={index % 2 ? 'fill-orange-200 stroke-orange-800' : 'fill-orange-100 stroke-orange-800'} />
+            <text x={toX(backWidth - center)} y={toY(rightDepth - closetDepth / 2) + 4} textAnchor="middle" className="fill-stone-900 text-[11px] font-bold">{formatInches(module.width)}</text>
+          </g>
+        ))}
 
-        {runs.back.length > 0 && reachZones.map((zone) => (
+        {reachZones.filter((zone) => runs.back.length > 0 || zone.id.includes('return') || zone.id.includes('entrance')).map((zone) => (
           <g key={zone.id}>
             <rect
               x={toX(zone.x)}
@@ -2510,7 +2571,7 @@ function buildDetailedWalkInParts(room, runs) {
   let adjustableShelfCount = 0;
   let rodCount = 0;
 
-  ['back', 'left', 'right'].forEach((wall) => {
+  planWalls.forEach((wall) => {
     const modules = runs[wall] || [];
     const height = getWallHeight(room, wall);
 
@@ -2828,7 +2889,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
             <section className="rounded border border-stone-200 bg-white p-4">
               <h2 className="text-base font-bold text-stone-950">Configurations</h2>
               <div className="mt-2 grid gap-2 text-sm font-semibold text-stone-700">
-                {['back', 'left', 'right'].map((wall) => (
+                {planWalls.map((wall) => (
                   <div key={wall} className="rounded bg-stone-50 px-2 py-1.5">
                     <div className="font-bold text-stone-950">{wallLabels[wall]}</div>
                     <div>{runs[wall].length ? runs[wall].map((module) => `${getWalkInLayoutCode(module, getWallHeight(room, wall))} ${module.width}"`).join(', ') : '-'}</div>
@@ -3022,17 +3083,20 @@ function WalkInPlanner() {
     rightHeight: 96,
   };
   const [room, setRoom] = useState({ ...defaultRoom, ...(requestedPlan?.room || {}) });
-  const [corners, setCorners] = useState(requestedPlan?.corners || { backLeft: 'back', backRight: 'back' });
+  const [corners, setCorners] = useState({ backLeft: 'back', backRight: 'back', entranceLeft: 'left', entranceRight: 'right', ...(requestedPlan?.corners || {}) });
   const [viewMode, setViewMode] = useState('plan');
   const [roomCaptured, setRoomCaptured] = useState(Boolean(requestedPlan));
-  const [runs, setRuns] = useState(requestedPlan?.runs || {
+  const [runs, setRuns] = useState({
     back: [],
     left: [],
     right: [],
+    leftReturn: [],
+    rightReturn: [],
+    ...(requestedPlan?.runs || {}),
   });
   const [enabledWalls, setEnabledWalls] = useState({
-    left: Boolean(requestedPlan?.runs?.left?.length),
-    right: Boolean(requestedPlan?.runs?.right?.length),
+    leftReturn: Boolean(requestedPlan?.runs?.leftReturn?.length),
+    rightReturn: Boolean(requestedPlan?.runs?.rightReturn?.length),
   });
   const [productCatalog, setProductCatalog] = useState([]);
   const [catalogReady, setCatalogReady] = useState(false);
@@ -3051,7 +3115,7 @@ function WalkInPlanner() {
     return map;
   }, [productCatalog]);
   const pricing = useMemo(() => {
-    const wallSummaries = ['back', 'left', 'right'].map((wall) => {
+    const wallSummaries = planWalls.map((wall) => {
       const modules = runs[wall] || [];
       const height = getWallHeight(room, wall);
       const towerSpecs = getWallTowerSpecs(room, wall, modules);
@@ -3139,7 +3203,7 @@ function WalkInPlanner() {
   }
 
   const addModule = (code, wall = 'back') => {
-    if (wall !== 'back') {
+    if (wall === 'leftReturn' || wall === 'rightReturn') {
       setEnabledWalls((current) => ({ ...current, [wall]: true }));
     }
     setRuns((current) => ({
@@ -3152,6 +3216,10 @@ function WalkInPlanner() {
     setEnabledWalls((current) => ({ ...current, [wall]: !current[wall] }));
     if (enabledWalls[wall]) {
       setRuns((current) => ({ ...current, [wall]: [] }));
+      setCorners((current) => ({
+        ...current,
+        ...(wall === 'leftReturn' ? { entranceLeft: 'left' } : { entranceRight: 'right' }),
+      }));
     }
   };
 
@@ -3254,21 +3322,26 @@ function WalkInPlanner() {
               <h2 className="text-base font-bold text-stone-950">Wall Configurations</h2>
             </div>
             <div className="grid gap-3">
-              {['back', 'left', 'right'].map((wall) => (
+              {['back', 'left', 'right', ...(enabledWalls.leftReturn ? ['leftReturn'] : []), ...(enabledWalls.rightReturn ? ['rightReturn'] : [])].map((wall) => (
                 <WallRunEditor
                   key={wall}
                   wall={wall}
                   wallHeight={getWallHeight(room, wall)}
                   usableLength={evaluation.usable[wall]}
-                  rawLength={wall === 'back' ? room.backWidth : wall === 'left' ? room.leftDepth : room.rightDepth}
+                  rawLength={wall === 'back' ? room.backWidth : wall === 'left' ? room.leftDepth : wall === 'right' ? room.rightDepth : wall === 'leftReturn' ? room.openingLeft : room.openingRight}
                   modules={runs[wall]}
                   grayBefore={
-                    runs.back.length === 0 ? 0
-                      : wall === 'back' ? (corners.backLeft === 'left' ? cornerStopDistance : 0)
-                        : wall === 'left' ? (corners.backLeft === 'back' ? cornerStopDistance : 0)
-                          : (corners.backRight === 'back' ? cornerStopDistance : 0)
+                    wall === 'back' && runs.back.length > 0 && corners.backLeft === 'left' ? cornerStopDistance
+                      : wall === 'left' && runs.back.length > 0 && corners.backLeft === 'back' ? cornerStopDistance
+                        : wall === 'right' && runs.back.length > 0 && corners.backRight === 'back' ? cornerStopDistance
+                          : wall === 'leftReturn' && runs.leftReturn.length > 0 && corners.entranceLeft === 'left' ? cornerStopDistance
+                            : wall === 'rightReturn' && runs.rightReturn.length > 0 && corners.entranceRight === 'right' ? cornerStopDistance : 0
                   }
-                  grayAfter={runs.back.length > 0 && wall === 'back' && corners.backRight === 'right' ? cornerStopDistance : 0}
+                  grayAfter={
+                    runs.back.length > 0 && wall === 'back' && corners.backRight === 'right' ? cornerStopDistance
+                      : wall === 'left' && runs.leftReturn.length > 0 && corners.entranceLeft === 'leftReturn' ? cornerStopDistance
+                        : wall === 'right' && runs.rightReturn.length > 0 && corners.entranceRight === 'rightReturn' ? cornerStopDistance : 0
+                  }
                   onAdd={addModule}
                   onDropModule={addModule}
                   onRemove={removeModule}
