@@ -675,7 +675,7 @@ function evaluateRoomStep(room) {
   };
 }
 
-function RoomSetup({ room, setRoom, corners, setCorners }) {
+function RoomSetup({ room, setRoom, corners, setCorners, enabledWalls, onToggleWall }) {
   const getOpeningRemaining = (nextRoom) =>
     Math.max(0, (Number(nextRoom.backWidth) || 0) - (Number(nextRoom.openingWidth) || 0));
 
@@ -778,26 +778,44 @@ function RoomSetup({ room, setRoom, corners, setCorners }) {
 
       <div className="mt-4 grid gap-2">
         <div>
-          <h3 className="text-xs font-bold uppercase text-stone-500">Corner Run Choice</h3>
+          <h3 className="text-xs font-bold uppercase text-stone-500">Return Wall Closets</h3>
           <p className="mt-1 text-sm font-semibold text-stone-600">
-            At each back corner, choose which wall gets the full closet run into the corner. The other wall stops short to leave the gray reach zone.
+            Add either return-wall closet, then choose which run wins that inside corner. The losing run keeps 26" clear: 14" cabinet depth plus a 12" reach zone.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          <CornerToggle
+          <button
+            type="button"
+            onClick={() => onToggleWall('left')}
+            aria-pressed={enabledWalls.left}
+            className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.left ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
+          >
+            {enabledWalls.left ? 'Remove left return wall closet' : 'Add left return wall closet'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleWall('right')}
+            aria-pressed={enabledWalls.right}
+            className={`rounded border px-3 py-2 text-sm font-bold ${enabledWalls.right ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-stone-300 bg-white text-stone-700'}`}
+          >
+            {enabledWalls.right ? 'Remove right return wall closet' : 'Add right return wall closet'}
+          </button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {enabledWalls.left && <CornerToggle
             label="Back-left corner"
             value={corners.backLeft}
             sideLabel="Left wall continues"
             onChange={(value) => updateCorner('backLeft', value)}
             sideValue="left"
-          />
-          <CornerToggle
+          />}
+          {enabledWalls.right && <CornerToggle
             label="Back-right corner"
             value={corners.backRight}
             sideLabel="Right wall continues"
             onChange={(value) => updateCorner('backRight', value)}
             sideValue="right"
-          />
+          />}
         </div>
       </div>
     </section>
@@ -945,7 +963,7 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
   );
 }
 
-function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, onContinue }) {
+function RoomCaptureStep({ room, setRoom, corners, setCorners, enabledWalls, onToggleWall, roomEvaluation, onContinue }) {
   return (
     <main className="app-shell bg-brand-ui text-brand-black">
       <header className="app-header flex flex-col items-stretch justify-center gap-2 border-b border-stone-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:py-0">
@@ -961,7 +979,7 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, roomEvaluation, o
       <section className="app-workspace w-full">
         <div className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid gap-4">
-            <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} />
+            <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} enabledWalls={enabledWalls} onToggleWall={onToggleWall} />
             <WalkInRoomDiagram room={room} corners={corners} roomEvaluation={roomEvaluation} />
           </div>
           <aside className="rounded border border-stone-200 bg-white p-3">
@@ -1218,7 +1236,6 @@ function TowerConfigIcon({ code }) {
 }
 
 function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange, productBySignature, productCatalog, isCatalogReady }) {
-  const [showPicker, setShowPicker] = useState(false);
   const moveLabels =
     wall === 'back'
       ? { previous: '<', next: '>', previousTitle: 'Move left', nextTitle: 'Move right' }
@@ -1228,10 +1245,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
   const graySpaceLength = Math.max(0, numberValue(rawLength) - availableLength);
   const usageText = `${formatInches(runLength)} of ${formatInches(availableLength)} closet space`;
   const exceedsLength = runLength > availableLength + 0.01;
-  const addConfiguration = (code) => {
-    onAdd(code, wall);
-    setShowPicker(false);
-  };
+  const addConfiguration = (code) => onAdd(code, wall);
 
   return (
     <section
@@ -1252,17 +1266,6 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
             {modules.length ? `${modules.length} tower${modules.length === 1 ? '' : 's'}` : '0 towers'} / {usageText}
           </span>
         </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowPicker((current) => !current)}
-            aria-expanded={showPicker}
-            title={`Add configuration to ${wallLabels[wall]}`}
-            className="grid h-9 w-9 place-items-center rounded bg-brand-orange text-xl font-bold leading-none text-white transition hover:bg-orange-700"
-          >
-            +
-          </button>
-        </div>
       </div>
       {exceedsLength && (
         <div className="mb-3 rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
@@ -1270,36 +1273,27 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
         </div>
       )}
 
-      {showPicker && (
-        <div className="mb-3 grid grid-cols-4 gap-2 rounded border border-orange-200 bg-orange-50 p-2 sm:grid-cols-7">
-          {moduleConfigs.map((config) => (
-            <button
-              key={config.code}
-              type="button"
-              onClick={() => addConfiguration(config.code)}
-              aria-label={`Add ${config.label} to ${wallLabels[wall]}`}
-              title={`${config.label} - ${config.defaultWidth}" default bay`}
-              className="relative grid min-h-[88px] place-items-center rounded border border-stone-200 bg-white px-2 py-2 transition hover:border-brand-orange hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange"
-            >
-              <TowerConfigIcon code={config.code} />
-              <span className="sr-only">{config.label}</span>
-              <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded bg-orange-50 text-xs font-bold leading-none text-brand-orange">+</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="mb-3 grid grid-cols-4 gap-2 rounded border border-orange-200 bg-orange-50 p-2 sm:grid-cols-7">
+        {moduleConfigs.map((config) => (
+          <button
+            key={config.code}
+            type="button"
+            onClick={() => addConfiguration(config.code)}
+            aria-label={`Add ${config.label} to ${wallLabels[wall]}`}
+            title={`${config.label} - ${config.defaultWidth}" default bay`}
+            className="relative grid min-h-[88px] place-items-center rounded border border-stone-200 bg-white px-2 py-2 transition hover:border-brand-orange hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange"
+          >
+            <TowerConfigIcon code={config.code} />
+            <span className="sr-only">{config.label}</span>
+            <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded bg-orange-50 text-xs font-bold leading-none text-brand-orange">+</span>
+          </button>
+        ))}
+      </div>
 
       <div className="min-h-[128px] min-w-0 rounded border border-dashed border-stone-300 bg-stone-50 p-2 pr-4 sm:pr-2">
         {modules.length === 0 ? (
-          <div className="grid h-[108px] place-items-center text-center">
-            <button
-              type="button"
-              onClick={() => setShowPicker(true)}
-              className="inline-flex items-center gap-2 rounded border border-stone-300 bg-white px-3 py-2 text-sm font-bold text-stone-700 transition hover:border-brand-orange hover:text-brand-orange"
-            >
-              <span className="grid h-6 w-6 place-items-center rounded bg-orange-50 text-base leading-none text-brand-orange">+</span>
-              Add configuration
-            </button>
+          <div className="grid h-[108px] place-items-center text-center text-sm font-semibold text-stone-500">
+            Choose a configuration above to start this wall.
           </div>
         ) : (
           <div className="min-w-0 overflow-x-auto pr-2">
@@ -3007,6 +3001,10 @@ function WalkInPlanner() {
     left: [],
     right: [],
   });
+  const [enabledWalls, setEnabledWalls] = useState({
+    left: Boolean(requestedPlan?.runs?.left?.length),
+    right: Boolean(requestedPlan?.runs?.right?.length),
+  });
   const [productCatalog, setProductCatalog] = useState([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const evaluation = useMemo(() => evaluatePlan(room, corners, runs), [room, corners, runs]);
@@ -3112,10 +3110,20 @@ function WalkInPlanner() {
   }
 
   const addModule = (code, wall = 'back') => {
+    if (wall !== 'back') {
+      setEnabledWalls((current) => ({ ...current, [wall]: true }));
+    }
     setRuns((current) => ({
       ...current,
       [wall]: [...current[wall], createModule(code)],
     }));
+  };
+
+  const toggleReturnWall = (wall) => {
+    setEnabledWalls((current) => ({ ...current, [wall]: !current[wall] }));
+    if (enabledWalls[wall]) {
+      setRuns((current) => ({ ...current, [wall]: [] }));
+    }
   };
 
   const removeModule = (wall, id) => {
@@ -3167,6 +3175,8 @@ function WalkInPlanner() {
         setRoom={setRoom}
         corners={corners}
         setCorners={setCorners}
+        enabledWalls={enabledWalls}
+        onToggleWall={toggleReturnWall}
         roomEvaluation={roomEvaluation}
         onContinue={() => setRoomCaptured(true)}
       />
@@ -3215,7 +3225,7 @@ function WalkInPlanner() {
               <h2 className="text-base font-bold text-stone-950">Wall Configurations</h2>
             </div>
             <div className="grid gap-3">
-              {['back', 'left', 'right'].map((wall) => (
+              {['back', ...(enabledWalls.left ? ['left'] : []), ...(enabledWalls.right ? ['right'] : [])].map((wall) => (
                 <WallRunEditor
                   key={wall}
                   wall={wall}
