@@ -218,7 +218,7 @@ function getPlannerCode(configCode, height) {
 }
 
 function getWidthOptions(configCode) {
-  return ['SHELF', 'LH', 'DH', 'HS'].includes(configCode) ? [18, 24, 30] : [24];
+  return ['SHELF', 'LH', 'DH', 'HS'].includes(configCode) ? [18, 24, 30] : [24, 30];
 }
 
 function createPlannerModule(configCode, height, width = null) {
