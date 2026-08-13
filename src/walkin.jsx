@@ -1244,7 +1244,7 @@ function TowerConfigIcon({ code }) {
   );
 }
 
-function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onAdd, onDropModule, onRemove, onMove, onWidthChange, productBySignature, productCatalog, isCatalogReady }) {
+function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, grayBefore = 0, grayAfter = 0, onAdd, onDropModule, onRemove, onMove, onWidthChange, productBySignature, productCatalog, isCatalogReady }) {
   const moveLabels =
     wall === 'back'
       ? { previous: '<', next: '>', previousTitle: 'Move left', nextTitle: 'Move right' }
@@ -1301,8 +1301,15 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
 
       <div className="min-h-[128px] min-w-0 rounded border border-dashed border-stone-300 bg-stone-50 p-2 pr-4 sm:pr-2">
         {modules.length === 0 ? (
-          <div className="grid h-[108px] place-items-center text-center text-sm font-semibold text-stone-500">
-            Choose a configuration above to start this wall.
+          <div className="flex h-[108px] items-stretch gap-2">
+            {(grayBefore > 0 || grayAfter > 0) && (
+              <div className="grid min-w-[92px] place-items-center rounded border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
+                Corner reach<br />{formatInches(grayBefore || grayAfter)}
+              </div>
+            )}
+            <div className="grid flex-1 place-items-center text-center text-sm font-semibold text-stone-500">
+              Choose a configuration above to start this wall.
+            </div>
           </div>
         ) : (
           <div className="min-w-0 overflow-x-auto pr-2">
@@ -1340,6 +1347,11 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
               })}
             </div>
             <div className="flex min-h-[126px] items-stretch">
+              {grayBefore > 0 && (
+                <div className="grid min-w-[92px] place-items-center rounded-l border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
+                  Corner reach<br />{formatInches(grayBefore)}
+                </div>
+              )}
               {modules.map((module, index) => {
                 const visualWidth = Math.max(86, numberValue(module.width) * 4.2);
                 const widthOptions = getWalkInWidthOptions(module.code);
@@ -1384,6 +1396,11 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, onA
                   </div>
                 );
               })}
+              {grayAfter > 0 && (
+                <div className="grid min-w-[92px] place-items-center rounded-r border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
+                  Corner reach<br />{formatInches(grayAfter)}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1771,7 +1788,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
           </g>
         ))}
 
-        {reachZones.map((zone) => (
+        {runs.back.length > 0 && reachZones.map((zone) => (
           <g key={zone.id}>
             <rect
               x={toX(zone.x)}
@@ -2339,7 +2356,7 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
           strokeWidth="1"
         />
 
-        {reachZones.map(renderFloorRect)}
+        {runs.back.length > 0 && reachZones.map(renderFloorRect)}
         {leftSegments.map(({ module, start, length }) =>
           renderCabinet({
             id: `left-3d-${module.id}`,
@@ -3245,6 +3262,13 @@ function WalkInPlanner() {
                   usableLength={evaluation.usable[wall]}
                   rawLength={wall === 'back' ? room.backWidth : wall === 'left' ? room.leftDepth : room.rightDepth}
                   modules={runs[wall]}
+                  grayBefore={
+                    runs.back.length === 0 ? 0
+                      : wall === 'back' ? (corners.backLeft === 'left' ? cornerStopDistance : 0)
+                        : wall === 'left' ? (corners.backLeft === 'back' ? cornerStopDistance : 0)
+                          : (corners.backRight === 'back' ? cornerStopDistance : 0)
+                  }
+                  grayAfter={runs.back.length > 0 && wall === 'back' && corners.backRight === 'right' ? cornerStopDistance : 0}
                   onAdd={addModule}
                   onDropModule={addModule}
                   onRemove={removeModule}
