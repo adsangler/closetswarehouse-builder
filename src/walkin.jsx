@@ -3225,7 +3225,7 @@ function WalkInPlanner() {
               <h2 className="text-base font-bold text-stone-950">Wall Configurations</h2>
             </div>
             <div className="grid gap-3">
-              {['back', ...(enabledWalls.left ? ['left'] : []), ...(enabledWalls.right ? ['right'] : [])].map((wall) => (
+              {['back', 'left', 'right'].map((wall) => (
                 <WallRunEditor
                   key={wall}
                   wall={wall}
