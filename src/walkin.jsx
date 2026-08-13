@@ -475,34 +475,7 @@ function getCatalogWidthOptionsForCode(targetCode, widthOptions, height, product
 }
 
 function getWalkInSupportedWidthOptions(modules, moduleIndex, widthOptions, height, productBySignature, productCatalog, isCatalogReady) {
-  if (!isCatalogReady) {
-    return widthOptions;
-  }
-
-  const targetModule = modules[moduleIndex];
-  const targetCode = getWalkInProductCode(targetModule, height);
-  const catalogWidthOptions = getCatalogWidthOptionsForCode(targetCode, widthOptions, height, productCatalog);
-
-  if (catalogWidthOptions.length > 0) {
-    return catalogWidthOptions;
-  }
-
-  const supportedWidthOptions = widthOptions.filter((width) => {
-    const candidateModules = modules.map((module, index) => (index === moduleIndex ? { ...module, width } : module));
-    const towerSpecs = candidateModules.map((module) => ({
-      code: getWalkInProductCode(module, height),
-      width: numberValue(module.width),
-    }));
-    const signature = buildMatchSignature(height, towerSpecs);
-    const appearsInLiveProduct = productCatalog.some((product) =>
-      product.height === height &&
-      product.towerSpecs.some((tower) => normalizeTowerCode(tower.code) === targetCode && numberValue(tower.width) === Number(width)),
-    );
-
-    return Boolean(productBySignature.get(signature) || appearsInLiveProduct || getLiveWallProductCoverage(candidateModules, height, productCatalog).missing.length === 0);
-  });
-
-  return supportedWidthOptions.length > 0 ? supportedWidthOptions : widthOptions;
+  return widthOptions;
 }
 
 function getWallHeight(room, wall) {

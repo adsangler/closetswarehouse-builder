@@ -671,34 +671,7 @@ function getCatalogWidthOptionsForCode(targetCode, widthOptions, height, product
 }
 
 function getReachInSupportedWidthOptions(modules, moduleIndex, widthOptions, height, productBySignature, productCatalog, isCatalogReady) {
-  if (!isCatalogReady) {
-    return widthOptions;
-  }
-
-  const targetModule = modules[moduleIndex];
-  const targetCode = getPlannerCode(targetModule.configCode || targetModule.code, height);
-  const catalogWidthOptions = getCatalogWidthOptionsForCode(targetCode, widthOptions, height, productCatalog);
-
-  if (catalogWidthOptions.length > 0) {
-    return catalogWidthOptions;
-  }
-
-  const supportedWidthOptions = widthOptions.filter((width) => {
-    const candidateModules = modules.map((module, index) => (index === moduleIndex ? { ...module, width } : module));
-    const towerSpecs = candidateModules.map((module) => ({
-      code: getPlannerCode(module.configCode || module.code, height),
-      width: Number(module.width),
-    }));
-    const signature = buildMatchSignature(height, towerSpecs);
-    const appearsInLiveProduct = productCatalog.some((product) =>
-      product.height === height &&
-      product.towerSpecs.some((tower) => normalizeTowerCode(tower.code) === targetCode && Number(tower.width) === Number(width)),
-    );
-
-    return Boolean(productBySignature.get(signature) || appearsInLiveProduct || getLiveModuleProductCoverage(towerSpecs, productCatalog, height).missing.length === 0);
-  });
-
-  return supportedWidthOptions.length > 0 ? supportedWidthOptions : widthOptions;
+  return widthOptions;
 }
 
 function shouldPreferProductCandidate(candidate, existing) {
@@ -1680,8 +1653,7 @@ function ModulePalette({ height, onAdd, productCatalog, isCatalogReady }) {
     <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
       {plannerConfigs.map((config) => {
         const code = getPlannerCode(config.code, height);
-        const catalogWidths = getCatalogWidthOptionsForCode(code, getWidthOptions(config.code), height, productCatalog);
-        const widthOptions = isCatalogReady && catalogWidths.length > 0 ? catalogWidths : getWidthOptions(config.code);
+        const widthOptions = getWidthOptions(config.code);
         const selectedWidth = widthOptions.includes(Number(selectedWidths[config.code])) ? Number(selectedWidths[config.code]) : widthOptions[0];
         const tooltip = `${config.title}: ${config.note}. Width choices: ${widthOptions.join(' / ')}".`;
 
