@@ -2513,6 +2513,22 @@ function ValidationPanel({ evaluation }) {
   );
 }
 
+function WallRunsSummary({ room, evaluation }) {
+  return (
+    <section className="rounded border border-stone-200 bg-white p-3">
+      <h2 className="text-base font-bold text-stone-950">Wall Run Dimensions</h2>
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        {Object.entries(evaluation.runLengths).map(([wall, length]) => (
+          <React.Fragment key={wall}>
+            <dt className="font-semibold text-stone-500">{wallLabels[wall]}</dt>
+            <dd className="text-right font-bold text-stone-950">{formatInches(length)} / {formatInches(getWallHeight(room, wall))}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 function buildWalkInMaterials(runs) {
   const allModules = Object.values(runs).flat();
 
@@ -2997,14 +3013,6 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
       <h2 className="text-base font-bold text-stone-950">Price & Next Step</h2>
-      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        {Object.entries(evaluation.runLengths).map(([wall, length]) => (
-          <React.Fragment key={wall}>
-            <dt className="font-semibold text-stone-500">{wallLabels[wall]}</dt>
-            <dd className="text-right font-bold text-stone-950">{formatInches(length)} / {formatInches(getWallHeight(room, wall))}</dd>
-          </React.Fragment>
-        ))}
-      </dl>
 
       {shouldShowProductLinks && (
         <div className="mt-3 rounded border border-emerald-200 bg-emerald-50 p-3">
@@ -3408,6 +3416,7 @@ function WalkInPlanner() {
         <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:border-l lg:border-t-0 lg:pr-3">
           <div className="space-y-3">
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
+            <WallRunsSummary room={room} evaluation={evaluation} />
             <ValidationPanel evaluation={evaluation} />
             <SummaryPanel room={room} corners={corners} runs={runs} evaluation={evaluation} pricing={pricing} isCatalogReady={catalogReady} />
           </div>
