@@ -487,7 +487,7 @@ function getWalkInSupportedWidthOptions(modules, moduleIndex, widthOptions, heig
     return catalogWidthOptions;
   }
 
-  return widthOptions.filter((width) => {
+  const supportedWidthOptions = widthOptions.filter((width) => {
     const candidateModules = modules.map((module, index) => (index === moduleIndex ? { ...module, width } : module));
     const towerSpecs = candidateModules.map((module) => ({
       code: getWalkInProductCode(module, height),
@@ -501,6 +501,8 @@ function getWalkInSupportedWidthOptions(modules, moduleIndex, widthOptions, heig
 
     return Boolean(productBySignature.get(signature) || appearsInLiveProduct || getLiveWallProductCoverage(candidateModules, height, productCatalog).missing.length === 0);
   });
+
+  return supportedWidthOptions.length > 0 ? supportedWidthOptions : widthOptions;
 }
 
 function getWallHeight(room, wall) {
