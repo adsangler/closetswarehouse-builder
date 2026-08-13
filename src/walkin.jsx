@@ -859,7 +859,6 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
   const leftDepth = Math.max(1, numberValue(room.leftDepth));
   const rightDepth = Math.max(1, numberValue(room.rightDepth));
   const maxDepth = Math.max(leftDepth, rightDepth);
-  const entranceDepth = Math.min(leftDepth, rightDepth);
   const openingWidth = Math.max(0, numberValue(room.openingWidth));
   const openingLeft = Math.max(0, numberValue(room.openingLeft));
   const openingRight = Math.max(0, numberValue(room.openingRight));
@@ -872,6 +871,13 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
   const scale = Math.min((viewWidth - padding * 2) / backWidth, (viewHeight - padding * 2) / maxDepth);
   const toX = (value) => padding + value * scale;
   const toY = (value) => padding + value * scale;
+  const roomOutline = [
+    [0, 0], [backWidth, 0], [backWidth, rightDepth], [openingEnd, rightDepth],
+    ...(rightDepth < maxDepth ? [[openingEnd, maxDepth]] : []),
+    [openingStart, maxDepth],
+    ...(leftDepth < maxDepth ? [[openingStart, leftDepth]] : []),
+    [0, leftDepth],
+  ].map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ');
   const backLeftReach = corners.backLeft === 'back'
     ? { x: 0, y: closetDepth, width: closetDepth, depth: cornerReachGap }
     : { x: closetDepth, y: 0, width: cornerReachGap, depth: closetDepth };
@@ -904,13 +910,15 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
         </span>
       </div>
       <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-[250px] w-full rounded bg-stone-50">
-        <rect x={toX(0)} y={toY(0)} width={backWidth * scale} height={entranceDepth * scale} className="fill-white stroke-stone-200" strokeWidth="1.5" />
+        <polygon points={roomOutline} className="fill-white stroke-stone-200" strokeWidth="1.5" />
         <rect x={toX(0)} y={toY(0) - wallPx / 2} width={backWidth * scale} height={wallPx} rx="1" className="fill-stone-600" />
         <rect x={toX(0) - wallPx / 2} y={toY(0)} width={wallPx} height={leftDepth * scale} rx="1" className="fill-stone-500" />
         <rect x={toX(backWidth) - wallPx / 2} y={toY(0)} width={wallPx} height={rightDepth * scale} rx="1" className="fill-stone-500" />
-        {openingStart > 0 && <line x1={toX(0)} y1={toY(entranceDepth)} x2={toX(openingStart)} y2={toY(entranceDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
-        {backWidth - openingEnd > 0 && <line x1={toX(openingEnd)} y1={toY(entranceDepth)} x2={toX(backWidth)} y2={toY(entranceDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
-        <line x1={toX(openingStart)} y1={toY(entranceDepth)} x2={toX(openingEnd)} y2={toY(entranceDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
+        {openingStart > 0 && <line x1={toX(0)} y1={toY(leftDepth)} x2={toX(openingStart)} y2={toY(leftDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
+        {leftDepth < maxDepth && <line x1={toX(openingStart)} y1={toY(leftDepth)} x2={toX(openingStart)} y2={toY(maxDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
+        <line x1={toX(openingStart)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
+        {rightDepth < maxDepth && <line x1={toX(openingEnd)} y1={toY(maxDepth)} x2={toX(openingEnd)} y2={toY(rightDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
+        {backWidth - openingEnd > 0 && <line x1={toX(openingEnd)} y1={toY(rightDepth)} x2={toX(backWidth)} y2={toY(rightDepth)} className="stroke-stone-500" strokeWidth={wallPx} strokeLinecap="round" />}
         {[backLeftReach, backRightReach].map(renderReachZone)}
         <text x={toX(backWidth / 2)} y={toY(0) - 14} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold">
           Back wall {formatInches(backWidth)}
@@ -921,16 +929,16 @@ function WalkInRoomDiagram({ room, corners, roomEvaluation }) {
         <text x={toX(backWidth) + 24} y={toY(rightDepth / 2)} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold" transform={`rotate(90 ${toX(backWidth) + 24} ${toY(rightDepth / 2)})`}>
           Right {formatInches(rightDepth)}
         </text>
-        <text x={toX(openingLeft + openingWidth / 2)} y={toY(entranceDepth) + 20} textAnchor="middle" className="fill-emerald-700 text-[13px] font-bold">
+        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-emerald-700 text-[13px] font-bold">
           Opening {formatInches(openingWidth)}
         </text>
         {openingLeft > 0 && (
-          <text x={toX(openingLeft / 2)} y={toY(entranceDepth) + 20} textAnchor="middle" className="fill-stone-500 text-[13px] font-bold">
+          <text x={toX(openingLeft / 2)} y={toY(leftDepth) + 20} textAnchor="middle" className="fill-stone-500 text-[13px] font-bold">
             L {formatInches(openingLeft)}
           </text>
         )}
         {openingRight > 0 && (
-          <text x={toX(openingEnd + openingRight / 2)} y={toY(entranceDepth) + 20} textAnchor="middle" className="fill-stone-500 text-[13px] font-bold">
+          <text x={toX(openingEnd + openingRight / 2)} y={toY(rightDepth) + 20} textAnchor="middle" className="fill-stone-500 text-[13px] font-bold">
             R {formatInches(openingRight)}
           </text>
         )}
@@ -1676,7 +1684,6 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
   const leftDepth = Math.max(1, numberValue(room.leftDepth));
   const rightDepth = Math.max(1, numberValue(room.rightDepth));
   const maxDepth = Math.max(leftDepth, rightDepth);
-  const entranceDepth = Math.min(leftDepth, rightDepth);
   const padding = 54;
   const viewWidth = 560;
   const viewHeight = 300;
@@ -1729,8 +1736,11 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
         <line x1={toX(0)} y1={toY(0)} x2={toX(backWidth)} y2={toY(0)} className="stroke-stone-900" strokeWidth="3" />
         <line x1={toX(0)} y1={toY(0)} x2={toX(0)} y2={toY(leftDepth)} className="stroke-stone-900" strokeWidth="3" />
         <line x1={toX(backWidth)} y1={toY(0)} x2={toX(backWidth)} y2={toY(rightDepth)} className="stroke-stone-900" strokeWidth="3" />
-        <line x1={toX(0)} y1={toY(entranceDepth)} x2={toX(openingLeft)} y2={toY(entranceDepth)} className="stroke-stone-400" strokeWidth="2" />
-        <line x1={toX(openingLeft + openingWidth)} y1={toY(entranceDepth)} x2={toX(backWidth)} y2={toY(entranceDepth)} className="stroke-stone-400" strokeWidth="2" />
+        <line x1={toX(0)} y1={toY(leftDepth)} x2={toX(openingLeft)} y2={toY(leftDepth)} className="stroke-stone-400" strokeWidth="2" />
+        {leftDepth < maxDepth && <line x1={toX(openingLeft)} y1={toY(leftDepth)} x2={toX(openingLeft)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" />}
+        <line x1={toX(openingLeft)} y1={toY(maxDepth)} x2={toX(openingLeft + openingWidth)} y2={toY(maxDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
+        {rightDepth < maxDepth && <line x1={toX(openingLeft + openingWidth)} y1={toY(maxDepth)} x2={toX(openingLeft + openingWidth)} y2={toY(rightDepth)} className="stroke-stone-400" strokeWidth="2" />}
+        <line x1={toX(openingLeft + openingWidth)} y1={toY(rightDepth)} x2={toX(backWidth)} y2={toY(rightDepth)} className="stroke-stone-400" strokeWidth="2" />
 
         {run.back > 0 && <rect x={toX(backStart)} y={toY(0)} width={run.back * scale} height={closetDepth * scale} className="fill-brand-orange/70 stroke-orange-800" />}
         {run.left > 0 && <rect x={toX(0)} y={toY(leftStart)} width={closetDepth * scale} height={run.left * scale} className="fill-stone-300 stroke-stone-700" />}
@@ -1780,7 +1790,7 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
         <text x={toX(backWidth / 2)} y={toY(0) - 12} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold">
           Back {formatInches(backWidth)}
         </text>
-        <text x={toX(openingLeft + openingWidth / 2)} y={toY(entranceDepth) + 20} textAnchor="middle" className="fill-stone-600 text-[14px] font-bold">
+        <text x={toX(openingLeft + openingWidth / 2)} y={toY(maxDepth) + 20} textAnchor="middle" className="fill-stone-600 text-[14px] font-bold">
           Opening {formatInches(openingWidth)}
         </text>
         <text x={toX(0) - 22} y={toY(leftDepth / 2)} textAnchor="middle" className="fill-stone-700 text-[16px] font-bold" transform={`rotate(-90 ${toX(0) - 22} ${toY(leftDepth / 2)})`}>
