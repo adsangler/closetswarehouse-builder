@@ -3362,7 +3362,7 @@ function WalkInPlanner() {
               )}
             </div>
             <div className="grid gap-3">
-              {['back', 'left', 'right', ...(enabledWalls.leftReturn ? ['leftReturn'] : []), ...(enabledWalls.rightReturn ? ['rightReturn'] : [])].map((wall) => (
+              {planWalls.map((wall) => (
                 <WallRunEditor
                   key={wall}
                   wall={wall}
