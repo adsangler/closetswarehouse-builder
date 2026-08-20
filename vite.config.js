@@ -7,6 +7,7 @@ import { buildResolvedParts } from './api/_part-pricing.js';
 import { normalizeQuoteSubmission, validateNormalizedQuote } from './api/_quote-normalize.js';
 import { isInternalAirtableApiEnabled, sanitizePublicKitRecords } from './api/_public-records.js';
 import { fetchShopifyCustomerContact, upsertShopifyCustomerPlan } from './api/_shopify.js';
+import { renderPrintablePlan } from './api/quote-print.js';
 
 const airtableTables = {
   '/api/kits': 'AIRTABLE_KITS_TABLE',
@@ -776,6 +777,59 @@ function quoteRequestProxy(env) {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const pathname = req.url?.split('?')[0];
+
+        if (pathname === '/api/quote-print') {
+          if (req.method !== 'GET') {
+            res.statusCode = 405;
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.end(renderPrintablePlan({ record: { quote: { planType: 'Method not allowed' } } }));
+            return;
+          }
+
+          try {
+            const requestUrl = new URL(req.url || '', 'http://localhost');
+            const quoteId = requestUrl.searchParams.get('quoteId') || '';
+            const email = requestUrl.searchParams.get('email') || '';
+            let record = null;
+            try {
+              record = await fetchAirtableQuoteByReference(env, { quoteId, email });
+            } catch {
+              record = null;
+            }
+
+            if (!record && quoteId && email) {
+              const draftPath = path.resolve('assets/drafts/quote-requests', `${quoteId}.json`);
+              const draft = JSON.parse(await fs.readFile(draftPath, 'utf8').catch(() => 'null'));
+              if (draft && normalizeEmail(draft.customer?.email) === normalizeEmail(email)) {
+                record = {
+                  quoteId,
+                  customer: draft.customer,
+                  planUrl: draft.planUrl,
+                  planType: draft.planType || draft.internalType,
+                  submittedAt: draft.submittedAt,
+                  estimatedPrice: draft.estimatedPrice,
+                  quote: draft,
+                };
+              }
+            }
+
+            res.statusCode = record ? 200 : 404;
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.end(renderPrintablePlan({
+              record: record || {
+                quoteId: quoteId || 'Not found',
+                customer: { email },
+                quote: { planType: 'Saved plan not found' },
+              },
+              autoPrint: requestUrl.searchParams.get('print') === '1',
+            }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.end(renderPrintablePlan({ record: { quote: { planType: 'Unable to load saved plan' } } }));
+          }
+          return;
+        }
 
         if (pathname === '/api/customer-quotes') {
           if (req.method !== 'GET') {

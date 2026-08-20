@@ -128,7 +128,10 @@ function renderMaterialsTable(materials = []) {
           </tr>
         </thead>
         <tbody>
-          ${materials.map((part) => `
+          ${[...materials].sort((left, right) => {
+            const categoryOrder = String(left.category || '').localeCompare(String(right.category || ''), undefined, { sensitivity: 'base' });
+            return categoryOrder || String(left.name || left.label || '').localeCompare(String(right.name || right.label || ''), undefined, { sensitivity: 'base' });
+          }).map((part) => `
             <tr>
               <td>${escapeHtml(part.category || '')}</td>
               <td>${escapeHtml(part.sku || '')}</td>
@@ -139,6 +142,110 @@ function renderMaterialsTable(materials = []) {
         </tbody>
       </table>
     </section>
+  `;
+}
+
+function renderDrawings(drawings = []) {
+  if (!Array.isArray(drawings) || !drawings.length) return '';
+
+  return `
+    <section class="drawings">
+      <h2>Plan Drawings</h2>
+      ${drawings.map((drawing) => `
+        <figure>
+          <figcaption>${escapeHtml(drawing.title || 'Plan drawing')}</figcaption>
+          <img src="${escapeHtml(drawing.dataUrl || '')}" alt="${escapeHtml(drawing.title || 'Plan drawing')}">
+        </figure>
+      `).join('')}
+    </section>
+  `;
+}
+
+function getEstimatePlanPath(planUrl) {
+  if (!planUrl) return '';
+
+  try {
+    const url = new URL(planUrl);
+    url.searchParams.set('estimate', '1');
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return '';
+  }
+}
+
+function renderLiveDrawingLoader(planPath, hasSavedDrawings) {
+  if (!planPath || hasSavedDrawings) return '';
+
+  return `
+    <section class="drawings live-drawings" id="live-drawings">
+      <h2>Plan Drawings</h2>
+      <p class="muted" id="drawing-status">Loading saved plan drawings...</p>
+      <div id="drawing-output"></div>
+      <iframe class="drawing-source-frame" id="drawing-source" title="Saved plan drawing source" src="${escapeHtml(planPath)}"></iframe>
+    </section>
+    <script>
+      (() => {
+        const frame = document.getElementById('drawing-source');
+        const section = document.getElementById('live-drawings');
+        const output = document.getElementById('drawing-output');
+        const status = document.getElementById('drawing-status');
+        if (!frame || !section || !output) return;
+
+        const inlineSvgStyles = (source, clone) => {
+          const sourceNodes = [source, ...source.querySelectorAll('*')];
+          const cloneNodes = [clone, ...clone.querySelectorAll('*')];
+          const properties = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'opacity'];
+          sourceNodes.forEach((node, index) => {
+            const target = cloneNodes[index];
+            if (!target) return;
+            const computed = frame.contentWindow.getComputedStyle(node);
+            properties.forEach((property) => target.style.setProperty(property, computed.getPropertyValue(property)));
+          });
+        };
+
+        let drawingAttempts = 0;
+        const loadDrawings = () => {
+          try {
+            const drawingGroups = [...frame.contentDocument.querySelectorAll('[data-saved-plan-drawing]')];
+            const drawings = drawingGroups.flatMap((group) => [...group.querySelectorAll('svg')].map((svg) => ({
+              title: group.dataset.savedPlanDrawing || 'Plan drawing',
+              svg,
+            })));
+            if (!drawings.length && drawingAttempts++ < 60) {
+              setTimeout(loadDrawings, 250);
+              return;
+            }
+            if (!drawings.length) throw new Error('No drawings found');
+            output.innerHTML = '';
+            const titleCounts = {};
+            drawings.forEach(({ title, svg }) => {
+              const figure = document.createElement('figure');
+              const caption = document.createElement('figcaption');
+              const clone = svg.cloneNode(true);
+              titleCounts[title] = (titleCounts[title] || 0) + 1;
+              const displayTitle = title === 'Wall Elevations' ? 'Wall Elevation ' + titleCounts[title] : title;
+              inlineSvgStyles(svg, clone);
+              clone.removeAttribute('class');
+              clone.setAttribute('aria-label', displayTitle);
+              caption.textContent = displayTitle;
+              figure.append(caption, clone);
+              output.appendChild(figure);
+            });
+            status.remove();
+            section.hidden = false;
+            document.documentElement.dataset.drawingsReady = 'true';
+            window.dispatchEvent(new Event('saved-plan-drawings-ready'));
+          } catch {
+            status.textContent = 'Open the editable planner to view this plan’s drawings.';
+            section.hidden = false;
+            document.documentElement.dataset.drawingsReady = 'unavailable';
+            window.dispatchEvent(new Event('saved-plan-drawings-ready'));
+          }
+        };
+        frame.addEventListener('load', loadDrawings);
+        if (frame.contentDocument?.readyState === 'complete') loadDrawings();
+      })();
+    </script>
   `;
 }
 
@@ -215,7 +322,7 @@ function renderWalkInDetails(quote = {}) {
   `;
 }
 
-function renderPrintablePlan({ record, autoPrint = false }) {
+export function renderPrintablePlan({ record, autoPrint = false }) {
   const quote = record.quote || {};
   const quoteId = record.quoteId || quote.quoteId || '';
   const planType = record.planType || quote.planType || quote.internalType || 'Closet plan';
@@ -227,7 +334,9 @@ function renderPrintablePlan({ record, autoPrint = false }) {
   const modules = getPlanModules(quote);
   const isWalkIn = String(quote.internalType || record.planType || '').toLowerCase().includes('walk');
   const editablePlanUrl = record.planUrl || quote.planUrl || '';
+  const estimatePlanPath = getEstimatePlanPath(editablePlanUrl);
   const materials = Array.isArray(quote.materials) ? quote.materials : [];
+  const drawings = Array.isArray(quote.drawings) ? quote.drawings : [];
 
   return `<!doctype html>
 <html lang="en">
@@ -258,6 +367,11 @@ function renderPrintablePlan({ record, autoPrint = false }) {
       .muted { color: #57534e; font-size: 13px; font-weight: 600; }
       .footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e7e5e4; color: #78716c; font-size: 12px; }
       .subsection, .run { break-inside: avoid; }
+      figure { margin: 14px 0 22px; break-inside: avoid; }
+      figcaption { margin-bottom: 8px; font-size: 14px; font-weight: 800; }
+      figure img { display: block; width: 100%; max-height: 7.25in; object-fit: contain; border: 1px solid #e7e5e4; background: #fff; }
+      figure svg { display: block; width: 100%; height: auto; max-height: 7.25in; border: 1px solid #e7e5e4; background: #fff; }
+      .drawing-source-frame { position: fixed; left: -10000px; top: 0; width: 1200px; height: 900px; visibility: hidden; pointer-events: none; }
       @media (max-width: 680px) {
         .page { width: 100%; margin: 0; padding: 20px; box-shadow: none; }
         .topbar, .summary, .details { display: grid; grid-template-columns: 1fr; }
@@ -308,11 +422,19 @@ function renderPrintablePlan({ record, autoPrint = false }) {
         </section>
       ` : ''}
 
+      ${renderDrawings(drawings)}
+      ${renderLiveDrawingLoader(estimatePlanPath, drawings.length > 0)}
+
       ${renderMaterialsTable(materials)}
 
       <p class="footer">Use this saved plan reference for warehouse pickup quoting and support. Prices and availability are subject to confirmation by Closets Warehouse.</p>
     </main>
-    ${autoPrint ? '<script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>' : ''}
+    ${autoPrint ? `<script>
+      window.addEventListener('load', () => {
+        if (!document.getElementById('drawing-source')) setTimeout(() => window.print(), 250);
+      });
+      window.addEventListener('saved-plan-drawings-ready', () => setTimeout(() => window.print(), 250), { once: true });
+    </script>` : ''}
   </body>
 </html>`;
 }

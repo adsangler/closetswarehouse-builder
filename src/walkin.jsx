@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls } from '@react-three/drei';
@@ -2693,7 +2693,9 @@ function PartsList({ parts }) {
       <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
-          const items = aggregatedParts.filter((part) => part.category === group);
+          const items = aggregatedParts
+            .filter((part) => part.category === group)
+            .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
 
           if (!items.length) return null;
 
@@ -2750,6 +2752,8 @@ function getRequestedWalkInPlan() {
 
 function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   const [previewMode, setPreviewMode] = useState('plan');
+  const planDrawingRef = useRef(null);
+  const frontDrawingsRef = useRef(null);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
@@ -2765,6 +2769,14 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
     setSubmitStatus({ state: 'loading', message: 'Saving plan to your account...' });
 
     try {
+      const drawingEntries = [
+        ['Plan View', planDrawingRef.current?.querySelector('svg')],
+        ...[...(frontDrawingsRef.current?.querySelectorAll('svg') || [])].map((svg, index) => [`Wall Elevation ${index + 1}`, svg]),
+      ];
+      const savedDrawings = drawingEntries.filter(([, svg]) => svg).map(([title, svg]) => ({
+        title,
+        dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`,
+      }));
       const modules = Object.entries(runs).flatMap(([wall, wallModules]) =>
         wallModules.map((module, index) => ({
           wall,
@@ -2786,6 +2798,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
           corners,
           runs,
           materials: parts.map(({ category, sku, name, quantity }) => ({ category, sku, name, quantity })),
+          drawings: savedDrawings,
           modules,
           estimatedPrice: pricing.estimatedPrice,
           signature: pricing.signature,
@@ -2860,13 +2873,16 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
                   ))}
                 </div>
               </div>
-              {previewMode === 'plan' ? (
+              <div ref={planDrawingRef} data-saved-plan-drawing="Plan View" className={previewMode === 'plan' ? '' : 'hidden'}>
                 <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluation} />
-              ) : (
+              </div>
+              <div className={previewMode === '3d' ? '' : 'hidden'}>
                 <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
-              )}
+              </div>
             </section>
-            <WalkInFrontViews room={room} runs={runs} />
+            <div ref={frontDrawingsRef} data-saved-plan-drawing="Wall Elevations">
+              <WalkInFrontViews room={room} runs={runs} />
+            </div>
             <PartsList parts={parts} />
           </div>
 

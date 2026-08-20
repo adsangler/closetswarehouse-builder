@@ -2389,7 +2389,9 @@ function PartsList({ parts }) {
       <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
-          const items = aggregatedParts.filter((part) => part.category === group);
+          const items = aggregatedParts
+            .filter((part) => part.category === group)
+            .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
 
           if (!items.length) return null;
 
@@ -2898,6 +2900,8 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
 
 function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
   const [previewMode, setPreviewMode] = useState('plan');
+  const planDrawingRef = useRef(null);
+  const frontDrawingRef = useRef(null);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
@@ -2915,6 +2919,13 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
     setSubmitStatus({ state: 'loading', message: 'Saving plan to your account...' });
 
     try {
+      const savedDrawings = [
+        ['Plan View', planDrawingRef.current?.querySelector('svg')],
+        ['Front View', frontDrawingRef.current?.querySelector('svg')],
+      ].filter(([, svg]) => svg).map(([title, svg]) => ({
+        title,
+        dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`,
+      }));
       const response = await fetch('/api/quote-requests', {
         method: 'POST',
         headers: {
@@ -2924,6 +2935,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
           ...planDetails,
           customer,
           materials: parts.map(({ category, sku, name, quantity }) => ({ category, sku, name, quantity })),
+          drawings: savedDrawings,
           planType: 'reach-in',
           planUrl,
           modules: modules.map((module, index) => ({
@@ -3003,7 +3015,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
                   ))}
                 </div>
               </div>
-              {previewMode === 'plan' ? (
+              <div ref={planDrawingRef} data-saved-plan-drawing="Plan View" className={previewMode === 'plan' ? '' : 'hidden'}>
                 <ReachInPlanView
                   modules={modules}
                   wallWidth={planDetails.wallWidth}
@@ -3015,21 +3027,20 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
                   height={planDetails.height}
                   drawerWarnings={planDetails.drawerWarnings}
                 />
-              ) : (
-                <div className="relative h-[520px] overflow-hidden rounded bg-white">
+              </div>
+              <div className={previewMode === '3d' ? 'relative h-[520px] overflow-hidden rounded bg-white' : 'hidden'}>
                   <OrbitHintBadge />
                   <Canvas className="h-full w-full" camera={{ position: [0, 50, 105], fov: 34 }} dpr={[1, 2]} shadows>
                     <RenderScene drawing={drawing} photoMode={false} wallWidth={planDetails.wallWidth} reachInRoom={planDetails} />
                   </Canvas>
-                </div>
-              )}
+              </div>
             </section>
             <section className="print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-base font-bold text-stone-950">Front View</h2>
                 <span className="text-xs font-semibold text-stone-500">Elevation for plan review</span>
               </div>
-              <div className="h-[430px] min-w-0 overflow-hidden rounded border border-stone-100 bg-white">
+              <div ref={frontDrawingRef} data-saved-plan-drawing="Front View" className="h-[430px] min-w-0 overflow-hidden rounded border border-stone-100 bg-white">
                 <TechnicalDrawing drawing={drawing} />
               </div>
             </section>

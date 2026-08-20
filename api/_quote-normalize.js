@@ -94,6 +94,19 @@ function cleanModule(module = {}, index = 0) {
   };
 }
 
+function cleanDrawings(drawings) {
+  if (!Array.isArray(drawings)) return [];
+
+  return drawings.slice(0, 8).map((drawing) => {
+    const dataUrl = String(drawing?.dataUrl || '');
+    if (!dataUrl.startsWith('data:image/svg+xml;charset=utf-8,') || dataUrl.length > 150000) return null;
+    return {
+      title: cleanText(drawing?.title || 'Plan drawing', 80),
+      dataUrl,
+    };
+  }).filter(Boolean);
+}
+
 function estimateModules(modules) {
   const groups = new Map();
 
@@ -136,6 +149,7 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     planType: cleanText(rawQuote.planType || rawQuote.internalType || 'closet plan', 40),
     internalType: cleanText(rawQuote.internalType || rawQuote.planType || 'closet plan', 80),
     planUrl: cleanUrl(rawQuote.planUrl),
+    drawings: cleanDrawings(rawQuote.drawings),
     modules,
     estimatedPrice,
     clientEstimatedPrice,
