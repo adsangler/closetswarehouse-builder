@@ -2319,7 +2319,6 @@ function buildDetailedReachInParts(modules, height) {
 
   const drawing = createDrawing(createPlannerDrawing(height, modules));
   let adjustableShelfCount = 0;
-  let rodCount = 0;
 
   drawing.towers.forEach((tower) => {
     const layout = buildTowerLayout(drawing, tower);
@@ -2330,23 +2329,19 @@ function buildDetailedReachInParts(modules, height) {
     const largeDrawers = layout.drawers.filter((drawer) => drawer.height === 10).length;
 
     adjustableShelfCount += adjustableShelves;
-    rodCount += rods;
 
     add(`FS-${tower.width}-14-W`, `Fixed shelf ${tower.width}" x 14"`, fixedShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay structural shelves.`, 'Shelves');
     add(`SH-${tower.width}-14-W`, `Adjustable shelf ${tower.width}" x 14"`, adjustableShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay movable shelves.`, 'Shelves');
     add(`TKK-${tower.width}-5-W`, `Toe-kick kit ${tower.width}" x 5"`, 1, 'Toe-kick kit for this tower bay.', 'Kits');
-    add(`RK-${tower.width}-S`, `Rod kit ${tower.width}"`, rods, 'Hanging rod kit for this bay width.', 'Kits');
+    add(`RK-${tower.width}-S`, `Rod kit ${tower.width}"`, rods, 'Complete hanging rod kit with one rod and one pair of rod brackets.', 'Kits');
     add(`DRK-${tower.width}-5-13-W`, `Small drawer kit ${tower.width}" x 5" x 13"`, smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
     add(`DRK-${tower.width}-10-13-W`, `Large drawer kit ${tower.width}" x 10" x 13"`, largeDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
   });
 
-  add('RDB-S-1', 'Rod bracket set, pair', rodCount, `${rodCount * 2} individual brackets total; one pair per rod.`, 'Hardware');
   const wallBracketCount = modules.length * 2;
-  add('WLB-S-1', 'Wall L-bracket', wallBracketCount, 'Two wall safety brackets per tower section.', 'Hardware');
+  add('WLB-S-1', 'Wall bracket kit', wallBracketCount, 'Includes one L-bracket, one wood screw for the fixed shelf, and one wall/stud screw. Two kits per tower section.', 'Kits');
   add('PIN-20-S', 'Shelf pin pack, 20 pins', Math.ceil((adjustableShelfCount * 4) / 20), `${adjustableShelfCount * 4} shelf pins required for ${adjustableShelfCount} adjustable shelves.`, 'Hardware');
   add('CAMKIT-10-W', 'Rafix/cam lock and screw kit, 10 pieces', modules.length, `${modules.length * 8} Rafix/bolt connector positions required; one 10-piece kit packed per tower.`, 'Hardware');
-  add('WOOD-SCREW', 'Wood screws for wall L-brackets', wallBracketCount, 'One wood screw per wall L-bracket to connect the bracket to the fixed shelf.', 'Hardware');
-  add('WALL-SCREW', 'Wall/stud screws for wall L-brackets', wallBracketCount, 'One wall screw per wall L-bracket to connect the bracket to a stud or suitable wall anchor.', 'Hardware');
 
   return [...parts.values()].filter((part) => part.quantity > 0);
 }
@@ -2934,7 +2929,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
         body: JSON.stringify({
           ...planDetails,
           customer,
-          materials: parts.map(({ category, sku, name, quantity }) => ({ category, sku, name, quantity })),
+          materials: parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })),
           drawings: savedDrawings,
           planType: 'reach-in',
           planUrl,

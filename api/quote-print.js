@@ -115,6 +115,25 @@ function renderMaterialsTable(materials = []) {
     return '';
   }
 
+  const packagedComponentSkus = new Set(['RDB-S-1', 'WOOD-SCREW', 'WALL-SCREW']);
+  const displayMaterials = materials
+    .filter((part) => !packagedComponentSkus.has(String(part.sku || '').toUpperCase()))
+    .map((part) => {
+      const sku = String(part.sku || '').toUpperCase();
+      if (sku.startsWith('RK-')) {
+        return { ...part, details: part.details || 'Complete hanging rod kit with one rod and one pair of rod brackets.' };
+      }
+      if (sku === 'WLB-S-1') {
+        return {
+          ...part,
+          category: 'Kits',
+          name: 'Wall bracket kit',
+          details: part.details || 'Includes one L-bracket, one wood screw for the fixed shelf, and one wall/stud screw.',
+        };
+      }
+      return part;
+    });
+
   return `
     <section>
       <h2>Build Parts</h2>
@@ -125,10 +144,11 @@ function renderMaterialsTable(materials = []) {
             <th>SKU</th>
             <th>Part</th>
             <th>Qty</th>
+            <th>Description</th>
           </tr>
         </thead>
         <tbody>
-          ${[...materials].sort((left, right) => {
+          ${displayMaterials.sort((left, right) => {
             const categoryOrder = String(left.category || '').localeCompare(String(right.category || ''), undefined, { sensitivity: 'base' });
             return categoryOrder || String(left.name || left.label || '').localeCompare(String(right.name || right.label || ''), undefined, { sensitivity: 'base' });
           }).map((part) => `
@@ -137,6 +157,7 @@ function renderMaterialsTable(materials = []) {
               <td>${escapeHtml(part.sku || '')}</td>
               <td>${escapeHtml(part.name || part.label || '')}</td>
               <td>${escapeHtml(part.quantity || '')}</td>
+              <td>${escapeHtml(part.details || '')}</td>
             </tr>
           `).join('')}
         </tbody>
