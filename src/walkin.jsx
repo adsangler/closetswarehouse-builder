@@ -2575,7 +2575,7 @@ function decodePlanPayload(encodedPlan) {
   return JSON.parse(atob(padded));
 }
 
-function buildWalkInPlanUrl(room, corners, runs) {
+function buildWalkInPlanUrl(room, corners, runs, extraParts = []) {
   if (typeof window === 'undefined') {
     return '';
   }
@@ -2583,12 +2583,12 @@ function buildWalkInPlanUrl(room, corners, runs) {
   const url = new URL(window.location.href);
   url.searchParams.set('type', 'walk-in');
   url.searchParams.delete('estimate');
-  url.searchParams.set('plan', encodePlanPayload({ room, corners, runs }));
+  url.searchParams.set('plan', encodePlanPayload({ room, corners, runs, extraParts }));
   return url.toString();
 }
 
-function buildWalkInEstimateUrl(room, corners, runs) {
-  const url = new URL(buildWalkInPlanUrl(room, corners, runs));
+function buildWalkInEstimateUrl(room, corners, runs, extraParts = []) {
+  const url = new URL(buildWalkInPlanUrl(room, corners, runs, extraParts));
   url.searchParams.set('estimate', '1');
   return url.toString();
 }
@@ -2696,7 +2696,7 @@ function aggregatePartsBySku(parts) {
 }
 
 function PartsList({ parts }) {
-  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware'];
+  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware', 'Added Parts'];
   const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
@@ -2743,6 +2743,23 @@ function PartsList({ parts }) {
   );
 }
 
+function AddedPartsSection({ items, plannedWidths }) {
+  if (!items.length) return null;
+  return (
+    <section className="print-break-avoid min-w-0 rounded border border-orange-200 bg-orange-50 p-4">
+      <h2 className="text-lg font-bold text-stone-950">Added Parts</h2>
+      <p className="mt-1 text-sm font-semibold text-stone-600">Loose parts selected in addition to the closet kit.</p>
+      <div className="mt-3 grid gap-2">
+        {items.map((item) => <div key={`${item.sku}-${item.width}`} className="rounded border border-orange-200 bg-white px-3 py-2 text-sm">
+          <div className="flex flex-wrap justify-between gap-2"><span className="font-bold text-stone-950">{item.name || item.sku} · {item.width}&quot;</span><span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span></div>
+          <div className="mt-1 text-xs font-semibold text-stone-600">{item.sku} · {money(item.price)} each</div>
+          {!plannedWidths.includes(Number(item.width)) && <div className="mt-2 text-xs font-bold text-amber-800">Warning: no matching {item.width}&quot; tower bay exists in this plan.</div>}
+        </div>)}
+      </div>
+    </section>
+  );
+}
+
 function getRequestedWalkInPlan() {
   if (typeof window === 'undefined') {
     return null;
@@ -2761,14 +2778,16 @@ function getRequestedWalkInPlan() {
   }
 }
 
-function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
+function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraParts }) {
   const [previewMode, setPreviewMode] = useState('plan');
   const planDrawingRef = useRef(null);
   const frontDrawingsRef = useRef(null);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
-  const planUrl = useMemo(() => buildWalkInPlanUrl(room, corners, runs), [room, corners, runs]);
+  const addedPartRows = useMemo(() => extraParts.map((item) => ({ category: 'Added Parts', sku: item.sku, name: item.name || item.sku, quantity: item.quantity, details: `${item.width}\" selection · ${money(item.price)} each · ${money(item.price * item.quantity)} total` })), [extraParts]);
+  const plannedWidths = useMemo(() => [...new Set(Object.values(runs).flat().map((module) => Number(module.width)))], [runs]);
+  const planUrl = useMemo(() => buildWalkInPlanUrl(room, corners, runs, extraParts), [room, corners, runs, extraParts]);
   const catalogMessages = pricing.catalogWarnings || [];
   const submitForVerification = async (event) => {
     event.preventDefault();
@@ -2808,7 +2827,8 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
           room,
           corners,
           runs,
-          materials: parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })),
+          materials: [...parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })), ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width}\" · ${money(item.price)} each` }))],
+          extraParts,
           drawings: savedDrawings,
           modules,
           estimatedPrice: pricing.estimatedPrice,
@@ -2894,7 +2914,8 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
             <div ref={frontDrawingsRef} data-saved-plan-drawing="Wall Elevations">
               <WalkInFrontViews room={room} runs={runs} />
             </div>
-            <PartsList parts={parts} />
+            <AddedPartsSection items={extraParts} plannedWidths={plannedWidths} />
+            <PartsList parts={[...parts, ...addedPartRows]} />
           </div>
 
           <aside className="order-first grid min-w-0 gap-3 self-start">
@@ -2969,7 +2990,14 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   );
 }
 
-function AddPartsCard() {
+function getExtraPartSku(type, width) {
+  if (type === 'shelf') return `SH-${width}-14-W`;
+  if (type === 'rod') return `RK-${width}-S`;
+  if (type === 'smallDrawer') return 'DRK-24-5-13-W';
+  return 'DRK-24-10-13-W';
+}
+
+function AddPartsCard({ items, onChange, plannedWidths }) {
   const options = {
     shelf: { label: 'Adjustable shelf', widths: [18, 24, 30] },
     rod: { label: 'Rod kit', widths: [18, 24, 30] },
@@ -2980,17 +3008,35 @@ function AddPartsCard() {
   const [type, setType] = useState('shelf');
   const [width, setWidth] = useState(24);
   const [quantity, setQuantity] = useState(1);
-  const [items, setItems] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/planner-parts').then((response) => response.json()).then((payload) => {
+      if (!cancelled) setCatalog(payload.records || []);
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setCatalogReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const selected = options[type];
   const changeType = (nextType) => {
     setType(nextType);
     setWidth(options[nextType].widths.includes(width) ? width : options[nextType].widths[0]);
   };
-  const addItem = () => setItems((current) => {
+  const addItem = () => {
+    const sku = getExtraPartSku(type, width);
+    const product = catalog.find((record) => record.sku.toUpperCase() === sku);
+    if (!product) return;
+    onChange((current) => {
     const existing = current.find((item) => item.type === type && item.width === width);
     if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
-    return [...current, { type, width, quantity }];
-  });
+      return [...current, { type, width, quantity, sku, name: product.name || selected.label, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
+    });
+  };
+  const selectedSku = getExtraPartSku(type, width);
+  const selectedProduct = catalog.find((record) => record.sku.toUpperCase() === selectedSku);
+  const widthMatchesPlan = plannedWidths.includes(width);
 
   return (
     <section className="mt-3 rounded border border-stone-200 bg-white p-3">
@@ -3014,12 +3060,15 @@ function AddPartsCard() {
             <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
           </label>
         </div>
-        <button type="button" onClick={addItem} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">Add to plan</button>
+        <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? `${money(selectedProduct.price)} each` : catalogReady ? 'Not available' : 'Checking price...'}</span></div>
+        {!widthMatchesPlan && <p className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-bold text-amber-800">Warning: this plan has no {width}&quot; tower bay. This part may not fit the planned closet; confirm the installation location before purchasing.</p>}
+        <button type="button" onClick={addItem} disabled={!selectedProduct} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
         {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
-          {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
+          {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
             <span className="font-semibold text-stone-700">{options[item.type].label} — {item.width}&quot;</span>
-            <span className="font-bold text-stone-950">Qty {item.quantity}</span>
-            <button type="button" onClick={() => setItems((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
+            <span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span>
+            <button type="button" onClick={() => onChange((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
+            {!plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
           </div>)}
         </div>}
       </div>}
@@ -3027,13 +3076,13 @@ function AddPartsCard() {
   );
 }
 
-function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady }) {
+function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, setExtraParts, isCatalogReady }) {
   const [showForm, setShowForm] = useState(false);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const materials = useMemo(() => buildWalkInMaterials(runs), [runs]);
   const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
-  const shouldShowProductLinks = evaluation.complete && pricing.allThreeWallsMatched;
+  const shouldShowProductLinks = evaluation.complete && pricing.allConfiguredWallsMatched;
   const catalogMessages = pricing.catalogWarnings || [];
   const canVerifyEstimate = Boolean(evaluation.complete && isCatalogReady && pricing.catalogSupported);
 
@@ -3067,11 +3116,12 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
           room,
           corners,
           runs,
-          materials,
+          materials: [...materials, ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width}\" · ${money(item.price)} each` }))],
+          extraParts,
           modules,
           estimatedPrice: pricing.estimatedPrice,
           signature: pricing.signature,
-          planUrl: buildWalkInPlanUrl(room, corners, runs),
+          planUrl: buildWalkInPlanUrl(room, corners, runs, extraParts),
           wallSummaries: pricing.wallSummaries,
           internalType: 'walk-in estimate verification',
         }),
@@ -3102,16 +3152,23 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
       {shouldShowProductLinks && (
         <div className="mt-3 rounded border border-emerald-200 bg-emerald-50 p-3">
           <div className="text-xs font-bold uppercase text-emerald-700">Existing products found</div>
-          <p className="mt-1 text-sm font-semibold text-stone-700">All three wall runs match products. Use these product pages for checkout.</p>
+          <p className="mt-1 text-sm font-semibold text-stone-700">Each configured wall run matches a standard product. Purchase the kit and any added parts separately below.</p>
+          <p className="mt-2 text-lg font-bold text-emerald-800">{money(pricing.estimatedPrice)} estimated total</p>
+          {pricing.extraPartsPrice > 0 && <p className="text-xs font-bold text-emerald-700">Kits {money(pricing.basePrice)} + parts {money(pricing.extraPartsPrice)}</p>}
           <div className="mt-3 grid gap-2">
             {wallProductMatches.map((summary) => (
               <a key={summary.wall} href={summary.match.productUrl} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white hover:bg-orange-700">
                 {wallLabels[summary.wall]}: {summary.match.title} {summary.match.price > 0 ? `- ${money(summary.match.price)}` : ''}
               </a>
             ))}
+            {extraParts.map((item) => (
+              <a key={`${item.sku}-${item.width}`} href={item.productUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-brand-orange bg-white px-3 py-2 text-sm font-bold text-brand-orange">
+                Part: {item.name || item.sku} - {money(item.price)}
+              </a>
+            ))}
             <button
               type="button"
-              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs))}
+              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs, extraParts))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white"
             >
               Verify estimate
@@ -3130,7 +3187,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
             <button
               type="button"
               disabled={!canVerifyEstimate}
-              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs))}
+              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs, extraParts))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300"
             >
               Verify estimate
@@ -3178,7 +3235,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
           )}
         </div>
       )}
-      <AddPartsCard />
+      <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(Object.values(runs).flat().map((module) => Number(module.width)))]} />
     </section>
   );
 }
@@ -3215,6 +3272,7 @@ function WalkInPlanner() {
     rightReturn: Boolean(requestedPlan?.runs?.rightReturn?.length),
   });
   const [productCatalog, setProductCatalog] = useState([]);
+  const [extraParts, setExtraParts] = useState(() => Array.isArray(requestedPlan?.extraParts) ? requestedPlan.extraParts : []);
   const [catalogReady, setCatalogReady] = useState(false);
   const evaluation = useMemo(() => evaluatePlan(room, corners, runs), [room, corners, runs]);
   const roomEvaluation = useMemo(() => evaluateRoomStep(room), [room]);
@@ -3253,7 +3311,8 @@ function WalkInPlanner() {
         missingProducts: supported ? [] : coverage.missing,
       };
     });
-    const allThreeWallsMatched = wallSummaries.every((summary) => summary.modules.length > 0 && summary.match?.productUrl);
+    const configuredWalls = wallSummaries.filter((summary) => summary.modules.length > 0);
+    const allConfiguredWallsMatched = configuredWalls.length > 0 && configuredWalls.every((summary) => summary.match?.productUrl);
     const catalogSupported = wallSummaries.every((summary) => summary.supported);
     const catalogWarnings =
       catalogReady && !catalogSupported
@@ -3261,17 +3320,21 @@ function WalkInPlanner() {
             summary.missingProducts.map((moduleName) => `${wallLabels[summary.wall]} ${moduleName} is not available for online quoting yet.`),
           )
         : [];
-    const estimatedPrice = catalogSupported ? Number(wallSummaries.reduce((total, summary) => total + (summary.match?.price || summary.estimate || 0), 0).toFixed(2)) : 0;
+    const basePrice = wallSummaries.reduce((total, summary) => total + (summary.match?.price || summary.estimate || 0), 0);
+    const extraPartsPrice = extraParts.reduce((total, item) => total + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
+    const estimatedPrice = catalogSupported ? Number((basePrice + extraPartsPrice).toFixed(2)) : 0;
 
     return {
       wallSummaries,
-      allThreeWallsMatched,
+      allConfiguredWallsMatched,
       catalogSupported,
       catalogWarnings,
       estimatedPrice,
+      basePrice,
+      extraPartsPrice,
       signature: wallSummaries.map((summary) => `${summary.wall}:${summary.signature || 'empty'}`).join('|'),
     };
-  }, [catalogReady, productCatalog, productBySignature, room, runs]);
+  }, [catalogReady, extraParts, productCatalog, productBySignature, room, runs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3314,6 +3377,7 @@ function WalkInPlanner() {
         runs={runs}
         evaluation={evaluation}
         pricing={pricing}
+        extraParts={extraParts}
       />
     );
   }
@@ -3504,7 +3568,7 @@ function WalkInPlanner() {
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <WallRunsSummary room={room} evaluation={evaluation} />
             <ValidationPanel evaluation={evaluation} />
-            <SummaryPanel room={room} corners={corners} runs={runs} evaluation={evaluation} pricing={pricing} isCatalogReady={catalogReady} />
+            <SummaryPanel room={room} corners={corners} runs={runs} evaluation={evaluation} pricing={pricing} extraParts={extraParts} setExtraParts={setExtraParts} isCatalogReady={catalogReady} />
           </div>
         </aside>
       </section>

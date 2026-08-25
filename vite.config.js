@@ -164,6 +164,44 @@ function resolvedPartsProxy(env) {
   };
 }
 
+function plannerPartsProxy(env) {
+  const allowedPatterns = [/^SH-(18|24|30)-14-W$/i, /^RK-(18|24|30)-S$/i, /^DRK-24-(5|10)-13-W$/i];
+  return {
+    name: 'planner-parts-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url?.split('?')[0] !== '/api/planner-parts') {
+          next();
+          return;
+        }
+        try {
+          const [parts, components, partComponents] = await Promise.all([
+            fetchAirtableRecords(env, 'AIRTABLE_PARTS_TABLE'),
+            fetchAirtableRecords(env, 'AIRTABLE_COMPONENTS_TABLE'),
+            fetchAirtableRecords(env, 'AIRTABLE_PART_COMPONENTS_TABLE'),
+          ]);
+          const records = buildResolvedParts({ parts, components, partComponents })
+            .filter((record) => allowedPatterns.some((pattern) => pattern.test(record.resolved.sku)))
+            .map((record) => ({
+              id: record.id,
+              sku: record.resolved.sku,
+              name: record.resolved.name,
+              price: record.resolved.price,
+              shopifyHandle: String(record.fields?.shopify_handle || record.fields?.['Shopify Handle'] || record.resolved.sku).trim().toLowerCase(),
+              status: String(record.fields?.Status || 'active').toLowerCase(),
+            }));
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ records }));
+        } catch (error) {
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+    },
+  };
+}
+
 function readRequestBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -1497,13 +1535,14 @@ export default defineConfig(({ mode }) => {
       quoteRequestProxy(env),
       photoDraftsProxy(),
       photoGenerationProxy(env),
+      plannerPartsProxy(env),
       resolvedPartsProxy(env),
       airtableProxy(env),
       removeProductionInternalAssets(publicProductionBuild),
       react(),
     ],
     server: {
-      host: 'localhost',
+      host: '127.0.0.1',
       port: 5173,
     },
     build: {

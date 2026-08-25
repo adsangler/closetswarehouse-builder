@@ -455,7 +455,7 @@ function getRequestedReachInPlan() {
   }
 }
 
-function buildReachInPlanUrl(planDetails, modules) {
+function buildReachInPlanUrl(planDetails, modules, extraParts = []) {
   if (typeof window === 'undefined') {
     return '';
   }
@@ -463,12 +463,12 @@ function buildReachInPlanUrl(planDetails, modules) {
   const url = new URL(window.location.href);
   url.searchParams.delete('kit');
   url.searchParams.delete('estimate');
-  url.searchParams.set('plan', encodePlanPayload({ planDetails, modules }));
+  url.searchParams.set('plan', encodePlanPayload({ planDetails, modules, extraParts }));
   return url.toString();
 }
 
-function buildReachInEstimateUrl(planDetails, modules) {
-  const url = new URL(buildReachInPlanUrl(planDetails, modules));
+function buildReachInEstimateUrl(planDetails, modules, extraParts = []) {
+  const url = new URL(buildReachInPlanUrl(planDetails, modules, extraParts));
   url.searchParams.set('estimate', '1');
   return url.toString();
 }
@@ -2384,7 +2384,7 @@ function aggregatePartsBySku(parts) {
 }
 
 function PartsList({ parts }) {
-  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware'];
+  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware', 'Added Parts'];
   const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
@@ -2426,6 +2426,23 @@ function PartsList({ parts }) {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function AddedPartsSection({ items, plannedWidths }) {
+  if (!items.length) return null;
+  return (
+    <section className="print-break-avoid min-w-0 rounded border border-orange-200 bg-orange-50 p-4">
+      <h2 className="text-lg font-bold text-stone-950">Added Parts</h2>
+      <p className="mt-1 text-sm font-semibold text-stone-600">Loose parts selected in addition to the closet kit.</p>
+      <div className="mt-3 grid gap-2">
+        {items.map((item) => <div key={`${item.sku}-${item.width}`} className="rounded border border-orange-200 bg-white px-3 py-2 text-sm">
+          <div className="flex flex-wrap justify-between gap-2"><span className="font-bold text-stone-950">{item.name || item.sku} · {item.width}&quot;</span><span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span></div>
+          <div className="mt-1 text-xs font-semibold text-stone-600">{item.sku} · {money(item.price)} each</div>
+          {!plannedWidths.includes(Number(item.width)) && <div className="mt-2 text-xs font-bold text-amber-800">Warning: no matching {item.width}&quot; tower bay exists in this plan.</div>}
+        </div>)}
       </div>
     </section>
   );
@@ -2647,7 +2664,14 @@ function getReachInValidationMessages(planDetails) {
   return [...messages, ...(planDetails.drawerWarnings || [])];
 }
 
-function AddPartsCard() {
+function getExtraPartSku(type, width) {
+  if (type === 'shelf') return `SH-${width}-14-W`;
+  if (type === 'rod') return `RK-${width}-S`;
+  if (type === 'smallDrawer') return 'DRK-24-5-13-W';
+  return 'DRK-24-10-13-W';
+}
+
+function AddPartsCard({ items, onChange, plannedWidths }) {
   const options = {
     shelf: { label: 'Adjustable shelf', widths: [18, 24, 30] },
     rod: { label: 'Rod kit', widths: [18, 24, 30] },
@@ -2658,19 +2682,35 @@ function AddPartsCard() {
   const [type, setType] = useState('shelf');
   const [width, setWidth] = useState(24);
   const [quantity, setQuantity] = useState(1);
-  const [items, setItems] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/planner-parts').then((response) => response.json()).then((payload) => {
+      if (!cancelled) setCatalog(payload.records || []);
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setCatalogReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const selected = options[type];
   const changeType = (nextType) => {
     setType(nextType);
     setWidth(options[nextType].widths.includes(width) ? width : options[nextType].widths[0]);
   };
   const addItem = () => {
-    setItems((current) => {
+    const sku = getExtraPartSku(type, width);
+    const product = catalog.find((record) => record.sku.toUpperCase() === sku);
+    if (!product) return;
+    onChange((current) => {
       const existing = current.find((item) => item.type === type && item.width === width);
       if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
-      return [...current, { type, width, quantity }];
+      return [...current, { type, width, quantity, sku, name: product.name || selected.label, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
     });
   };
+  const selectedSku = getExtraPartSku(type, width);
+  const selectedProduct = catalog.find((record) => record.sku.toUpperCase() === selectedSku);
+  const widthMatchesPlan = plannedWidths.includes(width);
 
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
@@ -2695,12 +2735,15 @@ function AddPartsCard() {
               <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
             </label>
           </div>
-          <button type="button" onClick={addItem} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">Add to plan</button>
+          <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? `${money(selectedProduct.price)} each` : catalogReady ? 'Not available' : 'Checking price...'}</span></div>
+          {!widthMatchesPlan && <p className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-bold text-amber-800">Warning: this plan has no {width}&quot; tower bay. This part may not fit the planned closet; confirm the installation location before purchasing.</p>}
+          <button type="button" onClick={addItem} disabled={!selectedProduct} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
           {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
-            {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
+            {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
               <span className="font-semibold text-stone-700">{options[item.type].label} — {item.width}&quot;</span>
-              <span className="font-bold text-stone-950">Qty {item.quantity}</span>
-              <button type="button" onClick={() => setItems((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
+              <span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span>
+              <button type="button" onClick={() => onChange((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
+              {!plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
             </div>)}
           </div>}
         </div>
@@ -2709,7 +2752,7 @@ function AddPartsCard() {
   );
 }
 
-function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogReady }) {
+function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, isCatalogReady }) {
   const hasModules = modules.length > 0;
   const validationMessages = getReachInValidationMessages(planDetails);
   const catalogMessages = evaluation.catalogWarnings || [];
@@ -2735,7 +2778,7 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {evaluation.displayPrice > 0 && (
             <span className="text-lg font-bold text-emerald-800">
-              {money(evaluation.displayPrice)} <span className="text-xs font-bold uppercase tracking-wide text-emerald-700">kit price</span>
+              {money(evaluation.displayPrice)} <span className="text-xs font-bold uppercase tracking-wide text-emerald-700">estimated total</span>
             </span>
           )}
           {evaluation.match.productUrl ? (
@@ -2751,6 +2794,12 @@ function MatchPanel({ evaluation, modules, planDetails, onContinue, isCatalogRea
             <span className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
               Product page is not connected yet.
             </span>
+          )}
+          {evaluation.extraPartsPrice > 0 && <span className="text-xs font-bold text-emerald-800">Kit {money(evaluation.basePrice)} + parts {money(evaluation.extraPartsPrice)}</span>}
+          {extraParts.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {extraParts.map((item) => <a key={`${item.sku}-${item.width}`} href={item.productUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-brand-orange bg-white px-3 py-2 text-sm font-bold text-brand-orange">Buy {item.name || item.sku}</a>)}
+            </div>
           )}
         </div>
         {validationMessages.length > 0 && (
@@ -2963,14 +3012,16 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
   );
 }
 
-function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
+function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraParts }) {
   const [previewMode, setPreviewMode] = useState('plan');
   const planDrawingRef = useRef(null);
   const frontDrawingRef = useRef(null);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
-  const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules), [planDetails, modules]);
+  const addedPartRows = useMemo(() => extraParts.map((item) => ({ category: 'Added Parts', sku: item.sku, name: item.name || item.sku, quantity: item.quantity, details: `${item.width}\" selection · ${money(item.price)} each · ${money(item.price * item.quantity)} total` })), [extraParts]);
+  const plannedWidths = useMemo(() => [...new Set(modules.map((module) => Number(module.width)))], [modules]);
+  const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules, extraParts), [extraParts, planDetails, modules]);
   const validationMessages = getReachInValidationMessages(planDetails);
   const catalogMessages = evaluation.catalogWarnings || [];
   const canSavePlan = Boolean(planDetails?.fits && evaluation.catalogSupported);
@@ -2999,7 +3050,8 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
         body: JSON.stringify({
           ...planDetails,
           customer,
-          materials: parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })),
+          materials: [...parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })), ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width}\" · ${money(item.price)} each` }))],
+          extraParts,
           drawings: savedDrawings,
           planType: 'reach-in',
           planUrl,
@@ -3109,7 +3161,8 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing }) {
                 <TechnicalDrawing drawing={drawing} />
               </div>
             </section>
-            <PartsList parts={parts} />
+            <AddedPartsSection items={extraParts} plannedWidths={plannedWidths} />
+            <PartsList parts={[...parts, ...addedPartRows]} />
           </div>
 
           <aside className="order-first grid min-w-0 gap-3 self-start">
@@ -3633,6 +3686,7 @@ export default function App({ internalRenderer = false }) {
   const [reachInDoorType, setReachInDoorType] = useState(requestedPlanDetails.doorType || 'regular');
   const [plannerPreviewMode, setPlannerPreviewMode] = useState('plan');
   const [plannerModules, setPlannerModules] = useState(() => requestedPlanModules || [createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24), createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24)]);
+  const [extraParts, setExtraParts] = useState(() => Array.isArray(requestedReachInPlan?.extraParts) ? requestedReachInPlan.extraParts : []);
   const [plannerStep, setPlannerStep] = useState('design');
 
   useEffect(() => {
@@ -3734,17 +3788,21 @@ export default function App({ internalRenderer = false }) {
       airtableStatus.state === 'loading' || catalogSupported
         ? []
         : moduleCoverage.missing.map((moduleName) => `${moduleName} is not available for online quoting yet.`);
-    const calculatedPrice = match?.price || calculateCustomEstimate(plannerModules, productCatalog, plannerHeight);
+    const basePrice = match?.price || calculateCustomEstimate(plannerModules, productCatalog, plannerHeight);
+    const extraPartsPrice = extraParts.reduce((total, item) => total + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
+    const calculatedPrice = Number((basePrice + extraPartsPrice).toFixed(2));
 
     return {
       signature,
       match,
       displayPrice: calculatedPrice,
       estimatedPrice: calculatedPrice,
+      basePrice,
+      extraPartsPrice,
       catalogSupported,
       catalogWarnings,
     };
-  }, [airtableStatus.state, plannerHeight, plannerModules, productBySignature, productCatalog]);
+  }, [airtableStatus.state, extraParts, plannerHeight, plannerModules, productBySignature, productCatalog]);
   const plannerPlanDetails = useMemo(() => {
     const assembledWidth = plannerModules.length ? getAssembledWidth(plannerModules) : 0;
     const requiredWidth = plannerModules.length ? getRequiredWidth(assembledWidth) : 0;
@@ -4023,6 +4081,7 @@ export default function App({ internalRenderer = false }) {
         modules={plannerModules}
         planDetails={plannerPlanDetails}
         drawing={drawing}
+        extraParts={extraParts}
       />
     );
   }
@@ -4243,10 +4302,11 @@ export default function App({ internalRenderer = false }) {
                     evaluation={plannerEvaluation}
                     modules={plannerModules}
                     planDetails={plannerPlanDetails}
-                    onContinue={() => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules))}
+                    extraParts={extraParts}
+                    onContinue={() => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules, extraParts))}
                     isCatalogReady={airtableStatus.state !== 'loading'}
                   />
-                  <AddPartsCard />
+                  <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(plannerModules.map((module) => Number(module.width)))]} />
                 </div>
               </aside>
             </>
