@@ -2969,6 +2969,64 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
   );
 }
 
+function AddPartsCard() {
+  const options = {
+    shelf: { label: 'Adjustable shelf', widths: [18, 24, 30] },
+    rod: { label: 'Rod kit', widths: [18, 24, 30] },
+    smallDrawer: { label: 'Small drawer kit', widths: [24, 30] },
+    largeDrawer: { label: 'Large drawer kit', widths: [24, 30] },
+  };
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState('shelf');
+  const [width, setWidth] = useState(24);
+  const [quantity, setQuantity] = useState(1);
+  const [items, setItems] = useState([]);
+  const selected = options[type];
+  const changeType = (nextType) => {
+    setType(nextType);
+    setWidth(options[nextType].widths.includes(width) ? width : options[nextType].widths[0]);
+  };
+  const addItem = () => setItems((current) => {
+    const existing = current.find((item) => item.type === type && item.width === width);
+    if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
+    return [...current, { type, width, quantity }];
+  });
+
+  return (
+    <section className="mt-3 rounded border border-stone-200 bg-white p-3">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex w-full items-center justify-between rounded bg-brand-orange px-3 py-2 text-left text-sm font-bold text-white">
+        <span>Add Parts</span><span>{open ? '−' : '+'}</span>
+      </button>
+      {open && <div className="mt-3 grid gap-3">
+        <p className="text-xs font-semibold text-stone-600">Add loose shelves, rod kits, or drawer kits without changing the tower layout.</p>
+        <label className="grid gap-1 text-xs font-bold text-stone-600">Part
+          <select value={type} onChange={(event) => changeType(event.target.value)} className="rounded border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900">
+            {Object.entries(options).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="grid gap-1 text-xs font-bold text-stone-600">Width
+            <select value={width} onChange={(event) => setWidth(Number(event.target.value))} className="rounded border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900">
+              {selected.widths.map((value) => <option key={value} value={value}>{value}&quot;</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs font-bold text-stone-600">Quantity
+            <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
+          </label>
+        </div>
+        <button type="button" onClick={addItem} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">Add to plan</button>
+        {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
+          {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
+            <span className="font-semibold text-stone-700">{options[item.type].label} — {item.width}&quot;</span>
+            <span className="font-bold text-stone-950">Qty {item.quantity}</span>
+            <button type="button" onClick={() => setItems((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
+          </div>)}
+        </div>}
+      </div>}
+    </section>
+  );
+}
+
 function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady }) {
   const [showForm, setShowForm] = useState(false);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
@@ -3120,6 +3178,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, isCatalogReady
           )}
         </div>
       )}
+      <AddPartsCard />
     </section>
   );
 }
