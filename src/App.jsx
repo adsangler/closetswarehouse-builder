@@ -1422,7 +1422,7 @@ function TechnicalDrawing({ drawing }) {
   const scale = 6;
   const width = drawing.assembledWidth * scale;
   const height = drawing.height * scale;
-  const totalWidth = width + margin * 2 + 180;
+  const totalWidth = width + margin * 2 + 300;
   const totalHeight = height + margin * 2 + 54;
   const left = margin + 34;
   const top = margin + 10;
@@ -1430,6 +1430,7 @@ function TechnicalDrawing({ drawing }) {
   const toY = (value) => top + (drawing.height - value) * scale;
   const inch = (value) => value * scale;
   const layouts = drawing.towers.map((tower) => ({ tower, layout: buildTowerLayout(drawing, tower) }));
+  const legendX = toX(drawing.assembledWidth) + 82;
 
   const Panel = ({ atX, label }) => (
     <g>
@@ -1535,11 +1536,18 @@ function TechnicalDrawing({ drawing }) {
           {layout.rods.map((rod) => (
             <Rod key={`${tower.id}-rod-${rod.label}`} rod={rod} />
           ))}
-          <text x={toX(tower.bayX + Math.max(2, tower.width / 4))} y={toY(20)} className="drawing-bay">
-            {towerNames[tower.code] || tower.code}
-          </text>
         </g>
       ))}
+
+      <g aria-label="Tower order from left to right">
+        <text x={legendX} y={top + 54} className="drawing-title">Tower order</text>
+        <text x={legendX} y={top + 72} className="drawing-subtitle">Left to right</text>
+        {drawing.towers.map((tower, index) => (
+          <text key={`tower-legend-${tower.id}`} x={legendX} y={top + 98 + index * 22} className="drawing-bay">
+            {index + 1}. {towerNames[tower.code] || tower.code} / {tower.width}&quot; bay
+          </text>
+        ))}
+      </g>
 
       <line x1={toX(0)} y1={toY(0)} x2={toX(drawing.assembledWidth)} y2={toY(0)} className="stroke-stone-950" strokeWidth="2" />
       <line x1={toX(0)} y1={toY(drawing.height)} x2={toX(drawing.assembledWidth)} y2={toY(drawing.height)} className="stroke-stone-950" strokeWidth="2" />

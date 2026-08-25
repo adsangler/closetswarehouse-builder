@@ -229,7 +229,7 @@ function renderLiveDrawingLoader(planPath, hasSavedDrawings) {
           try {
             const drawingGroups = [...frame.contentDocument.querySelectorAll('[data-saved-plan-drawing]')];
             const drawings = drawingGroups.flatMap((group) => [...group.querySelectorAll('svg')].map((svg) => ({
-              title: group.dataset.savedPlanDrawing || 'Plan drawing',
+              title: svg.dataset.drawingTitle || group.dataset.savedPlanDrawing || 'Plan drawing',
               svg,
             })));
             if (!drawings.length && drawingAttempts++ < 60) {

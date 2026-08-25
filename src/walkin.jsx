@@ -1639,16 +1639,22 @@ function WalkInFrontViews({ room, runs }) {
   }
 
   const renderWall = ([wall, modules]) => {
+    // Elevations are shown as a customer would see them while standing inside
+    // the room and facing the wall. The left-side and left-return sight lines
+    // run opposite the planner's back-to-opening storage direction.
+    const elevationModules = wall === 'left' || wall === 'leftReturn' ? [...modules].reverse() : modules;
     const height = getWallHeight(room, wall);
-    const runLength = getRunLength(modules);
+    const runLength = getRunLength(elevationModules);
     const padding = 30;
-    const viewWidth = 640;
-    const viewHeight = 310;
-    const scale = Math.min((viewWidth - padding * 2) / Math.max(1, runLength), (viewHeight - padding * 2) / Math.max(1, height));
+    const drawingWidth = 500;
+    const viewWidth = 760;
+    const viewHeight = 330;
+    const legendX = 535;
+    const scale = Math.min((drawingWidth - padding * 2) / Math.max(1, runLength), (viewHeight - padding * 2) / Math.max(1, height));
     const toX = (value) => padding + value * scale;
     const toY = (value) => padding + (height - value) * scale;
     const inch = (value) => value * scale;
-    const segments = getModuleSegments(modules);
+    const segments = getModuleSegments(elevationModules);
     const panelXs = [0, ...segments.slice(1).map((segment) => segment.start - panelThickness), runLength - panelThickness];
 
     return (
@@ -1657,7 +1663,8 @@ function WalkInFrontViews({ room, runs }) {
           <h3 className="text-sm font-bold text-stone-950">{wallLabels[wall]} Wall Front View</h3>
           <span className="text-xs font-semibold text-stone-500">{formatInches(runLength)} wide x {formatInches(height)} high</span>
         </div>
-        <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-auto w-full bg-white">
+        <div className="mb-1 text-[11px] font-semibold text-stone-500">Room-facing elevation — left and right match the view from inside the closet.</div>
+        <svg data-drawing-title={`${wallLabels[wall]} Wall Front View`} data-module-order={elevationModules.map((module) => module.id || `${module.code}-${module.width}`).join('|')} viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-auto w-full bg-white">
           <rect x={toX(0)} y={toY(toeKickHeight)} width={inch(runLength)} height={inch(toeKickHeight)} className="fill-stone-200 stroke-stone-500" />
           {panelXs.map((x, index) => (
             <rect
@@ -1719,14 +1726,23 @@ function WalkInFrontViews({ room, runs }) {
                     />
                   </g>
                 ))}
-                <text x={toX(segment.center)} y={toY(18)} textAnchor="middle" className="drawing-bay">
-                  {towerNames[code] || code}
-                </text>
               </g>
             );
           })}
           <line x1={toX(0)} y1={toY(0)} x2={toX(runLength)} y2={toY(0)} className="stroke-stone-950" strokeWidth="2" />
           <line x1={toX(0)} y1={toY(height)} x2={toX(runLength)} y2={toY(height)} className="stroke-stone-950" strokeWidth="2" />
+          <g aria-label="Tower order from left to right">
+            <text x={legendX} y="42" className="drawing-title">Tower order</text>
+            <text x={legendX} y="60" className="drawing-subtitle">Left to right</text>
+            {elevationModules.map((module, index) => {
+              const code = getWalkInLayoutCode(module, height);
+              return (
+                <text key={`${wall}-legend-${module.id || index}`} x={legendX} y={88 + index * 24} className="drawing-bay">
+                  {index + 1}. {towerNames[code] || code} / {module.width}&quot; bay
+                </text>
+              );
+            })}
+          </g>
         </svg>
       </div>
     );
@@ -2766,7 +2782,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing }) {
     try {
       const drawingEntries = [
         ['Plan View', planDrawingRef.current?.querySelector('svg')],
-        ...[...(frontDrawingsRef.current?.querySelectorAll('svg') || [])].map((svg, index) => [`Wall Elevation ${index + 1}`, svg]),
+        ...[...(frontDrawingsRef.current?.querySelectorAll('svg') || [])].map((svg, index) => [svg.dataset.drawingTitle || `Wall Elevation ${index + 1}`, svg]),
       ];
       const savedDrawings = drawingEntries.filter(([, svg]) => svg).map(([title, svg]) => ({
         title,
