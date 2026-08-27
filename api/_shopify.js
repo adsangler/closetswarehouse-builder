@@ -1,21 +1,62 @@
 const shopifyApiVersion = process.env.SHOPIFY_API_VERSION || '2026-07';
+let cachedAdminToken = null;
 
-function getShopifyConfig() {
+function getShopifyCredentials() {
   const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN;
-  const token = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+  const clientId = process.env.SHOPIFY_CLIENT_ID || process.env.shopify_client_id;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET || process.env.shopify_client_secret;
+  const staticToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 
-  if (!shopDomain || !token) {
+  if (!shopDomain || (!staticToken && (!clientId || !clientSecret))) {
     return null;
   }
 
   return {
     shopDomain: shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, ''),
-    token,
+    clientId,
+    clientSecret,
+    staticToken,
   };
 }
 
+async function getShopifyConfig() {
+  const credentials = getShopifyCredentials();
+
+  if (!credentials) return null;
+
+  if (credentials.clientId && credentials.clientSecret) {
+    const now = Date.now();
+
+    if (!cachedAdminToken || cachedAdminToken.expiresAt <= now + 60_000) {
+      const response = await fetch(`https://${credentials.shopDomain}/admin/oauth/access_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: credentials.clientId,
+          client_secret: credentials.clientSecret,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.access_token) {
+        throw new Error(payload.error_description || payload.error || `Shopify token request returned ${response.status}`);
+      }
+
+      cachedAdminToken = {
+        token: payload.access_token,
+        expiresAt: now + Math.max(60, Number(payload.expires_in) || 86400) * 1000,
+      };
+    }
+
+    return { shopDomain: credentials.shopDomain, token: cachedAdminToken.token };
+  }
+
+  return { shopDomain: credentials.shopDomain, token: credentials.staticToken };
+}
+
 async function shopifyGraphql(query, variables = {}) {
-  const config = getShopifyConfig();
+  const config = await getShopifyConfig();
 
   if (!config) {
     return null;
@@ -156,12 +197,15 @@ async function createCustomer(quote) {
         email: quote.customer.email,
         firstName,
         lastName,
-        tags: ['closet-planner', 'closet-plan-subscriber'],
-        emailMarketingConsent: {
-          marketingState: 'SUBSCRIBED',
-          marketingOptInLevel: 'SINGLE_OPT_IN',
-          consentUpdatedAt: quote.submittedAt || new Date().toISOString(),
-        },
+        phone: quote.customer.phone || undefined,
+        tags: ['closet-planner', 'closet-plan-lead'],
+        ...(quote.marketingConsent ? {
+          emailMarketingConsent: {
+            marketingState: 'SUBSCRIBED',
+            marketingOptInLevel: 'SINGLE_OPT_IN',
+            consentUpdatedAt: quote.submittedAt || new Date().toISOString(),
+          },
+        } : {}),
         metafields: getCustomerMetafields(quote),
       },
     },
@@ -196,6 +240,7 @@ async function updateCustomer(customerId, quote) {
         id: customerId,
         firstName,
         lastName,
+        phone: quote.customer.phone || undefined,
       },
     },
   );
@@ -219,7 +264,7 @@ async function addCustomerTags(customerId) {
         }
       }
     }`,
-    { id: customerId, tags: ['closet-planner', 'closet-plan-subscriber'] },
+    { id: customerId, tags: ['closet-planner', 'closet-plan-lead'] },
   );
   const errorMessage = getUserErrorMessage(data, 'tagsAdd');
 
@@ -288,7 +333,7 @@ async function setCustomerPlanMetafields(customerId, quote) {
 }
 
 export async function upsertShopifyCustomerPlan(quote) {
-  if (!getShopifyConfig()) {
+  if (!getShopifyCredentials()) {
     return { configured: false };
   }
 
@@ -327,7 +372,9 @@ export async function upsertShopifyCustomerPlan(quote) {
   if (!created) {
     await updateCustomer(customer.id, quote);
     await addCustomerTags(customer.id);
-    await updateEmailMarketingConsent(customer.id, quote);
+    if (quote.marketingConsent) {
+      await updateEmailMarketingConsent(customer.id, quote);
+    }
     await setCustomerPlanMetafields(customer.id, quote);
   }
 
@@ -341,7 +388,7 @@ export async function upsertShopifyCustomerPlan(quote) {
 }
 
 export async function fetchShopifyCustomerContact(customerId) {
-  if (!getShopifyConfig()) {
+  if (!getShopifyCredentials()) {
     return { configured: false, customer: null };
   }
 

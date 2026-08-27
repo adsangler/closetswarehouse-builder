@@ -914,7 +914,7 @@ function quoteRequestProxy(env) {
 
               if (!quotes.length && !manualContactProvided) {
                 try {
-                  applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
+                  applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET', 'shopify_client_id', 'shopify_client_secret', 'SHOPIFY_API_VERSION']);
                   const accountContact = await fetchShopifyCustomerContact(customerId);
 
                   if (normalizeEmail(accountContact?.customer?.email)) {
@@ -1013,7 +1013,7 @@ function quoteRequestProxy(env) {
             return;
           }
 
-          applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_API_VERSION']);
+          applyServerEnv(env, ['SHOPIFY_SHOP_DOMAIN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET', 'shopify_client_id', 'shopify_client_secret', 'SHOPIFY_API_VERSION']);
           const airtableResult = await createAirtableQuote(env, capturedQuote);
           const airtableRecord = airtableResult.record;
 

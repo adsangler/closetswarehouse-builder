@@ -1240,7 +1240,7 @@ function ClosetTypeStart({ onWalkIn }) {
   );
 }
 
-function TowerConfigIcon({ code }) {
+function TowerConfigIcon({ code, compact = false }) {
   const shelves = {
     LH: [64],
     DH: [38, 72],
@@ -1263,7 +1263,7 @@ function TowerConfigIcon({ code }) {
   }[code] || [];
 
   return (
-    <svg viewBox="0 0 72 108" aria-hidden="true" className="h-16 w-12 text-stone-800">
+    <svg viewBox="0 0 72 108" aria-hidden="true" className={`${compact ? 'h-10 w-8' : 'h-16 w-12'} text-stone-800`}>
       <rect x="10" y="8" width="52" height="92" rx="2" className="fill-white stroke-stone-700" strokeWidth="3" />
       <line x1="18" y1="8" x2="18" y2="100" className="stroke-stone-200" strokeWidth="2" />
       <line x1="54" y1="8" x2="54" y2="100" className="stroke-stone-200" strokeWidth="2" />
@@ -1360,39 +1360,6 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, gra
           </div>
         ) : (
           <div className="min-w-0 overflow-x-auto pr-2">
-            <div className="relative mb-2 flex items-center pt-5">
-              <div className="absolute left-0 top-0 text-xs font-bold uppercase text-stone-500">Move</div>
-              {modules.map((module, index) => {
-                const visualWidth = Math.max(86, numberValue(module.width) * 4.2);
-
-                return (
-                  <div
-                    key={`walkin-move-${module.id}`}
-                    className="grid shrink-0 grid-cols-2 items-center px-1"
-                    style={{ width: `${visualWidth + (index === 0 ? 16 : 8)}px` }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onMove(wall, index, -1)}
-                      disabled={index === 0}
-                      className="grid h-7 min-w-7 place-items-center justify-self-start rounded border border-stone-300 bg-white px-2 text-xs font-bold text-stone-700 disabled:opacity-25"
-                      title={moveLabels.previousTitle}
-                    >
-                      {moveLabels.previous}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onMove(wall, index, 1)}
-                      disabled={index === modules.length - 1}
-                      className="grid h-7 min-w-7 place-items-center justify-self-end rounded border border-stone-300 bg-white px-2 text-xs font-bold text-stone-700 disabled:opacity-25"
-                      title={moveLabels.nextTitle}
-                    >
-                      {moveLabels.next}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
             <div className="flex min-h-[126px] items-stretch">
               {grayBefore > 0 && (
                 <div className="grid min-w-[92px] place-items-center rounded-l border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
@@ -1400,7 +1367,6 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, gra
                 </div>
               )}
               {modules.map((module, index) => {
-                const visualWidth = Math.max(86, numberValue(module.width) * 4.2);
                 const widthOptions = getWalkInWidthOptions(module.code);
                 const supportedWidthOptions = getWalkInSupportedWidthOptions(modules, index, widthOptions, wallHeight, productBySignature, productCatalog, isCatalogReady);
 
@@ -1409,14 +1375,14 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, gra
                     {index === 0 && <div className="w-2 rounded-l bg-stone-300" title="Side panel" />}
                     <div
                       className={`flex flex-col justify-between border-y border-stone-300 p-2 ${index % 2 ? 'bg-orange-50' : 'bg-white'}`}
-                      style={{ width: `${visualWidth}px` }}
+                      style={{ width: '68px' }}
                       title={module.label}
                     >
                       <div className="grid justify-items-center gap-1">
-                        <TowerConfigIcon code={module.code} />
+                        <TowerConfigIcon code={module.code} compact />
                         <div className="text-xs font-bold text-stone-600">{formatInches(module.width)}</div>
                       </div>
-                      <label className="mt-3 flex items-center gap-1">
+                      <label className="mt-1 flex items-center gap-1">
                         <select
                           value={module.width}
                           onChange={(event) => onWidthChange(wall, module.id, Number(event.target.value))}
@@ -1431,13 +1397,37 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, gra
                           ))}
                         </select>
                       </label>
-                      <button
-                        type="button"
-                        onClick={() => onRemove(wall, module.id)}
-                        className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-bold text-red-700 hover:bg-red-100"
-                      >
-                        Remove tower
-                      </button>
+                      <div className="mt-2 grid grid-cols-3 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onMove(wall, index, -1)}
+                          disabled={index === 0}
+                          className="grid h-7 place-items-center rounded border border-stone-300 bg-white text-xs font-bold text-stone-700 disabled:opacity-25"
+                          title={moveLabels.previousTitle}
+                          aria-label={`${moveLabels.previousTitle}: ${module.label}`}
+                        >
+                          {moveLabels.previous}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onMove(wall, index, 1)}
+                          disabled={index === modules.length - 1}
+                          className="grid h-7 place-items-center rounded border border-stone-300 bg-white text-xs font-bold text-stone-700 disabled:opacity-25"
+                          title={moveLabels.nextTitle}
+                          aria-label={`${moveLabels.nextTitle}: ${module.label}`}
+                        >
+                          {moveLabels.next}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRemove(wall, module.id)}
+                          className="grid h-7 place-items-center rounded border border-red-200 bg-white text-sm font-bold text-red-700 hover:bg-red-50"
+                          title="Remove tower"
+                          aria-label={`Remove ${module.label}`}
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
                     <div className="w-2 bg-stone-300" title={index === modules.length - 1 ? 'Side panel' : 'Shared divider panel'} />
                   </div>

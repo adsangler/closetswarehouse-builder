@@ -2529,7 +2529,7 @@ function ReachInClosetDetailsSummary({ planDetails, moduleCount, embedded = fals
   const content = (
     <>
       <h3 className="text-sm font-bold text-stone-950">Closet details</h3>
-      <dl className="mt-3 grid grid-cols-4 gap-2 text-xs">
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         {details.map(([label, value]) => (
           <div key={label} className="rounded bg-stone-50 px-2 py-1.5">
             <dt className="font-semibold text-stone-500">{label}</dt>
@@ -2552,11 +2552,9 @@ function ReachInClosetDetailsSummary({ planDetails, moduleCount, embedded = fals
 }
 
 function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange, productBySignature, productCatalog, isCatalogReady }) {
-  const cardGridColumns = modules.map((module) => `minmax(8.5rem, ${module.width}fr)`).join(' ');
-
   if (modules.length === 0) {
     return (
-      <section className="border-b border-stone-200 bg-white p-3">
+      <section className="min-w-0 border-b border-stone-200 bg-white p-3">
         <div className="rounded border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm font-semibold text-stone-400">
           Build your closets by clicking or dragging any of the above configurations.
         </div>
@@ -2565,16 +2563,16 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange, 
   }
 
   return (
-    <section className="border-b border-stone-200 bg-white p-3">
+    <section className="min-w-0 border-b border-stone-200 bg-white p-3">
       <h2 className="mb-2 text-sm font-bold text-stone-950">Tower selected</h2>
       <div className="w-full overflow-x-auto pb-1">
-        <div className="grid min-w-max items-start gap-2 xl:min-w-0" style={{ gridTemplateColumns: cardGridColumns }}>
+        <div className="flex min-w-max items-start gap-2">
         {modules.map((module, index) => {
           const widthOptions = getWidthOptions(module.configCode);
           const supportedWidthOptions = getReachInSupportedWidthOptions(modules, index, widthOptions, height, productBySignature, productCatalog, isCatalogReady);
 
           return (
-            <article key={module.id} className="min-w-0 rounded border border-stone-200 bg-stone-50 p-2 xl:[grid-column:auto]">
+            <article key={module.id} className="w-[6.25rem] shrink-0 rounded border border-stone-200 bg-stone-50 p-2">
               <div className="min-w-0">
                 <div className="truncate text-xs font-bold text-stone-950" title={towerNames[module.code] || module.code}>
                   {towerNames[module.code] || module.code}
@@ -2595,35 +2593,35 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange, 
                     </option>
                   ))}
                 </select>
-                <div className="flex flex-wrap items-center justify-between gap-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold uppercase text-stone-500">Move</span>
-                    <button
-                      type="button"
-                      onClick={() => onMove(index, -1)}
-                      disabled={index === 0}
-                      className="grid h-7 w-7 place-items-center rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
-                      title="Move tower left"
-                    >
-                      &lt;
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onMove(index, 1)}
-                      disabled={index === modules.length - 1}
-                      className="grid h-7 w-7 place-items-center rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
-                      title="Move tower right"
-                    >
-                      &gt;
-                    </button>
-                  </div>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onMove(index, -1)}
+                    disabled={index === 0}
+                    className="grid h-7 place-items-center rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
+                    title="Move tower left"
+                    aria-label={`Move ${towerNames[module.code] || module.code} left`}
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMove(index, 1)}
+                    disabled={index === modules.length - 1}
+                    className="grid h-7 place-items-center rounded border border-stone-300 bg-white text-sm font-bold text-stone-700 disabled:opacity-25"
+                    title="Move tower right"
+                    aria-label={`Move ${towerNames[module.code] || module.code} right`}
+                  >
+                    &gt;
+                  </button>
                   <button
                     type="button"
                     onClick={() => onRemove(module.id)}
-                    className="h-7 rounded border border-red-200 bg-white px-2 text-xs font-bold text-red-700 hover:bg-red-50"
+                    className="grid h-7 place-items-center rounded border border-red-200 bg-white text-sm font-bold text-red-700 hover:bg-red-50"
                     title="Remove tower"
+                    aria-label={`Remove ${towerNames[module.code] || module.code}`}
                   >
-                    Remove
+                    ×
                   </button>
                 </div>
               </div>
@@ -2735,13 +2733,13 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
               <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
             </label>
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? `${money(selectedProduct.price)} each` : catalogReady ? 'Not available' : 'Checking price...'}</span></div>
+          <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? 'Price included after plan save' : catalogReady ? 'Not available' : 'Checking availability...'}</span></div>
           {!widthMatchesPlan && <p className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-bold text-amber-800">Warning: this plan has no {width}&quot; tower bay. This part may not fit the planned closet; confirm the installation location before purchasing.</p>}
           <button type="button" onClick={addItem} disabled={!selectedProduct} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
           {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
             {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
               <span className="font-semibold text-stone-700">{options[item.type].label} — {item.width}&quot;</span>
-              <span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span>
+              <span className="font-bold text-stone-950">Qty {item.quantity}</span>
               <button type="button" onClick={() => onChange((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
               {!plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
             </div>)}
@@ -2753,10 +2751,98 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
 }
 
 function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, isCatalogReady }) {
+  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [leadStatus, setLeadStatus] = useState({ state: 'idle', message: '', quoteId: '' });
+  const [hasSavedPlan, setHasSavedPlan] = useState(false);
   const hasModules = modules.length > 0;
   const validationMessages = getReachInValidationMessages(planDetails);
   const catalogMessages = evaluation.catalogWarnings || [];
   const canVerifyEstimate = Boolean(planDetails?.fits && isCatalogReady && evaluation.catalogSupported);
+  const priceUnlocked = leadStatus.state === 'success';
+  const addedPartsSignature = extraParts
+    .map((item) => `${item.sku}:${item.width}:${item.quantity}`)
+    .sort()
+    .join('|');
+
+  useEffect(() => {
+    setLeadStatus({ state: 'idle', message: '', quoteId: '' });
+  }, [addedPartsSignature, evaluation.signature]);
+
+  const savePlanAndRevealPrice = async (event) => {
+    event.preventDefault();
+
+    if (!canVerifyEstimate) {
+      setLeadStatus({ state: 'error', message: 'Please fix the closet configuration before saving this plan.', quoteId: '' });
+      return;
+    }
+
+    setLeadStatus({ state: 'loading', message: 'Saving your plan...', quoteId: '' });
+
+    try {
+      const response = await fetch('/api/quote-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...planDetails,
+          customer,
+          materials: [
+            ...buildMaterialSummary(modules),
+            ...extraParts.map((item) => ({
+              category: 'Added parts',
+              sku: item.sku,
+              name: item.name,
+              quantity: item.quantity,
+              details: `${item.width}\" · ${money(item.price)} each`,
+            })),
+          ],
+          extraParts,
+          planType: 'reach-in',
+          planUrl: buildReachInPlanUrl(planDetails, modules, extraParts),
+          modules: modules.map((module, index) => ({
+            index,
+            code: module.code,
+            width: module.width,
+            label: module.label,
+          })),
+          estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
+          signature: evaluation.signature,
+          internalType: 'reach-in planner price reveal',
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to save this plan');
+      }
+
+      setLeadStatus({ state: 'success', message: '', quoteId: payload.quoteId });
+      setHasSavedPlan(true);
+    } catch (error) {
+      setLeadStatus({ state: 'error', message: error.message, quoteId: '' });
+    }
+  };
+
+  const priceCapture = (
+    <form className="mt-3 rounded border border-stone-200 bg-white p-3" onSubmit={savePlanAndRevealPrice}>
+      <h3 className="text-sm font-bold text-stone-950">{hasSavedPlan ? 'Your plan has changed' : 'Save your plan and see the price'}</h3>
+      <p className="mt-1 text-xs font-semibold text-stone-600">
+        {hasSavedPlan ? 'Save this revised design as a new copy to receive its updated price.' : 'Enter your details and we’ll save this design for follow-up.'}
+      </p>
+      {!hasSavedPlan && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <input type="text" autoComplete="given-name" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" aria-label="First name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+          <input type="text" autoComplete="family-name" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" aria-label="Last name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+          <input type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" aria-label="Email" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+          <input type="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" aria-label="Phone" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+        </div>
+      )}
+      <button type="submit" disabled={leadStatus.state === 'loading' || !canVerifyEstimate} className="mt-3 w-full rounded bg-brand-orange px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-700 disabled:bg-stone-300">
+        {leadStatus.state === 'loading' ? 'Saving plan...' : hasSavedPlan ? 'Save updated copy & see new price' : 'Save plan & see price'}
+      </button>
+      {!hasSavedPlan && <p className="mt-2 text-[11px] leading-4 text-stone-500">By submitting, you agree that Closets Warehouse may contact you about this plan. This does not subscribe you to marketing emails.</p>}
+      {leadStatus.state === 'error' && <p className="mt-2 rounded bg-red-100 px-2 py-1.5 text-xs font-bold text-red-700">{leadStatus.message}</p>}
+    </form>
+  );
 
   if (!hasModules) {
     return (
@@ -2775,7 +2861,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
         <p className="mt-2 text-sm text-stone-700">
           This layout matches a standard product. Tower order is modular, so the page can be used even if the preview order is different.
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        {!priceUnlocked ? priceCapture : <div className="mt-3 flex flex-wrap items-center gap-2">
           {evaluation.displayPrice > 0 && (
             <span className="text-lg font-bold text-emerald-800">
               {money(evaluation.displayPrice)} <span className="text-xs font-bold uppercase tracking-wide text-emerald-700">estimated total</span>
@@ -2795,13 +2881,25 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
               Product page is not connected yet.
             </span>
           )}
-          {evaluation.extraPartsPrice > 0 && <span className="text-xs font-bold text-emerald-800">Kit {money(evaluation.basePrice)} + parts {money(evaluation.extraPartsPrice)}</span>}
-          {extraParts.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {extraParts.map((item) => <a key={`${item.sku}-${item.width}`} href={item.productUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-brand-orange bg-white px-3 py-2 text-sm font-bold text-brand-orange">Buy {item.name || item.sku}</a>)}
+          {evaluation.extraPartsPrice > 0 && (
+            <div className="w-full grid gap-1 rounded border border-emerald-200 bg-white p-2 text-xs font-bold text-emerald-900 sm:grid-cols-2">
+              <span>Closet system: {money(evaluation.basePrice)}</span>
+              <span>Added parts: {money(evaluation.extraPartsPrice)}</span>
             </div>
           )}
-        </div>
+          {extraParts.length > 0 && (
+            <div className="grid w-full gap-2">
+              {extraParts.map((item) => (
+                <div key={`${item.sku}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-orange-200 bg-white p-2 text-sm">
+                  <span className="font-semibold text-stone-700">{item.name || item.sku} · Qty {item.quantity} · {money(item.price * item.quantity)}</span>
+                  <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-brand-orange bg-white px-3 py-1.5 font-bold text-brand-orange">Buy separately</a>
+                </div>
+              ))}
+            </div>
+          )}
+          <button type="button" onClick={onContinue} className="rounded border border-emerald-700 bg-white px-3 py-2 text-sm font-bold text-emerald-800">View saved plan</button>
+          <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}</span>
+        </div>}
         {validationMessages.length > 0 && (
           <div className="mt-3 grid gap-2">
             {validationMessages.map((warning) => (
@@ -2834,12 +2932,27 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
             ? 'Review the material and order details before submitting for verification.'
             : 'This layout is not available for online quoting yet.'}
         </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-lg font-bold text-stone-950">{!isCatalogReady ? 'Checking availability...' : evaluation.catalogSupported ? `${money(evaluation.estimatedPrice)} estimated` : 'Not available yet'}</span>
-        <button type="button" onClick={onContinue} disabled={!canVerifyEstimate} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
-          Verify estimate
-        </button>
-      </div>
+      {!priceUnlocked ? priceCapture : <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-lg font-bold text-stone-950">{money(evaluation.estimatedPrice)} estimated</span>
+        {evaluation.extraPartsPrice > 0 && (
+          <div className="w-full grid gap-1 rounded border border-stone-200 bg-stone-50 p-2 text-xs font-bold text-stone-800 sm:grid-cols-2">
+            <span>Closet system: {money(evaluation.basePrice)}</span>
+            <span>Added parts: {money(evaluation.extraPartsPrice)}</span>
+          </div>
+        )}
+        {extraParts.length > 0 && (
+          <div className="grid w-full gap-2">
+            {extraParts.map((item) => (
+              <div key={`${item.sku}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-orange-200 bg-white p-2 text-sm">
+                <span className="font-semibold text-stone-700">{item.name || item.sku} · Qty {item.quantity} · {money(item.price * item.quantity)}</span>
+                <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-brand-orange bg-white px-3 py-1.5 font-bold text-brand-orange">Buy separately</a>
+              </div>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={onContinue} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">View saved plan</button>
+        <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}</span>
+      </div>}
       {validationMessages.length > 0 && (
         <div className="mt-3 grid gap-2">
           {validationMessages.map((warning) => (
@@ -3174,7 +3287,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
                 </div>
               ) : (
                 <>
-                  <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
+                  <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account so we can follow up about it.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
                     <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
@@ -3685,7 +3798,7 @@ export default function App({ internalRenderer = false }) {
   const [reachInOpeningRight, setReachInOpeningRight] = useState(requestedPlanDetails.openingRight ?? initialOpeningReturn);
   const [reachInDoorType, setReachInDoorType] = useState(requestedPlanDetails.doorType || 'regular');
   const [plannerPreviewMode, setPlannerPreviewMode] = useState('plan');
-  const [plannerModules, setPlannerModules] = useState(() => requestedPlanModules || [createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24), createPlannerModule('SHELF', requestedPlanDetails.height || 84, 24)]);
+  const [plannerModules, setPlannerModules] = useState(() => requestedPlanModules || []);
   const [extraParts, setExtraParts] = useState(() => Array.isArray(requestedReachInPlan?.extraParts) ? requestedReachInPlan.extraParts : []);
   const [plannerStep, setPlannerStep] = useState('design');
 
@@ -4191,7 +4304,7 @@ export default function App({ internalRenderer = false }) {
           ) : (
             <>
               <section
-                className="grid bg-white xl:min-h-0 xl:grid-rows-[auto_minmax(75vh,1fr)]"
+                className="grid min-w-0 bg-white xl:min-h-0 xl:grid-rows-[auto_minmax(75vh,1fr)]"
                 onDragOver={(event) => {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = 'copy';
@@ -4205,8 +4318,8 @@ export default function App({ internalRenderer = false }) {
                   }
                 }}
               >
-                <div className="grid gap-2 border-b border-stone-200 bg-stone-100 p-2 xl:grid-cols-2">
-                  <section className="rounded border border-stone-200 bg-white p-2">
+                <div className="grid min-w-0 gap-2 border-b border-stone-200 bg-stone-100 p-2 xl:grid-cols-2">
+                  <section className="min-w-0 rounded border border-stone-200 bg-white p-2">
                     <h2 className="text-sm font-bold text-stone-950">Configure your closet</h2>
                     <p className="mb-1 mt-0.5 text-xs text-stone-500">Click or drag a configuration.</p>
                     <ModulePalette
@@ -4232,7 +4345,7 @@ export default function App({ internalRenderer = false }) {
                     </div>
                   ) : null}
                 </div>
-                <section className="relative bg-white">
+                <section className="relative min-w-0 bg-white">
                   <div className="sticky top-2 z-20 ml-auto mr-3 mt-3 flex w-fit rounded border border-stone-300 bg-white p-0.5 text-xs font-bold shadow-sm xl:absolute xl:right-3 xl:top-3 xl:m-0">
                     {[
                       ['plan', 'Plan'],
@@ -4249,7 +4362,7 @@ export default function App({ internalRenderer = false }) {
                     ))}
                   </div>
                   {plannerPreviewMode === 'plan' ? (
-                    <div className="bg-stone-50 p-4 pt-3 xl:pt-14">
+                    <div className="min-w-0 bg-stone-50 p-2 pt-3 sm:p-4 xl:pt-14">
                       <ReachInPlanView
                         modules={plannerModules}
                         wallWidth={plannerPlanDetails.wallWidth}
@@ -4287,7 +4400,7 @@ export default function App({ internalRenderer = false }) {
                   )}
                 </section>
               </section>
-              <aside className="border-t border-stone-200 bg-stone-50 p-3 xl:border-l xl:border-t-0">
+              <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 xl:border-l xl:border-t-0">
                 <div className="space-y-3">
                   {!internalRenderer ? (
                     <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={() => setReachInRoomCaptured(false)}>

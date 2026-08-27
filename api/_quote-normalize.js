@@ -146,6 +146,7 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
       email: cleanEmail(rawQuote.customer?.email),
       phone: cleanText(rawQuote.customer?.phone, 40),
     },
+    marketingConsent: rawQuote.marketingConsent === true,
     planType: cleanText(rawQuote.planType || rawQuote.internalType || 'closet plan', 40),
     internalType: cleanText(rawQuote.internalType || rawQuote.planType || 'closet plan', 80),
     planUrl: cleanUrl(rawQuote.planUrl),
