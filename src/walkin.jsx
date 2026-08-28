@@ -372,6 +372,7 @@ function kitRecordToProduct(record) {
   const height = Number(fields.Height) || (normalizeHandle(sku).includes('-96-') ? 96 : 84);
   const assembledWidth = Number(fields.Width) || getRunLength(towerSpecs);
   const shopifyHandle = getShopifyHandle(fields, sku);
+  const shopifyActive = fields.shopify_active === true;
 
   return {
     handle: sku,
@@ -381,7 +382,7 @@ function kitRecordToProduct(record) {
     assembledWidth,
     requiredWidth: Number(fields['Width Requirement']) || assembledWidth + 2,
     price: normalizePrice(fields.retail_price),
-    productUrl: getProductUrl(shopifyHandle),
+    productUrl: shopifyActive ? getProductUrl(shopifyHandle) : '',
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: String(fields.Status || 'active').toLowerCase(),
     towerSpecs,
@@ -2752,6 +2753,21 @@ function AddedPartsSection({ items, plannedWidths }) {
   );
 }
 
+function serializeSvgWithInlineStyles(svg) {
+  const clone = svg.cloneNode(true);
+  const sourceNodes = [svg, ...svg.querySelectorAll('*')];
+  const cloneNodes = [clone, ...clone.querySelectorAll('*')];
+  const properties = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'opacity'];
+
+  sourceNodes.forEach((node, index) => {
+    const computed = window.getComputedStyle(node);
+    properties.forEach((property) => cloneNodes[index]?.style.setProperty(property, computed.getPropertyValue(property)));
+  });
+
+  clone.removeAttribute('class');
+  return new XMLSerializer().serializeToString(clone);
+}
+
 function getRequestedWalkInPlan() {
   if (typeof window === 'undefined') {
     return null;
@@ -2797,7 +2813,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
       ];
       const savedDrawings = drawingEntries.filter(([, svg]) => svg).map(([title, svg]) => ({
         title,
-        dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`,
+        dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializeSvgWithInlineStyles(svg))}`,
       }));
       const modules = Object.entries(runs).flatMap(([wall, wallModules]) =>
         wallModules.map((module, index) => ({

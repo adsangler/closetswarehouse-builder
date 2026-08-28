@@ -80,6 +80,54 @@ async function shopifyGraphql(query, variables = {}) {
   return payload.data;
 }
 
+let cachedActiveProductHandles = null;
+
+export async function fetchActiveShopifyProductHandles() {
+  const now = Date.now();
+
+  if (cachedActiveProductHandles?.expiresAt > now) {
+    return cachedActiveProductHandles.handles;
+  }
+
+  const shopDomain = String(process.env.SHOPIFY_SHOP_DOMAIN || '')
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '');
+
+  if (!shopDomain) {
+    return null;
+  }
+
+  const handles = new Set();
+  let page = 1;
+
+  while (true) {
+    // Shopify's public products feed contains only products published to the
+    // Online Store, which is exactly the set safe for customer purchase links.
+    const response = await fetch(`https://${shopDomain}/products.json?limit=250&page=${page}`);
+
+    if (!response.ok) {
+      throw new Error(`Shopify published-products feed returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const products = Array.isArray(payload.products) ? payload.products : [];
+    products.forEach((product) => handles.add(String(product.handle || '').toLowerCase()));
+
+    if (products.length < 250) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  cachedActiveProductHandles = {
+    handles,
+    expiresAt: now + 5 * 60 * 1000,
+  };
+
+  return handles;
+}
+
 function toCustomerGid(customerId = '') {
   const value = String(customerId || '').trim();
 

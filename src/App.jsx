@@ -346,6 +346,7 @@ function kitRecordToDrawing(record) {
   const height = Number(fields.Height) || (normalizeHandle(sku).includes('-96-') ? 96 : 84);
   const assembledWidth = Number(fields.Width) || getAssembledWidth(towerSpecs);
   const shopifyHandle = getShopifyHandle(fields, sku);
+  const shopifyActive = fields.shopify_active === true;
 
   return {
     source: 'airtable',
@@ -356,7 +357,7 @@ function kitRecordToDrawing(record) {
     assembledWidth,
     requiredWidth: Number(fields['Width Requirement']) || getRequiredWidth(assembledWidth),
     price: normalizePrice(fields.retail_price),
-    productUrl: getProductUrl(shopifyHandle),
+    productUrl: shopifyActive ? getProductUrl(shopifyHandle) : '',
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: String(fields.Status || 'active').toLowerCase(),
     towerSpecs,
@@ -1562,8 +1563,14 @@ function TechnicalDrawing({ drawing }) {
       <line x1={toX(-4)} y1={toY(0)} x2={toX(-4)} y2={toY(drawing.height)} className="stroke-orange-700" />
       <line x1={toX(-5)} y1={toY(0)} x2={toX(-3)} y2={toY(0)} className="stroke-orange-700" />
       <line x1={toX(-5)} y1={toY(drawing.height)} x2={toX(-3)} y2={toY(drawing.height)} className="stroke-orange-700" />
-      <text x={toX(-12)} y={toY(42)} className="drawing-dim -rotate-90">
-        {drawing.height} in drawing height
+      <text
+        x={toX(-8)}
+        y={toY(drawing.height / 2)}
+        textAnchor="middle"
+        className="drawing-dim"
+        transform={`rotate(-90 ${toX(-8)} ${toY(drawing.height / 2)})`}
+      >
+        {drawing.height}&quot; actual height
       </text>
 
       <Dimension y={drawing.height - panelThickness} label="top shelf" />
@@ -2448,6 +2455,21 @@ function AddedPartsSection({ items, plannedWidths }) {
   );
 }
 
+function serializeSvgWithInlineStyles(svg) {
+  const clone = svg.cloneNode(true);
+  const sourceNodes = [svg, ...svg.querySelectorAll('*')];
+  const cloneNodes = [clone, ...clone.querySelectorAll('*')];
+  const properties = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'opacity'];
+
+  sourceNodes.forEach((node, index) => {
+    const computed = window.getComputedStyle(node);
+    properties.forEach((property) => cloneNodes[index]?.style.setProperty(property, computed.getPropertyValue(property)));
+  });
+
+  clone.removeAttribute('class');
+  return new XMLSerializer().serializeToString(clone);
+}
+
 function isDrawerTower(module) {
   return ['S3D', 'H3D', 'S2D'].includes(module.code);
 }
@@ -3153,7 +3175,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
         ['Front View', frontDrawingRef.current?.querySelector('svg')],
       ].filter(([, svg]) => svg).map(([title, svg]) => ({
         title,
-        dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`,
+        dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializeSvgWithInlineStyles(svg))}`,
       }));
       const response = await fetch('/api/quote-requests', {
         method: 'POST',

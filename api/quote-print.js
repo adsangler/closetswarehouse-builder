@@ -41,7 +41,8 @@ function formatMoney(value) {
   return number.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -191,7 +192,11 @@ function getEstimatePlanPath(planUrl) {
   if (!planUrl) return '';
 
   try {
-    const url = new URL(planUrl);
+    // Saved plans may contain either an absolute storefront URL or an
+    // application-relative planner URL. Both should load the current drawing
+    // components instead of falling back to an older embedded SVG whose bay
+    // labels can overlap.
+    const url = new URL(planUrl, 'https://planner.local');
     url.searchParams.set('estimate', '1');
     return `${url.pathname}${url.search}`;
   } catch {
@@ -457,8 +462,8 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
         </section>
       ` : ''}
 
-      ${renderDrawings(drawings)}
-      ${renderLiveDrawingLoader(estimatePlanPath, drawings)}
+      ${estimatePlanPath ? '' : renderDrawings(drawings)}
+      ${renderLiveDrawingLoader(estimatePlanPath)}
 
       ${renderMaterialsTable(materials)}
 
