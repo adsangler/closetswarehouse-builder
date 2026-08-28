@@ -2556,7 +2556,7 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange, 
     return (
       <section className="min-w-0 border-b border-stone-200 bg-white p-3">
         <div className="rounded border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm font-semibold text-stone-400">
-          Build your closets by clicking or dragging any of the above configurations.
+          Build your closet by clicking or dragging any available configuration.
         </div>
       </section>
     );
@@ -2786,7 +2786,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
           ...planDetails,
           customer,
           materials: [
-            ...buildMaterialSummary(modules),
+            ...buildDetailedReachInParts(modules, planDetails.height),
             ...extraParts.map((item) => ({
               category: 'Added parts',
               sku: item.sku,
@@ -3233,7 +3233,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
         <section className="grid min-w-0 gap-4">
           <div className="grid min-w-0 gap-4">
             <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
-              <div className="mb-3 flex justify-end">
+              <div className="print-hide mb-3 flex justify-end">
                 <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
                   {[
                     ['plan', 'Plan'],
@@ -3258,7 +3258,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
                   drawerWarnings={planDetails.drawerWarnings}
                 />
               </div>
-              <div className={previewMode === '3d' ? 'relative h-[520px] overflow-hidden rounded bg-white' : 'hidden'}>
+              <div className={`print-hide ${previewMode === '3d' ? 'relative h-[520px] overflow-hidden rounded bg-white' : 'hidden'}`}>
                   <OrbitHintBadge />
                   <Canvas className="h-full w-full" camera={{ position: [0, 50, 105], fov: 34 }} dpr={[1, 2]} shadows>
                     <RenderScene drawing={drawing} photoMode={false} wallWidth={planDetails.wallWidth} reachInRoom={planDetails} />
@@ -3803,6 +3803,14 @@ export default function App({ internalRenderer = false }) {
   const [plannerStep, setPlannerStep] = useState('design');
 
   useEffect(() => {
+    if (internalRenderer || requestedType !== 'walk-in') return;
+
+    const destination = new URL('/walkin.html', window.location.href);
+    destination.search = window.location.search;
+    window.location.replace(destination.toString());
+  }, [internalRenderer, requestedType]);
+
+  useEffect(() => {
     let ignore = false;
 
     async function loadKits() {
@@ -4104,6 +4112,13 @@ export default function App({ internalRenderer = false }) {
     });
   };
 
+  const editReachInRoom = () => {
+    setReachInRoomCaptured(false);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  };
+
   const resetClosetType = () => {
     setClosetType('');
     setReachInRoomCaptured(false);
@@ -4196,6 +4211,14 @@ export default function App({ internalRenderer = false }) {
         drawing={drawing}
         extraParts={extraParts}
       />
+    );
+  }
+
+  if (!internalRenderer && requestedType === 'walk-in') {
+    return (
+      <main className="grid min-h-screen place-items-center bg-brand-ui p-4 text-sm font-bold text-stone-700">
+        Opening the walk-in planner…
+      </main>
     );
   }
 
@@ -4403,7 +4426,7 @@ export default function App({ internalRenderer = false }) {
               <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 xl:border-l xl:border-t-0">
                 <div className="space-y-3">
                   {!internalRenderer ? (
-                    <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={() => setReachInRoomCaptured(false)}>
+                    <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={editReachInRoom}>
                       <ReachInClosetDetailsSummary planDetails={plannerPlanDetails} moduleCount={plannerModules.length} embedded />
                     </ReachInSpaceSummary>
                   ) : (

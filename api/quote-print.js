@@ -134,34 +134,39 @@ function renderMaterialsTable(materials = []) {
       return part;
     });
 
+  const categoryOrder = ['Panels', 'Shelves', 'Kits', 'Hardware', 'Added Parts', 'Added parts', 'Parts'];
+  const categories = [...new Set(displayMaterials.map((part) => part.category || 'Parts'))]
+    .sort((left, right) => {
+      const leftIndex = categoryOrder.indexOf(left);
+      const rightIndex = categoryOrder.indexOf(right);
+      return (leftIndex < 0 ? categoryOrder.length : leftIndex) - (rightIndex < 0 ? categoryOrder.length : rightIndex)
+        || String(left).localeCompare(String(right), undefined, { sensitivity: 'base' });
+    });
+
   return `
     <section>
-      <h2>Build Parts</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th>SKU</th>
-            <th>Part</th>
-            <th>Qty</th>
-            <th>Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${displayMaterials.sort((left, right) => {
-            const categoryOrder = String(left.category || '').localeCompare(String(right.category || ''), undefined, { sensitivity: 'base' });
-            return categoryOrder || String(left.name || left.label || '').localeCompare(String(right.name || right.label || ''), undefined, { sensitivity: 'base' });
-          }).map((part) => `
-            <tr>
-              <td>${escapeHtml(part.category || '')}</td>
-              <td>${escapeHtml(part.sku || '')}</td>
-              <td>${escapeHtml(part.name || part.label || '')}</td>
-              <td>${escapeHtml(part.quantity || '')}</td>
-              <td>${escapeHtml(part.details || '')}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <h2>Exact Part List</h2>
+      ${categories.map((category) => {
+        const categoryParts = displayMaterials
+          .filter((part) => (part.category || 'Parts') === category)
+          .sort((left, right) => String(left.name || left.label || '').localeCompare(String(right.name || right.label || ''), undefined, { sensitivity: 'base' }));
+        return `
+          <div class="part-category">
+            <h3>${escapeHtml(category)}</h3>
+            <table>
+              <thead><tr><th>Qty</th><th>SKU</th><th>Part</th><th>Description</th></tr></thead>
+              <tbody>${categoryParts.map((part) => `
+                <tr>
+                  <td>${escapeHtml(part.quantity || '')}</td>
+                  <td>${escapeHtml(part.sku || '')}</td>
+                  <td>${escapeHtml(part.name || part.label || '')}</td>
+                  <td>${escapeHtml(part.details || '')}</td>
+                </tr>
+              `).join('')}</tbody>
+            </table>
+          </div>
+        `;
+      }).join('')}
     </section>
   `;
 }
@@ -194,13 +199,15 @@ function getEstimatePlanPath(planUrl) {
   }
 }
 
-function renderLiveDrawingLoader(planPath, hasSavedDrawings) {
-  if (!planPath || hasSavedDrawings) return '';
+function renderLiveDrawingLoader(planPath, savedDrawings = []) {
+  if (!planPath) return '';
+
+  const savedTitles = savedDrawings.map((drawing) => drawing.title || 'Plan drawing');
 
   return `
     <section class="drawings live-drawings" id="live-drawings">
-      <h2>Plan Drawings</h2>
-      <p class="muted" id="drawing-status">Loading saved plan drawings...</p>
+      <h2>${savedTitles.length ? 'Additional Plan Drawings' : 'Plan Drawings'}</h2>
+      <p class="muted" id="drawing-status">Checking plan drawings...</p>
       <div id="drawing-output"></div>
       <iframe class="drawing-source-frame" id="drawing-source" title="Saved plan drawing source" src="${escapeHtml(planPath)}"></iframe>
     </section>
@@ -210,6 +217,7 @@ function renderLiveDrawingLoader(planPath, hasSavedDrawings) {
         const section = document.getElementById('live-drawings');
         const output = document.getElementById('drawing-output');
         const status = document.getElementById('drawing-status');
+        const savedTitles = new Set(${JSON.stringify(savedTitles)});
         if (!frame || !section || !output) return;
 
         const inlineSvgStyles = (source, clone) => {
@@ -240,6 +248,7 @@ function renderLiveDrawingLoader(planPath, hasSavedDrawings) {
             output.innerHTML = '';
             const titleCounts = {};
             drawings.forEach(({ title, svg }) => {
+              if (savedTitles.has(title)) return;
               const figure = document.createElement('figure');
               const caption = document.createElement('figcaption');
               const clone = svg.cloneNode(true);
@@ -253,7 +262,7 @@ function renderLiveDrawingLoader(planPath, hasSavedDrawings) {
               output.appendChild(figure);
             });
             status.remove();
-            section.hidden = false;
+            section.hidden = output.children.length === 0;
             document.documentElement.dataset.drawingsReady = 'true';
             window.dispatchEvent(new Event('saved-plan-drawings-ready'));
           } catch {
@@ -319,23 +328,27 @@ function renderModulesTable(modules = []) {
 function renderWalkInDetails(quote = {}) {
   const room = quote.room || {};
   const roomItems = [
-    ['Room width', formatInches(room.width)],
-    ['Room depth', formatInches(room.depth)],
-    ['Height', formatInches(room.height || quote.height)],
+    ['Back wall', formatInches(room.backWidth || room.width)],
+    ['Left wall', formatInches(room.leftDepth || room.depth)],
+    ['Right wall', formatInches(room.rightDepth || room.depth)],
+    ['Ceiling', formatInches(room.ceilingHeight || room.height || quote.height)],
+    ['Opening', formatInches(room.openingWidth)],
+    ['Return walls', [formatInches(room.openingLeft), formatInches(room.openingRight)].filter(Boolean).join(' / ')],
   ].filter(([, value]) => value);
 
   const runEntries = Object.entries(quote.runs || {})
-    .filter(([, run]) => Array.isArray(run?.modules) && run.modules.length);
+    .map(([wall, run]) => [wall, Array.isArray(run) ? run : (Array.isArray(run?.modules) ? run.modules : [])])
+    .filter(([, modules]) => modules.length);
 
   return `
     ${renderDefinitionList(roomItems)}
     ${runEntries.length ? `
       <section class="subsection">
         <h2>Wall Runs</h2>
-        ${runEntries.map(([wall, run]) => `
+        ${runEntries.map(([wall, modules]) => `
           <div class="run">
             <h3>${escapeHtml(wall)}</h3>
-            ${renderModulesTable(run.modules.map((module, index) => ({ ...module, wall, index: Number.isFinite(Number(module.index)) ? Number(module.index) : index })))}
+            ${renderModulesTable(modules.map((module, index) => ({ ...module, wall, index: Number.isFinite(Number(module.index)) ? Number(module.index) : index })))}
           </div>
         `).join('')}
       </section>
@@ -388,6 +401,7 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
       .muted { color: #57534e; font-size: 13px; font-weight: 600; }
       .footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e7e5e4; color: #78716c; font-size: 12px; }
       .subsection, .run { break-inside: avoid; }
+      .part-category { margin-top: 18px; break-inside: avoid-page; }
       figure { margin: 14px 0 22px; break-inside: avoid; }
       figcaption { margin-bottom: 8px; font-size: 14px; font-weight: 800; }
       figure img { display: block; width: 100%; max-height: 7.25in; object-fit: contain; border: 1px solid #e7e5e4; background: #fff; }
@@ -444,7 +458,7 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
       ` : ''}
 
       ${renderDrawings(drawings)}
-      ${renderLiveDrawingLoader(estimatePlanPath, drawings.length > 0)}
+      ${renderLiveDrawingLoader(estimatePlanPath, drawings)}
 
       ${renderMaterialsTable(materials)}
 

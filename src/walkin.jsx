@@ -1350,7 +1350,7 @@ function WallRunEditor({ wall, wallHeight, usableLength, rawLength, modules, gra
               </div>
             )}
             <div className="grid flex-1 place-items-center text-center text-sm font-semibold text-stone-500">
-              Choose a configuration above to start this wall.
+              Choose an available configuration to start this wall.
             </div>
             {grayAfter > 0 && (
               <div className="grid min-w-[92px] place-items-center rounded border border-dashed border-stone-500 bg-stone-300/70 px-2 text-center text-xs font-bold text-stone-700">
@@ -1622,7 +1622,9 @@ function buildWalkInTowerLayout(height, code) {
 }
 
 function WalkInFrontViews({ room, runs }) {
-  const wallEntries = Object.entries(runs).filter(([, modules]) => modules.length > 0);
+  const wallEntries = planWalls
+    .map((wall) => [wall, runs[wall] || []])
+    .filter(([, modules]) => modules.length > 0);
 
   if (wallEntries.length === 0) {
     return null;
@@ -1648,7 +1650,7 @@ function WalkInFrontViews({ room, runs }) {
     const panelXs = [0, ...segments.slice(1).map((segment) => segment.start - panelThickness), runLength - panelThickness];
 
     return (
-      <div key={wall} className="min-w-0 rounded border border-stone-100 bg-white p-2">
+      <div key={wall} data-wall-view={wall} className="min-w-0 rounded border border-stone-100 bg-white p-2">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-sm font-bold text-stone-950">{wallLabels[wall]} Wall Front View</h3>
           <span className="text-xs font-semibold text-stone-500">{formatInches(runLength)} wide x {formatInches(height)} high</span>
@@ -2128,7 +2130,7 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
           </span>
         </div>
       </div>
-      <div className="relative w-full overflow-hidden rounded bg-stone-50" style={{ height: 560 }}>
+      <div className="relative h-[420px] w-full overflow-hidden rounded bg-stone-50 sm:h-[560px]">
         <WalkInOrbitHintBadge />
         <Canvas shadows camera={{ position: [orbitRoomRadius * 0.85, orbitMaxHeight * 0.72, orbitRoomRadius * 0.95], fov: 36, near: 0.1, far: 1200 }} style={{ width: '100%', height: '100%' }}>
           <color attach="background" args={['#fbfaf6']} />
@@ -2882,7 +2884,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
         <section className="grid min-w-0 gap-4">
           <div className="grid min-w-0 gap-4">
             <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
-              <div className="mb-3 flex justify-end">
+              <div className="print-hide mb-3 flex justify-end">
                 <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
                   {[
                     ['plan', 'Plan'],
@@ -2897,7 +2899,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
               <div ref={planDrawingRef} data-saved-plan-drawing="Plan View" className={previewMode === 'plan' ? '' : 'hidden'}>
                 <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluation} />
               </div>
-              <div className={previewMode === '3d' ? '' : 'hidden'}>
+              <div className={`print-hide ${previewMode === '3d' ? '' : 'hidden'}`}>
                 <WalkIn3DPreview room={room} runs={runs} corners={corners} evaluation={evaluation} />
               </div>
             </section>
@@ -3070,7 +3072,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
   const [showForm, setShowForm] = useState(false);
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
-  const materials = useMemo(() => buildWalkInMaterials(runs), [runs]);
+  const materials = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
   const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
   const shouldShowProductLinks = evaluation.complete && pricing.allConfiguredWallsMatched;
   const catalogMessages = pricing.catalogWarnings || [];
@@ -3445,7 +3447,12 @@ function WalkInPlanner() {
         enabledWalls={enabledWalls}
         onToggleWall={toggleReturnWall}
         roomEvaluation={roomEvaluation}
-        onContinue={() => setRoomCaptured(true)}
+        onContinue={() => {
+          setRoomCaptured(true);
+          window.requestAnimationFrame(() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          });
+        }}
       />
     );
   }

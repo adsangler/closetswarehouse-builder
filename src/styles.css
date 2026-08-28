@@ -136,6 +136,10 @@ html[data-embedded-planner="true"] .h-screen {
     display: none !important;
   }
 
+  [data-saved-plan-drawing] {
+    display: block !important;
+  }
+
   .print-plan-reference {
     display: block !important;
     break-after: avoid;
