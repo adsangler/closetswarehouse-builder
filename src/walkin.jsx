@@ -1523,9 +1523,10 @@ function getDrawerBounds(drawers) {
 function buildWalkInTowerLayout(height, code) {
   const topShelf = height - panelThickness;
   const bottomShelf = toeKickHeight;
+  const standardHeightTopShelf = 84 - panelThickness;
   const s2dDrawerTop = getDrawerBounds(buildDrawers('S2D')).top;
   const drawerDeck = code === 'S2D' ? s2dDrawerTop : 46;
-  const longHangShelfY = height - 18;
+  const longHangShelfY = 84 - 18;
   const rodDropBelowShelf = 4.5;
   const longHangRodY = longHangShelfY - rodDropBelowShelf;
   const hsLowerShelfTopY = height >= 96 ? 52 : 43;
@@ -1547,6 +1548,7 @@ function buildWalkInTowerLayout(height, code) {
       shelves: [
         { y: bottomShelf, fixed: true },
         { y: longHangShelfY, fixed: false },
+        ...(hasTallHeight ? [{ y: standardHeightTopShelf, fixed: false }] : []),
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Long hang rod', y: longHangRodY }],
@@ -1558,7 +1560,7 @@ function buildWalkInTowerLayout(height, code) {
     return {
       shelves: [
         { y: bottomShelf, fixed: true },
-        ...buildAdjustableShelves(height, 3, bottomShelf, hsLowerShelfTopY),
+        ...buildAdjustableShelves(height, hasTallHeight ? 4 : 3, bottomShelf, hsLowerShelfTopY),
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: height - 8.5 }],
@@ -1567,10 +1569,13 @@ function buildWalkInTowerLayout(height, code) {
   }
 
   if (code === 'H3D') {
+    const lowerShelfYs = hasTallHeight
+      ? buildAdjustableShelves(height, 2, bottomShelf, getDrawerBounds(buildDrawers(code)).bottom)
+      : [{ y: 14.35, fixed: false }];
     return {
       shelves: [
         { y: bottomShelf, fixed: true },
-        { y: 14.35, fixed: false },
+        ...lowerShelfYs,
         { y: drawerDeck, fixed: false },
         { y: topShelf, fixed: true },
       ],
@@ -1580,16 +1585,18 @@ function buildWalkInTowerLayout(height, code) {
   }
 
   if (code === 'DH') {
-    const middleShelfY = bottomShelf + (topShelf - bottomShelf) / 2;
+    const middleShelfY = bottomShelf + (standardHeightTopShelf - bottomShelf) / 2;
+    const upperRodShelfY = hasTallHeight ? standardHeightTopShelf : topShelf;
 
     return {
       shelves: [
         { y: bottomShelf, fixed: true },
         { y: middleShelfY, fixed: false },
+        ...(hasTallHeight ? [{ y: standardHeightTopShelf, fixed: false }] : []),
         { y: topShelf, fixed: true },
       ],
       rods: [
-        { label: 'Upper rod', y: topShelf - rodDropBelowShelf },
+        { label: 'Upper rod', y: upperRodShelfY - rodDropBelowShelf },
         { label: 'Lower rod', y: middleShelfY - rodDropBelowShelf },
       ],
       drawers: [],
