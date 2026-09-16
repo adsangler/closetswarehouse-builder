@@ -1,3 +1,12 @@
+import { gzipSync, gunzipSync } from 'node:zlib';
+
+export function parseStoredQuote(value) {
+  const quote = JSON.parse(value || 'null');
+  return quote?.encoding === 'gzip-base64'
+    ? JSON.parse(gunzipSync(Buffer.from(quote.data, 'base64'), { maxOutputLength: 5000000 }).toString('utf8'))
+    : quote;
+}
+
 const tableEnvKeys = {
   kits: 'AIRTABLE_KITS_TABLE',
   parts: 'AIRTABLE_PARTS_TABLE',
@@ -124,6 +133,33 @@ function compactFields(fields) {
   );
 }
 
+const AIRTABLE_LONG_TEXT_SAFE_LENGTH = 95000;
+
+function stringifyQuoteForAirtable(quote) {
+  const serialized = JSON.stringify(quote);
+
+  if (serialized.length <= AIRTABLE_LONG_TEXT_SAFE_LENGTH) {
+    return serialized;
+  }
+
+  // SVG data URLs can easily exceed Airtable's 100k-character long-text limit.
+  // The printable view recreates them from the saved planner URL, so retain the
+  // plan itself and discard only the embedded drawing copies.
+  const compact = JSON.stringify({
+    ...quote,
+    drawings: [],
+    drawingsStoredInPlanUrl: Array.isArray(quote.drawings) && quote.drawings.length > 0,
+  });
+  if (compact.length <= AIRTABLE_LONG_TEXT_SAFE_LENGTH) return compact;
+  // Never send an oversized field, even when other plan metadata is large.
+  // Preserve the full object losslessly in a JSON envelope for our readers.
+  const compressed = JSON.stringify({ encoding: 'gzip-base64', data: gzipSync(compact).toString('base64') });
+  if (compressed.length > AIRTABLE_LONG_TEXT_SAFE_LENGTH) {
+    throw new Error('Plan exceeds the supported saved-plan size. Please split it into smaller plans.');
+  }
+  return compressed;
+}
+
 async function fetchQuoteRecords(config, configureUrl = () => {}) {
   const records = [];
   let offset;
@@ -164,7 +200,7 @@ function parseQuoteRecord(record, fallbackQuoteId = '') {
   let quoteJson = null;
 
   try {
-    quoteJson = JSON.parse(record.fields?.['Quote JSON'] || 'null');
+    quoteJson = parseStoredQuote(record.fields?.['Quote JSON']);
   } catch {
     quoteJson = null;
   }
@@ -215,7 +251,7 @@ function getAirtableErrorMessage(payload, text = '') {
 }
 
 function shouldFallbackQuoteSave(result) {
-  return /UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(
+  return /UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS|cannot accept the provided value|INVALID_VALUE_FOR_COLUMN/i.test(
     getAirtableErrorMessage(result.payload, result.text),
   );
 }
@@ -258,7 +294,7 @@ function buildLegacyQuoteFields(quote) {
     'Estimated Price': quote.estimatedPrice,
     Signature: quote.signature,
     Modules: quote.modules?.map(formatModuleDisplay).join(', '),
-    'Quote JSON': JSON.stringify(quote),
+    'Quote JSON': stringifyQuoteForAirtable(quote),
   });
 }
 
@@ -278,10 +314,15 @@ function buildEnrichedQuoteFields(quote, shopifyCustomer = null) {
   };
 }
 
+function withoutQuoteJson(fields) {
+  const { 'Quote JSON': _quoteJson, ...remainingFields } = fields;
+  return remainingFields;
+}
+
 function buildCoreQuoteFields(quote) {
   const fieldNames = getQuoteFieldNames();
 
-  return {
+  return withoutQuoteJson({
     ...buildLegacyQuoteFields(quote),
     ...compactFields({
       [fieldNames.quoteId]: quote.quoteId,
@@ -289,7 +330,7 @@ function buildCoreQuoteFields(quote) {
       [fieldNames.planType]: quote.planType || quote.internalType || 'closet plan',
       [fieldNames.submittedAt]: quote.submittedAt,
     }),
-  };
+  });
 }
 
 function buildRequiredQuoteFields(quote) {
@@ -299,7 +340,6 @@ function buildRequiredQuoteFields(quote) {
     [fieldNames.quoteId]: quote.quoteId,
     Email: quote.customer?.email || '',
     Phone: quote.customer?.phone || '',
-    'Quote JSON': JSON.stringify(quote),
   });
 }
 
@@ -310,11 +350,10 @@ export async function createAirtableQuoteWithDiagnostics(quote) {
     return { record: null, error: 'missing_airtable_quote_env' };
   }
 
-  const payload = {
-    fields: buildEnrichedQuoteFields(quote),
-  };
-
   try {
+    const payload = {
+      fields: buildEnrichedQuoteFields(quote),
+    };
     const enrichedResult = await airtableRequest(config, '', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -326,6 +365,19 @@ export async function createAirtableQuoteWithDiagnostics(quote) {
 
     if (!shouldFallbackQuoteSave(enrichedResult)) {
       return { record: null, error: getQuoteSaveFailureReason(enrichedResult, 'enriched') };
+    }
+
+    const withoutJsonFallback = await airtableRequest(config, '', {
+      method: 'POST',
+      body: JSON.stringify({ fields: withoutQuoteJson(payload.fields) }),
+    });
+
+    if (withoutJsonFallback.response.ok) {
+      return { record: withoutJsonFallback.payload, mode: 'enriched-without-json' };
+    }
+
+    if (!shouldFallbackQuoteSave(withoutJsonFallback)) {
+      return { record: null, error: getQuoteSaveFailureReason(withoutJsonFallback, 'enriched-without-json') };
     }
 
     const coreFallback = await airtableRequest(config, '', {
@@ -368,7 +420,12 @@ export async function updateAirtableQuoteShopifyCustomer(recordId, quote, shopif
     return null;
   }
 
-  const fields = buildEnrichedQuoteFields(quote, shopifyCustomer);
+  // Linking a customer must not resend drawings or unrelated plan fields.
+  const fieldNames = getQuoteFieldNames();
+  const fields = compactFields({
+    [fieldNames.shopifyCustomerId]: shopifyCustomer.customerId,
+    [fieldNames.shopifyCustomerEmail]: shopifyCustomer.customerEmail,
+  });
 
   try {
     const { response, payload } = await airtableRequest(config, `/${recordId}`, {
