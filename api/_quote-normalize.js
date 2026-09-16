@@ -14,9 +14,9 @@ const allowedWidthsByCode = {
   LH: new Set([18, 24, 30]),
   DH: new Set([18, 24, 30]),
   HS: new Set([18, 24, 30]),
-  S3D: new Set([24]),
-  H3D: new Set([24]),
-  S2D: new Set([24]),
+  S3D: new Set([24, 30]),
+  H3D: new Set([24, 30]),
+  S2D: new Set([24, 30]),
   S7: new Set([18, 24, 30]),
   S8: new Set([18, 24, 30]),
 };
