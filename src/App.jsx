@@ -1,8 +1,13 @@
+import { adjustableShelfCount } from './shelfCounts.js';
+import { pickListGroups, comparePickParts } from './pickList.js';
+import { buildDetailedReachInParts } from './partList.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/drei';
 import { Pathtracer } from '@react-three/gpu-pathtracer';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
+import { getPlannerContact, hasPlannerContact, rememberPlannerContact } from './contactSession';
+import { reportUserVisibleError } from './userErrorLog';
 
 const storefrontBaseUrl = 'https://closetswarehouse.com';
 const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
@@ -100,11 +105,6 @@ const drawerPullLength = 5;
 const drawerPullHeight = 0.5;
 const drawerPullProjection = 1.4;
 const frontDrillLineZ = depth / 2 - 1.1;
-const shelfOnlyAdjustableShelfCounts = {
-  S7: 6,
-  S8: 7,
-  S9: 7,
-};
 const panelMaterial = {
   color: '#fffdf7',
   roughness: 0.68,
@@ -456,7 +456,7 @@ function getRequestedReachInPlan() {
   }
 }
 
-function buildReachInPlanUrl(planDetails, modules, extraParts = []) {
+function buildReachInPlanUrl(planDetails, modules, extraParts = [], savedEstimate = null) {
   if (typeof window === 'undefined') {
     return '';
   }
@@ -464,14 +464,22 @@ function buildReachInPlanUrl(planDetails, modules, extraParts = []) {
   const url = new URL(window.location.href);
   url.searchParams.delete('kit');
   url.searchParams.delete('estimate');
-  url.searchParams.set('plan', encodePlanPayload({ planDetails, modules, extraParts }));
+  url.searchParams.set('plan', encodePlanPayload({ planDetails, modules, extraParts, ...(savedEstimate ? { savedEstimate } : {}) }));
   return url.toString();
 }
 
-function buildReachInEstimateUrl(planDetails, modules, extraParts = []) {
-  const url = new URL(buildReachInPlanUrl(planDetails, modules, extraParts));
+function buildReachInEstimateUrl(planDetails, modules, extraParts = [], quoteId = '', savedEstimate = null) {
+  const url = new URL(buildReachInPlanUrl(planDetails, modules, extraParts, savedEstimate));
   url.searchParams.set('estimate', '1');
+  if (quoteId) {
+    url.searchParams.set('quote', quoteId);
+  }
   return url.toString();
+}
+
+function getSavedQuoteIdFromUrl() {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get('quote') || '';
 }
 
 function navigateInsideFrame(path) {
@@ -749,16 +757,11 @@ function buildTowerLayout(drawing, tower) {
   const longHangRodY = longHangShelfY - rodDropBelowShelf;
   const hsLowerShelfTopY = drawing.height >= 96 ? 52 : 43;
   const hasTallHeight = drawing.height >= 96;
-  const shelfCountByCode = {
-    S3D: hasTallHeight ? 5 : 4,
-    H3D: hasTallHeight ? 2 : 1,
-    S2D: hasTallHeight ? 5 : 4,
-    ...shelfOnlyAdjustableShelfCounts,
-  };
+  const adjustableCount = adjustableShelfCount(tower.code, drawing.height);
 
   const shelves = [
     { y: bottomShelf, fixed: true },
-    ...buildAdjustableShelves(drawing, shelfCountByCode[tower.code] || 3),
+    ...buildAdjustableShelves(drawing, adjustableCount),
     { y: topShelf, fixed: true },
   ];
   const rods = [];
@@ -782,7 +785,7 @@ function buildTowerLayout(drawing, tower) {
     return {
       shelves: [
         { y: bottomShelf, fixed: true },
-        ...buildAdjustableShelves(drawing, hasTallHeight ? 4 : 3, bottomShelf, hsLowerShelfTopY),
+        ...buildAdjustableShelves(drawing, adjustableCount, bottomShelf, hsLowerShelfTopY),
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: drawing.height - 8.5, bayX: tower.bayX, width: tower.width }],
@@ -793,13 +796,13 @@ function buildTowerLayout(drawing, tower) {
 
   if (tower.code === 'H3D') {
     const lowerShelfYs = hasTallHeight
-      ? buildAdjustableShelves(drawing, 2, bottomShelf, getDrawerBounds(buildDrawers(tower.code)).bottom)
+      ? buildAdjustableShelves(drawing, adjustableCount - 1, bottomShelf, getDrawerBounds(buildDrawers(tower.code)).bottom)
       : [{ y: 14.35, fixed: false }];
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
+        { y: bottomShelf, fixed: false },
         ...lowerShelfYs,
-        { y: drawerDeck, fixed: false },
+        { y: drawerDeck, fixed: true },
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: drawing.height - 7.5, bayX: tower.bayX, width: tower.width }],
@@ -814,8 +817,8 @@ function buildTowerLayout(drawing, tower) {
 
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
-        { y: middleShelfY, fixed: false },
+        { y: bottomShelf, fixed: false },
+        { y: middleShelfY, fixed: true },
         ...(hasTallHeight ? [{ y: standardHeightTopShelf, fixed: false }] : []),
         { y: topShelf, fixed: true },
       ],
@@ -832,13 +835,13 @@ function buildTowerLayout(drawing, tower) {
     const drawerTowerDrawers = buildDrawers(tower.code);
     const drawerBounds = getDrawerBounds(drawerTowerDrawers);
     const lowerShelfY = bottomShelf + (drawerBounds.bottom - bottomShelf) / 2;
-    const upperShelfCount = hasTallHeight ? 3 : 2;
+    const upperShelfCount = adjustableCount - 2;
 
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
+        { y: bottomShelf, fixed: false },
         { y: lowerShelfY, fixed: false },
-        { y: drawerDeck, fixed: tower.code === 'S2D' },
+        { y: drawerDeck, fixed: true },
         ...buildAdjustableShelves(drawing, upperShelfCount, drawerDeck, topShelf),
         { y: topShelf, fixed: true },
       ],
@@ -1939,7 +1942,8 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
   const viewWidth = 640;
   const viewHeight = 340;
   const wallPx = 7;
-  const scale = Math.min((viewWidth - padding * 2) / backWidth, (viewHeight - padding * 2) / reachDepth);
+  const drawingWidth = Math.max(backWidth, assembledWidth);
+  const scale = Math.min((viewWidth - padding * 2) / drawingWidth, (viewHeight - padding * 2) / reachDepth);
   const toX = (value) => padding + value * scale;
   const toY = (value) => padding + value * scale;
   const runStart = Math.max(0, (backWidth - assembledWidth) / 2);
@@ -1981,6 +1985,14 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
         {backWidth - openingEnd > 0 && <rect x={toX(openingEnd)} y={toY(reachDepth) - wallPx / 2} width={(backWidth - openingEnd) * scale} height={wallPx} rx="1" className="fill-stone-500" />}
         <line x1={toX(openingStart)} y1={toY(reachDepth)} x2={toX(openingEnd)} y2={toY(reachDepth)} className="stroke-stone-400" strokeWidth="2" strokeDasharray="5 4" />
         <rect x={toX(runStart)} y={toY(0)} width={assembledWidth * scale} height={depth * scale} className="fill-brand-orange/70 stroke-orange-800" />
+        {assembledWidth > backWidth && (
+          <g>
+            <rect x={toX(backWidth)} y={toY(0)} width={(assembledWidth - backWidth) * scale} height={depth * scale} className="fill-red-200/80 stroke-red-700" strokeDasharray="5 3" />
+            <text x={toX(backWidth + (assembledWidth - backWidth) / 2)} y={toY(depth / 2) + 4} textAnchor="middle" className="fill-red-800 text-[10px] font-bold">
+              {formatInches(assembledWidth - backWidth)} over wall
+            </text>
+          </g>
+        )}
         {doorType === 'sliding' && (
           <g>
             <rect x={toX(openingStart)} y={toY(reachDepth) - 7} width={(doorWidth / 2) * scale} height="5" className="fill-stone-300/80 stroke-stone-600" />
@@ -2270,109 +2282,11 @@ function GeneratedPhotoGallery({ drawing, onSelectHandle, refreshToken }) {
   );
 }
 
-function buildMaterialSummary(modules) {
-  const counts = new Map();
-  const add = (label, quantity = 1) => counts.set(label, (counts.get(label) || 0) + quantity);
-
-  if (modules.length === 0) {
-    return [];
-  }
-
-  add('Vertical panels', modules.length + 1);
-  add('Toe kicks', modules.length);
-
-  modules.forEach((module) => {
-    const tall = module.code === 'S8' || module.code === 'S9';
-    const shelfCounts = {
-      LH: 3,
-      DH: 3,
-      HS: 5,
-      S3D: tall ? 7 : 6,
-      H3D: 4,
-      S2D: tall ? 7 : 6,
-      S7: 8,
-      S8: 9,
-    };
-    const rodCounts = {
-      LH: 1,
-      DH: 2,
-      HS: 1,
-      H3D: 1,
-    };
-    const drawerCounts = {
-      S3D: '2 small + 1 large drawer kit',
-      H3D: '2 small + 1 large drawer kit',
-      S2D: '2 small drawer kits',
-    };
-
-    add(`${module.width}" shelf boards`, shelfCounts[module.code] || 0);
-    add(`${module.width}" rods`, rodCounts[module.code] || 0);
-
-    if (drawerCounts[module.code]) {
-      add(drawerCounts[module.code]);
-    }
-  });
-
-  return [...counts.entries()].filter(([, quantity]) => quantity > 0).map(([label, quantity]) => ({ label, quantity }));
-}
-
-function buildDetailedReachInParts(modules, height) {
-  const parts = new Map();
-  const add = (sku, name, quantity = 1, details = '', category = 'Parts') => {
-    if (!quantity) return;
-    const key = `${category}|${sku}|${name}|${details}`;
-    const current = parts.get(key);
-    parts.set(key, {
-      category,
-      sku,
-      name,
-      details,
-      quantity: (current?.quantity || 0) + quantity,
-    });
-  };
-
-  if (!modules.length) {
-    return [];
-  }
-
-  add(`VL-14-${height}-W`, `Left vertical panel 14" x ${height}"`, 1, 'Outer left side panel.', 'Panels');
-  add(`VR-14-${height}-W`, `Right vertical panel 14" x ${height}"`, 1, 'Outer right side panel.', 'Panels');
-  add(`VD-14-${height}-W`, `Shared divider panel 14" x ${height}"`, Math.max(0, modules.length - 1), 'One shared divider at each tower joint; no doubled side panels.', 'Panels');
-
-  const drawing = createDrawing(createPlannerDrawing(height, modules));
-  let adjustableShelfCount = 0;
-
-  drawing.towers.forEach((tower) => {
-    const layout = buildTowerLayout(drawing, tower);
-    const fixedShelves = layout.shelves.filter((shelf) => shelf.fixed).length;
-    const adjustableShelves = layout.shelves.length - fixedShelves;
-    const rods = layout.rods.length;
-    const smallDrawers = layout.drawers.filter((drawer) => drawer.height === 5).length;
-    const largeDrawers = layout.drawers.filter((drawer) => drawer.height === 10).length;
-
-    adjustableShelfCount += adjustableShelves;
-
-    add(`FS-${tower.width}-14-W`, `Fixed shelf ${tower.width}" x 14"`, fixedShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay structural shelves.`, 'Shelves');
-    add(`SH-${tower.width}-14-W`, `Adjustable shelf ${tower.width}" x 14"`, adjustableShelves, `${towerNames[tower.code] || tower.code} ${tower.width}" bay movable shelves.`, 'Shelves');
-    add(`TKK-${tower.width}-5-W`, `Toe-kick kit ${tower.width}" x 5"`, 1, 'Toe-kick kit for this tower bay.', 'Kits');
-    add(`RK-${tower.width}-S`, `Rod kit ${tower.width}"`, rods, 'Complete hanging rod kit with one rod and one pair of rod brackets.', 'Kits');
-    add(`DRK-${tower.width}-5-13-W`, `Small drawer kit ${tower.width}" x 5" x 13"`, smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
-    add(`DRK-${tower.width}-10-13-W`, `Large drawer kit ${tower.width}" x 10" x 13"`, largeDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
-  });
-
-  const wallBracketCount = modules.length * 2;
-  add('WLB-S-1', 'Wall bracket kit', wallBracketCount, 'Includes one L-bracket, one wood screw for the fixed shelf, and one wall/stud screw. Two kits per tower section.', 'Kits');
-  add('PIN-20-S', 'Shelf pin pack, 20 pins', Math.ceil((adjustableShelfCount * 4) / 20), `${adjustableShelfCount * 4} shelf pins required for ${adjustableShelfCount} adjustable shelves.`, 'Hardware');
-  add('CAMKIT-10-W', 'Rafix/cam lock and screw kit, 10 pieces', modules.length, `${modules.length * 8} Rafix/bolt connector positions required; one 10-piece kit packed per tower.`, 'Hardware');
-
-  return [...parts.values()].filter((part) => part.quantity > 0);
-}
-
 function aggregatePartsBySku(parts) {
   const aggregated = new Map();
 
   parts.forEach((part) => {
-    const key = `${part.category}|${part.sku}`;
+    const key = `${part.category}|${part.sku || part.name}`;
     const current = aggregated.get(key) || {
       category: part.category,
       sku: part.sku,
@@ -2398,17 +2312,17 @@ function aggregatePartsBySku(parts) {
 }
 
 function PartsList({ parts }) {
-  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware', 'Added Parts'];
+  const groups = pickListGroups;
   const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
     <section className="min-w-0 rounded border border-stone-200 bg-white p-4">
-      <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
+      <h2 className="text-lg font-bold text-stone-950">Pick List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
           const items = aggregatedParts
             .filter((part) => part.category === group)
-            .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
+            .sort(comparePickParts);
 
           if (!items.length) return null;
 
@@ -2453,9 +2367,9 @@ function AddedPartsSection({ items, plannedWidths }) {
       <p className="mt-1 text-sm font-semibold text-stone-600">Loose parts selected in addition to the closet kit.</p>
       <div className="mt-3 grid gap-2">
         {items.map((item) => <div key={`${item.sku}-${item.width}`} className="rounded border border-orange-200 bg-white px-3 py-2 text-sm">
-          <div className="flex flex-wrap justify-between gap-2"><span className="font-bold text-stone-950">{item.name || item.sku} · {item.width}&quot;</span><span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span></div>
+          <div className="flex flex-wrap justify-between gap-2"><span className="font-bold text-stone-950">{item.name || item.sku}{item.width ? ` · ${item.width}\"` : ''}</span><span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span></div>
           <div className="mt-1 text-xs font-semibold text-stone-600">{item.sku} · {money(item.price)} each</div>
-          {!plannedWidths.includes(Number(item.width)) && <div className="mt-2 text-xs font-bold text-amber-800">Warning: no matching {item.width}&quot; tower bay exists in this plan.</div>}
+          {item.width > 0 && !plannedWidths.includes(Number(item.width)) && <div className="mt-2 text-xs font-bold text-amber-800">Warning: no matching {item.width}&quot; tower bay exists in this plan.</div>}
         </div>)}
       </div>
     </section>
@@ -2603,7 +2517,7 @@ function ModuleControlStrip({ modules, height, onRemove, onMove, onWidthChange, 
           return (
             <article key={module.id} className="w-[6.25rem] shrink-0 rounded border border-stone-200 bg-stone-50 p-2">
               <div className="min-w-0">
-                <div className="truncate text-xs font-bold text-stone-950" title={towerNames[module.code] || module.code}>
+                <div className="line-clamp-2 min-h-8 text-xs font-bold leading-4 text-stone-950" title={towerNames[module.code] || module.code}>
                   {towerNames[module.code] || module.code}
                 </div>
                 <div className="text-[11px] font-semibold text-stone-500">{module.code} / {height}"H</div>
@@ -2694,6 +2608,8 @@ function getReachInValidationMessages(planDetails) {
 function getExtraPartSku(type, width) {
   if (type === 'shelf') return `SH-${width}-14-W`;
   if (type === 'rod') return `RK-${width}-S`;
+  if (type === 'shelfPins') return 'PIN-20-S';
+  if (type === 'rafix') return 'CAMKIT-10-W';
   if (type === 'smallDrawer') return 'DRK-24-5-13-W';
   return 'DRK-24-10-13-W';
 }
@@ -2702,6 +2618,8 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
   const options = {
     shelf: { label: 'Adjustable shelf', widths: [18, 24, 30] },
     rod: { label: 'Rod kit', widths: [18, 24, 30] },
+    shelfPins: { label: 'Shelf pins — pack of 20', widths: [0] },
+    rafix: { label: 'Rafix/cam-lock kit — pack of 10', widths: [0] },
     smallDrawer: { label: 'Small drawer kit', widths: [24, 30] },
     largeDrawer: { label: 'Large drawer kit', widths: [24, 30] },
   };
@@ -2732,12 +2650,14 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
     onChange((current) => {
       const existing = current.find((item) => item.type === type && item.width === width);
       if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
-      return [...current, { type, width, quantity, sku, name: product.name || selected.label, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
+      const displayName = product.name && product.name.toUpperCase() !== product.sku.toUpperCase() ? product.name : selected.label;
+      return [...current, { type, width, quantity, sku, name: displayName, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
     });
   };
   const selectedSku = getExtraPartSku(type, width);
   const selectedProduct = catalog.find((record) => record.sku.toUpperCase() === selectedSku);
-  const widthMatchesPlan = plannedWidths.includes(width);
+  const usesWidth = selected.widths[0] !== 0;
+  const widthMatchesPlan = !usesWidth || plannedWidths.includes(width);
 
   return (
     <section className="rounded border border-stone-200 bg-white p-3">
@@ -2746,18 +2666,18 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
       </button>
       {open && (
         <div className="mt-3 grid gap-3">
-          <p className="text-xs font-semibold text-stone-600">Add loose shelves, rod kits, or drawer kits without changing the tower layout.</p>
+          <p className="text-xs font-semibold text-stone-600">Add loose shelves, rod kits, shelf pins, Rafix hardware, or drawer kits without changing the tower layout.</p>
           <label className="grid gap-1 text-xs font-bold text-stone-600">Part
             <select value={type} onChange={(event) => changeType(event.target.value)} className="rounded border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900">
               {Object.entries(options).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
             </select>
           </label>
           <div className="grid grid-cols-2 gap-2">
-            <label className="grid gap-1 text-xs font-bold text-stone-600">Width
+            {usesWidth ? <label className="grid gap-1 text-xs font-bold text-stone-600">Width
               <select value={width} onChange={(event) => setWidth(Number(event.target.value))} className="rounded border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900">
                 {selected.widths.map((value) => <option key={value} value={value}>{value}&quot;</option>)}
               </select>
-            </label>
+            </label> : <div className="grid content-end text-xs font-bold text-stone-600"><span className="rounded border border-stone-200 bg-stone-50 px-2 py-2">Standard pack</span></div>}
             <label className="grid gap-1 text-xs font-bold text-stone-600">Quantity
               <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
             </label>
@@ -2767,10 +2687,10 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
           <button type="button" onClick={addItem} disabled={!selectedProduct} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
           {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
             {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
-              <span className="font-semibold text-stone-700">{options[item.type].label} — {item.width}&quot;</span>
+              <span className="font-semibold text-stone-700">{options[item.type].label}{item.width ? ` — ${item.width}\"` : ''}</span>
               <span className="font-bold text-stone-950">Qty {item.quantity}</span>
               <button type="button" onClick={() => onChange((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
-              {!plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
+              {item.width > 0 && !plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
             </div>)}
           </div>}
         </div>
@@ -2780,14 +2700,19 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
 }
 
 function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, isCatalogReady }) {
-  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState(getPlannerContact);
   const [leadStatus, setLeadStatus] = useState({ state: 'idle', message: '', quoteId: '' });
-  const [hasSavedPlan, setHasSavedPlan] = useState(false);
+  const [hasSavedPlan, setHasSavedPlan] = useState(hasPlannerContact);
   const hasModules = modules.length > 0;
   const validationMessages = getReachInValidationMessages(planDetails);
   const catalogMessages = evaluation.catalogWarnings || [];
   const canVerifyEstimate = Boolean(planDetails?.fits && isCatalogReady && evaluation.catalogSupported);
   const priceUnlocked = leadStatus.state === 'success';
+  const savedEstimate = {
+    estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
+    customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim(),
+    phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
+  };
   const addedPartsSignature = extraParts
     .map((item) => `${item.sku}:${item.width}:${item.quantity}`)
     .sort()
@@ -2796,6 +2721,10 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
   useEffect(() => {
     setLeadStatus({ state: 'idle', message: '', quoteId: '' });
   }, [addedPartsSignature, evaluation.signature]);
+
+  useEffect(() => {
+    catalogMessages.forEach((message) => reportUserVisibleError({ message, planner: 'reach-in', action: 'catalog availability' }));
+  }, [catalogMessages]);
 
   const savePlanAndRevealPrice = async (event) => {
     event.preventDefault();
@@ -2821,12 +2750,12 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
               sku: item.sku,
               name: item.name,
               quantity: item.quantity,
-              details: `${item.width}\" · ${money(item.price)} each`,
+              details: `${item.width ? `${item.width}\" · ` : ''}${money(item.price)} each`,
             })),
           ],
           extraParts,
           planType: 'reach-in',
-          planUrl: buildReachInPlanUrl(planDetails, modules, extraParts),
+          planUrl: buildReachInEstimateUrl(planDetails, modules, extraParts, '', savedEstimate),
           modules: modules.map((module, index) => ({
             index,
             code: module.code,
@@ -2846,7 +2775,9 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
 
       setLeadStatus({ state: 'success', message: '', quoteId: payload.quoteId });
       setHasSavedPlan(true);
+      rememberPlannerContact(customer);
     } catch (error) {
+      reportUserVisibleError({ message: error.message, planner: 'reach-in', action: 'save plan and reveal price' });
       setLeadStatus({ state: 'error', message: error.message, quoteId: '' });
     }
   };
@@ -2926,7 +2857,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
               ))}
             </div>
           )}
-          <button type="button" onClick={onContinue} className="rounded border border-emerald-700 bg-white px-3 py-2 text-sm font-bold text-emerald-800">View saved plan</button>
+          <button type="button" onClick={() => onContinue(leadStatus.quoteId, savedEstimate)} className="rounded border border-emerald-700 bg-white px-3 py-2 text-sm font-bold text-emerald-800">View saved plan</button>
           <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}</span>
         </div>}
         {validationMessages.length > 0 && (
@@ -2940,8 +2871,8 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
         )}
         {catalogMessages.length > 0 && (
           <div className="mt-3 grid gap-2">
-            {catalogMessages.map((warning) => (
-              <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+            {catalogMessages.map((warning, index) => (
+              <div key={`${warning}-${index}`} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
                 {warning}
               </div>
             ))}
@@ -2979,7 +2910,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
             ))}
           </div>
         )}
-        <button type="button" onClick={onContinue} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">View saved plan</button>
+        <button type="button" onClick={() => onContinue(leadStatus.quoteId, savedEstimate)} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">View saved plan</button>
         <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}</span>
       </div>}
       {validationMessages.length > 0 && (
@@ -2993,8 +2924,8 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
       )}
       {catalogMessages.length > 0 && (
         <div className="mt-3 grid gap-2">
-          {catalogMessages.map((warning) => (
-            <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+          {catalogMessages.map((warning, index) => (
+            <div key={`${warning}-${index}`} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
               {warning}
             </div>
           ))}
@@ -3005,9 +2936,9 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
 }
 
 function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
-  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState(getPlannerContact);
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
-  const materials = useMemo(() => buildMaterialSummary(modules), [modules]);
+  const materials = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
 
   const submitForVerification = async (event) => {
     event.preventDefault();
@@ -3052,7 +2983,9 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
         message: '',
         quoteId: payload.quoteId,
       });
+      rememberPlannerContact(customer);
     } catch (error) {
+      reportUserVisibleError({ message: error.message, planner: 'reach-in', action: 'submit verification request' });
       setSubmitStatus({
         state: 'error',
         message: error.message,
@@ -3111,17 +3044,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
             </ul>
           </section>
 
-          <section className="rounded border border-stone-200 p-3 md:col-span-2">
-            <h3 className="text-sm font-bold text-stone-950">Material Summary</h3>
-            <div className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
-              {materials.map((item) => (
-                <div key={item.label} className="flex justify-between rounded bg-stone-50 px-2 py-1">
-                  <span className="font-semibold text-stone-600">{item.label}</span>
-                  <span className="font-bold text-stone-950">{item.quantity}</span>
-                </div>
-              ))}
-            </div>
-          </section>
+          <div className="md:col-span-2"><PartsList parts={materials} /></div>
         </div>
 
         <form className="mt-4 rounded border border-stone-200 p-3" onSubmit={submitForVerification}>
@@ -3154,19 +3077,24 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
   );
 }
 
-function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraParts }) {
+function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraParts, savedEstimate }) {
+  const savedQuoteId = getSavedQuoteIdFromUrl();
   const [previewMode, setPreviewMode] = useState('plan');
   const planDrawingRef = useRef(null);
   const frontDrawingRef = useRef(null);
-  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
-  const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+  const [customer, setCustomer] = useState(getPlannerContact);
+  const [hasKnownContact, setHasKnownContact] = useState(hasPlannerContact);
+  const [submitStatus, setSubmitStatus] = useState(() => savedQuoteId
+    ? { state: 'success', message: '', quoteId: savedQuoteId }
+    : { state: 'idle', message: '', quoteId: '' });
   const parts = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
-  const addedPartRows = useMemo(() => extraParts.map((item) => ({ category: 'Added Parts', sku: item.sku, name: item.name || item.sku, quantity: item.quantity, details: `${item.width}\" selection · ${money(item.price)} each · ${money(item.price * item.quantity)} total` })), [extraParts]);
+  const addedPartRows = useMemo(() => extraParts.map((item) => ({ category: 'Added Parts', sku: item.sku, name: item.name || item.sku, quantity: item.quantity, details: `${item.width ? `${item.width}\" selection · ` : ''}${money(item.price)} each · ${money(item.price * item.quantity)} total` })), [extraParts]);
   const plannedWidths = useMemo(() => [...new Set(modules.map((module) => Number(module.width)))], [modules]);
   const planUrl = useMemo(() => buildReachInPlanUrl(planDetails, modules, extraParts), [extraParts, planDetails, modules]);
   const validationMessages = getReachInValidationMessages(planDetails);
   const catalogMessages = evaluation.catalogWarnings || [];
   const canSavePlan = Boolean(planDetails?.fits && evaluation.catalogSupported);
+  const displayedPrice = Number(savedEstimate?.estimatedPrice) || evaluation.displayPrice || evaluation.estimatedPrice;
   const submitForVerification = async (event) => {
     event.preventDefault();
     if (!canSavePlan) {
@@ -3192,7 +3120,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
         body: JSON.stringify({
           ...planDetails,
           customer,
-          materials: [...parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })), ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width}\" · ${money(item.price)} each` }))],
+          materials: [...parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })), ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width ? `${item.width}\" · ` : ''}${money(item.price)} each` }))],
           extraParts,
           drawings: savedDrawings,
           planType: 'reach-in',
@@ -3219,7 +3147,10 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
         message: '',
         quoteId: payload.quoteId,
       });
+      rememberPlannerContact(customer);
+      setHasKnownContact(true);
     } catch (error) {
+      reportUserVisibleError({ message: error.message, planner: 'reach-in', action: 'save estimate detail' });
       setSubmitStatus({
         state: 'error',
         message: error.message,
@@ -3240,13 +3171,15 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
             </div>
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
-              <div className="text-2xl font-bold text-stone-950">{evaluation.catalogSupported && money(evaluation.displayPrice || evaluation.estimatedPrice) ? money(evaluation.displayPrice || evaluation.estimatedPrice) : 'Not available yet'}</div>
+              <div className="text-2xl font-bold text-stone-950">{money(displayedPrice) || 'Not available yet'}</div>
+              {savedEstimate?.customerName && <div className="mt-1 text-sm font-bold text-stone-700">{savedEstimate.customerName}</div>}
+              {savedEstimate?.phoneLast4 && <div className="text-xs font-semibold text-stone-500">Phone ending in {savedEstimate.phoneLast4}</div>}
             </div>
           </div>
           {catalogMessages.length > 0 && (
             <div className="mt-3 grid gap-2">
-              {catalogMessages.map((warning) => (
-                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              {catalogMessages.map((warning, index) => (
+                <div key={`${warning}-${index}`} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
                   {warning}
                 </div>
               ))}
@@ -3259,8 +3192,8 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
           </div>
         </header>
 
-        <section className="grid min-w-0 gap-4">
-          <div className="grid min-w-0 gap-4">
+        <section className="print-estimate-layout grid min-w-0 gap-4">
+          <div className="print-estimate-content grid min-w-0 gap-4">
             <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="print-hide mb-3 flex justify-end">
                 <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
@@ -3294,7 +3227,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
                   </Canvas>
               </div>
             </section>
-            <section className="print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
+            <section className="print-reachin-front-view print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-base font-bold text-stone-950">Front View</h2>
                 <span className="text-xs font-semibold text-stone-500">Elevation for plan review</span>
@@ -3317,12 +3250,12 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
               ) : (
                 <>
                   <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account so we can follow up about it.</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {!hasKnownContact && <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
                     <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
                     <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
                     <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
-                  </div>
+                  </div>}
                   {validationMessages.length > 0 && (
                     <div className="mt-3 grid gap-2">
                       {validationMessages.map((warning) => (
@@ -3433,6 +3366,7 @@ function ReachInRoomSetup({
                 id="ceiling-height"
                 type="number"
                 min="0"
+                max="144"
                 step="0.25"
                 value={ceilingHeight}
                 onChange={(event) => onCeilingHeightChange(event.target.value)}
@@ -3450,6 +3384,7 @@ function ReachInRoomSetup({
                 id="wall-width"
                 type="number"
                 min="18"
+                max="240"
                 step="0.25"
                 value={wallWidth}
                 onChange={(event) => onWallWidthChange(event.target.value)}
@@ -3467,6 +3402,7 @@ function ReachInRoomSetup({
                 id="reach-in-depth"
                 type="number"
                 min={depth}
+                max="120"
                 step="0.25"
                 value={reachInDepth}
                 onChange={(event) => onDepthChange(event.target.value)}
@@ -3487,6 +3423,7 @@ function ReachInRoomSetup({
                 id="reach-in-opening"
                 type="number"
                 min="0"
+                max={Number(wallWidth) || 240}
                 step="0.25"
                 value={openingWidth}
                 onChange={(event) => onOpeningWidthChange(event.target.value)}
@@ -3504,6 +3441,7 @@ function ReachInRoomSetup({
                 id="reach-in-opening-left"
                 type="number"
                 min="0"
+                max={Number(wallWidth) || 240}
                 step="0.25"
                 value={openingLeft}
                 onChange={(event) => onOpeningLeftChange(event.target.value)}
@@ -3521,6 +3459,7 @@ function ReachInRoomSetup({
                 id="reach-in-opening-right"
                 type="number"
                 min="0"
+                max={Number(wallWidth) || 240}
                 step="0.25"
                 value={openingRight}
                 onChange={(event) => onOpeningRightChange(event.target.value)}
@@ -3744,7 +3683,7 @@ function ReachInRoomCaptureStep({ setupProps, planDetails, onContinue, onBack })
           <ConsultationCta compact />
         </div>
       </header>
-      <section className="grid gap-3 p-3 xl:grid-cols-[minmax(280px,0.25fr)_minmax(0,0.75fr)]">
+      <section className="mx-auto grid max-w-6xl gap-3 p-3">
         <div className="space-y-3">
           <ReachInRoomSetup title="Closet Dimensions" {...setupProps} planDetails={planDetails} />
           <section className="rounded border border-stone-200 bg-white p-3">
@@ -3880,6 +3819,7 @@ export default function App({ internalRenderer = false }) {
         }
       } catch (error) {
         if (!ignore) {
+          reportUserVisibleError({ message: error.message, planner: 'reach-in', action: 'load product catalog' });
           const fallbackOptions = requestedFallbackKit.handle === fallbackKit.handle ? [fallbackKit] : [requestedFallbackKit, fallbackKit];
           setKitOptions(fallbackOptions);
           setSelectedHandle((currentHandle) => (fallbackOptions.some((kit) => kit.handle === currentHandle) ? currentHandle : requestedFallbackKit.handle));
@@ -4239,6 +4179,7 @@ export default function App({ internalRenderer = false }) {
         planDetails={plannerPlanDetails}
         drawing={drawing}
         extraParts={extraParts}
+        savedEstimate={requestedReachInPlan?.savedEstimate}
       />
     );
   }
@@ -4343,9 +4284,9 @@ export default function App({ internalRenderer = false }) {
         </div>
       </header>
       {appMode === 'planner' ? (
-        <section className="app-workspace grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,0.75fr)_minmax(240px,0.25fr)]">
+        <section className="app-workspace mx-auto grid w-full max-w-7xl grid-cols-1 gap-0">
           {plannerStep === 'review' ? (
-            <section className="bg-white xl:col-span-2">
+            <section className="bg-white">
               <OrderReviewPanel
                 evaluation={plannerEvaluation}
                 modules={plannerModules}
@@ -4356,7 +4297,7 @@ export default function App({ internalRenderer = false }) {
           ) : (
             <>
               <section
-                className="grid min-w-0 bg-white xl:min-h-0 xl:grid-rows-[auto_minmax(75vh,1fr)]"
+                className="grid min-w-0 bg-white"
                 onDragOver={(event) => {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = 'copy';
@@ -4370,7 +4311,7 @@ export default function App({ internalRenderer = false }) {
                   }
                 }}
               >
-                <div className="grid min-w-0 gap-2 border-b border-stone-200 bg-stone-100 p-2 xl:grid-cols-2">
+                <div className="grid min-w-0 gap-2 border-b border-stone-200 bg-stone-100 p-2">
                   <section className="min-w-0 rounded border border-stone-200 bg-white p-2">
                     <h2 className="text-sm font-bold text-stone-950">Configure your closet</h2>
                     <p className="mb-1 mt-0.5 text-xs text-stone-500">Click or drag a configuration.</p>
@@ -4392,13 +4333,13 @@ export default function App({ internalRenderer = false }) {
                     isCatalogReady={airtableStatus.state !== 'loading'}
                   />
                   {internalRenderer ? (
-                    <div className="xl:col-span-2">
+                    <div>
                       <ReachInRoomSetup {...reachInSetupProps} planDetails={plannerPlanDetails} />
                     </div>
                   ) : null}
                 </div>
                 <section className="relative min-w-0 bg-white">
-                  <div className="sticky top-2 z-20 ml-auto mr-3 mt-3 flex w-fit rounded border border-stone-300 bg-white p-0.5 text-xs font-bold shadow-sm xl:absolute xl:right-3 xl:top-3 xl:m-0">
+                  <div className="sticky top-2 z-20 ml-auto mr-3 mt-3 flex w-fit rounded border border-stone-300 bg-white p-0.5 text-xs font-bold shadow-sm">
                     {[
                       ['plan', 'Plan'],
                       ['3d', '3D'],
@@ -4414,7 +4355,7 @@ export default function App({ internalRenderer = false }) {
                     ))}
                   </div>
                   {plannerPreviewMode === 'plan' ? (
-                    <div className="min-w-0 bg-stone-50 p-2 pt-3 sm:p-4 xl:pt-14">
+                    <div className="min-w-0 bg-stone-50 p-2 pt-3 sm:p-4">
                       <ReachInPlanView
                         modules={plannerModules}
                         wallWidth={plannerPlanDetails.wallWidth}
@@ -4428,7 +4369,7 @@ export default function App({ internalRenderer = false }) {
                       />
                     </div>
                   ) : (
-                    <div className="relative h-[460px] bg-white sm:h-[560px] xl:h-full">
+                    <div className="relative h-[460px] bg-white sm:h-[620px]">
                       <OrbitHintBadge />
                       <Canvas
                         key={`${viewMode}-${drawing.handle}`}
@@ -4452,7 +4393,7 @@ export default function App({ internalRenderer = false }) {
                   )}
                 </section>
               </section>
-              <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 xl:border-l xl:border-t-0">
+              <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3">
                 <div className="space-y-3">
                   {!internalRenderer ? (
                     <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={editReachInRoom}>
@@ -4468,7 +4409,7 @@ export default function App({ internalRenderer = false }) {
                     modules={plannerModules}
                     planDetails={plannerPlanDetails}
                     extraParts={extraParts}
-                    onContinue={() => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules, extraParts))}
+                    onContinue={(quoteId, savedEstimate) => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules, extraParts, quoteId, savedEstimate))}
                     isCatalogReady={airtableStatus.state !== 'loading'}
                   />
                   <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(plannerModules.map((module) => Number(module.width)))]} />
@@ -4479,7 +4420,7 @@ export default function App({ internalRenderer = false }) {
         </section>
       ) : (
         <section
-          className={`app-workspace renderer-workspace ${photoMode ? '' : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]'}`}
+          className={`app-workspace renderer-workspace mx-auto w-full max-w-7xl ${photoMode ? '' : 'grid grid-cols-1'}`}
         >
           {photoMode && photoWorkspaceTab === 'generated' ? (
             <GeneratedPhotoGallery drawing={drawing} onSelectHandle={setSelectedHandle} refreshToken={photoGalleryVersion} />
@@ -4515,7 +4456,7 @@ export default function App({ internalRenderer = false }) {
             </section>
           )}
           {!photoMode && (
-            <section className="min-h-0 border-l border-stone-200 bg-white">
+            <section className="min-h-[420px] border-t border-stone-200 bg-white sm:min-h-[560px]">
               <TechnicalDrawing drawing={drawing} />
             </section>
           )}

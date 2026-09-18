@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createAirtableQuoteWithDiagnostics, fetchAirtableQuoteByReference, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
-import { normalizeQuoteSubmission, validateNormalizedQuote } from './_quote-normalize.js';
+import { attachQuoteReferenceToPlanUrl, normalizeQuoteSubmission, validateNormalizedQuote } from './_quote-normalize.js';
 import { upsertShopifyCustomerPlan } from './_shopify.js';
 
 async function readRequestBody(req) {
@@ -55,6 +55,7 @@ export default async function handler(req, res) {
     const submittedAt = submittedDate.toISOString();
     const quoteId = createQuoteId(submittedDate);
     const capturedQuote = normalizeQuoteSubmission(quote, { quoteId, submittedAt });
+    capturedQuote.planUrl = attachQuoteReferenceToPlanUrl(capturedQuote.planUrl, quoteId);
     const validationError = validateNormalizedQuote(capturedQuote);
 
     if (validationError) {

@@ -1,3 +1,5 @@
+import { buildPickList, pickListGroups, comparePickParts } from '../src/pickList.js';
+import { buildDetailedReachInParts, buildDetailedWalkInParts } from '../src/partList.js';
 import { fetchAirtableQuoteByReference, sendJson } from './_airtable.js';
 
 function escapeHtml(value) {
@@ -7,6 +9,15 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function titleCaseWords(value) {
+  return String(value || '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function sendHtml(res, statusCode, html) {
@@ -74,7 +85,81 @@ function getCustomerName(record = {}, quote = {}) {
 }
 
 function getPlanModules(quote = {}) {
-  return Array.isArray(quote.modules) ? quote.modules : [];
+  const runModules = quote.runs && typeof quote.runs === 'object'
+    ? Object.entries(quote.runs).flatMap(([wall, modules]) => (
+      Array.isArray(modules) ? modules.map((module, index) => ({ ...module, wall, index })) : []
+    ))
+    : [];
+  return runModules.length ? runModules : (Array.isArray(quote.modules) ? quote.modules : []);
+}
+
+function normalizeStructuralHardware(materials = [], modules = []) {
+  if (!Array.isArray(materials) || !modules.length) return materials;
+
+  const towerCountsByWidth = modules.reduce((counts, module) => {
+    const width = Number(module.width);
+    if (Number.isFinite(width) && width > 0) counts.set(width, (counts.get(width) || 0) + 1);
+    return counts;
+  }, new Map());
+  const shelfTotalsByWidth = new Map();
+
+  materials.forEach((part) => {
+    const sku = String(part.sku || '').toUpperCase();
+    const match = sku.match(/^(?:FS|SH)-(\d+)-14-W$/);
+    if (match && String(part.category || '').toLowerCase() === 'shelves') {
+      const width = Number(match[1]);
+      shelfTotalsByWidth.set(width, (shelfTotalsByWidth.get(width) || 0) + Number(part.quantity || 0));
+    }
+  });
+
+  const fixedByWidth = new Map([...towerCountsByWidth].map(([width, count]) => [width, count * 2]));
+  const adjustableByWidth = new Map([...shelfTotalsByWidth].map(([width, total]) => [width, Math.max(0, total - (fixedByWidth.get(width) || 0))]));
+  const fixedShelfCount = modules.length * 2;
+  const camConnectorCount = fixedShelfCount * 4;
+  const normalizedShelfSkus = new Set();
+
+  return materials.map((part) => {
+    const sku = String(part.sku || '').toUpperCase();
+    const category = String(part.category || '').toLowerCase();
+    const fixedMatch = sku.match(/^FS-(\d+)-14-W$/);
+    const adjustableMatch = sku.match(/^SH-(\d+)-14-W$/);
+    if (category === 'shelves' && fixedMatch) {
+      const quantity = fixedByWidth.get(Number(fixedMatch[1]));
+      if (quantity == null) return part;
+      if (normalizedShelfSkus.has(sku)) return { ...part, quantity: 0 };
+      normalizedShelfSkus.add(sku);
+      return { ...part, quantity };
+    }
+    if (category === 'shelves' && adjustableMatch) {
+      const quantity = adjustableByWidth.get(Number(adjustableMatch[1]));
+      if (quantity == null) return part;
+      if (normalizedShelfSkus.has(sku)) return { ...part, quantity: 0 };
+      normalizedShelfSkus.add(sku);
+      return { ...part, quantity };
+    }
+    if (sku === 'CAMKIT-10-W') {
+      return {
+        ...part,
+        name: 'Camfix and cam-screw kit, 10 pairs',
+        quantity: Math.ceil(camConnectorCount / 10),
+        details: `${camConnectorCount} connector pairs required for ${fixedShelfCount} fixed shelves at four pairs per shelf.`,
+      };
+    }
+    return part;
+  });
+}
+
+function getPrintableMaterials(quote = {}, modules = [], isWalkIn = false) {
+  const savedMaterials = Array.isArray(quote.materials) ? quote.materials : [];
+  if (savedMaterials.length) {
+    return buildPickList(normalizeStructuralHardware(savedMaterials, modules), modules.length);
+  }
+
+  if (isWalkIn) {
+    return buildDetailedWalkInParts(quote.room, quote.runs);
+  }
+
+  return buildDetailedReachInParts(modules, quote.height || quote.planDetails?.height || 84);
 }
 
 function getReachInDetails(quote = {}) {
@@ -111,31 +196,19 @@ function getModuleDisplayName(module = {}) {
   return [cleanLabel, width ? `${width} bay` : ''].filter(Boolean).join(' / ');
 }
 
+function getCustomerFacingPartDetails(part = {}) {
+  return String(part.details || '')
+    .replace(/\s*Round up to the next bag of 20 only when needed\.?/gi, '')
+    .trim();
+}
+
 function renderMaterialsTable(materials = []) {
   if (!Array.isArray(materials) || !materials.length) {
     return '';
   }
 
-  const packagedComponentSkus = new Set(['RDB-S-1', 'WOOD-SCREW', 'WALL-SCREW']);
-  const displayMaterials = materials
-    .filter((part) => !packagedComponentSkus.has(String(part.sku || '').toUpperCase()))
-    .map((part) => {
-      const sku = String(part.sku || '').toUpperCase();
-      if (sku.startsWith('RK-')) {
-        return { ...part, details: part.details || 'Complete hanging rod kit with one rod and one pair of rod brackets.' };
-      }
-      if (sku === 'WLB-S-1') {
-        return {
-          ...part,
-          category: 'Kits',
-          name: 'Wall bracket kit',
-          details: part.details || 'Includes one L-bracket, one wood screw for the fixed shelf, and one wall/stud screw.',
-        };
-      }
-      return part;
-    });
-
-  const categoryOrder = ['Panels', 'Shelves', 'Kits', 'Hardware', 'Added Parts', 'Added parts', 'Parts'];
+  const displayMaterials = materials;
+  const categoryOrder = pickListGroups;
   const categories = [...new Set(displayMaterials.map((part) => part.category || 'Parts'))]
     .sort((left, right) => {
       const leftIndex = categoryOrder.indexOf(left);
@@ -146,11 +219,11 @@ function renderMaterialsTable(materials = []) {
 
   return `
     <section>
-      <h2>Exact Part List</h2>
+      <h2>Pick List</h2>
       ${categories.map((category) => {
         const categoryParts = displayMaterials
           .filter((part) => (part.category || 'Parts') === category)
-          .sort((left, right) => String(left.name || left.label || '').localeCompare(String(right.name || right.label || ''), undefined, { sensitivity: 'base' }));
+          .sort(comparePickParts);
         return `
           <div class="part-category">
             <h3>${escapeHtml(category)}</h3>
@@ -161,7 +234,7 @@ function renderMaterialsTable(materials = []) {
                   <td>${escapeHtml(part.quantity || '')}</td>
                   <td>${escapeHtml(part.sku || '')}</td>
                   <td>${escapeHtml(part.name || part.label || '')}</td>
-                  <td>${escapeHtml(part.details || '')}</td>
+                  <td>${escapeHtml(getCustomerFacingPartDetails(part))}</td>
                 </tr>
               `).join('')}</tbody>
             </table>
@@ -179,7 +252,7 @@ function renderDrawings(drawings = []) {
     <section class="drawings">
       <h2>Plan Drawings</h2>
       ${drawings.map((drawing) => `
-        <figure>
+        <figure class="${drawing.title === 'Plan View' ? 'plan-view-figure' : ''}">
           <figcaption>${escapeHtml(drawing.title || 'Plan drawing')}</figcaption>
           <img src="${escapeHtml(drawing.dataUrl || '')}" alt="${escapeHtml(drawing.title || 'Plan drawing')}">
         </figure>
@@ -262,6 +335,7 @@ function renderLiveDrawingLoader(planPath, savedDrawings = []) {
               inlineSvgStyles(svg, clone);
               clone.removeAttribute('class');
               clone.setAttribute('aria-label', displayTitle);
+              if (displayTitle === 'Plan View') figure.className = 'plan-view-figure';
               caption.textContent = displayTitle;
               figure.append(caption, clone);
               output.appendChild(figure);
@@ -352,7 +426,7 @@ function renderWalkInDetails(quote = {}) {
         <h2>Wall Runs</h2>
         ${runEntries.map(([wall, modules]) => `
           <div class="run">
-            <h3>${escapeHtml(wall)}</h3>
+            <h3>${escapeHtml(titleCaseWords(wall))}</h3>
             ${renderModulesTable(modules.map((module, index) => ({ ...module, wall, index: Number.isFinite(Number(module.index)) ? Number(module.index) : index })))}
           </div>
         `).join('')}
@@ -374,7 +448,7 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
   const isWalkIn = String(quote.internalType || record.planType || '').toLowerCase().includes('walk');
   const editablePlanUrl = record.planUrl || quote.planUrl || '';
   const estimatePlanPath = getEstimatePlanPath(editablePlanUrl);
-  const materials = Array.isArray(quote.materials) ? quote.materials : [];
+  const materials = getPrintableMaterials(quote, modules, isWalkIn);
   const drawings = Array.isArray(quote.drawings) ? quote.drawings : [];
 
   return `<!doctype html>
@@ -409,8 +483,10 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
       .part-category { margin-top: 18px; break-inside: avoid-page; }
       figure { margin: 14px 0 22px; break-inside: avoid; }
       figcaption { margin-bottom: 8px; font-size: 14px; font-weight: 800; }
-      figure img { display: block; width: 100%; max-height: 7.25in; object-fit: contain; border: 1px solid #e7e5e4; background: #fff; }
-      figure svg { display: block; width: 100%; height: auto; max-height: 7.25in; border: 1px solid #e7e5e4; background: #fff; }
+      figure img { display: block; width: 100%; max-height: 7.25in; margin: 0 auto; object-fit: contain; border: 1px solid #e7e5e4; background: #fff; }
+      figure svg { display: block; width: 100%; height: auto; max-height: 7.25in; margin: 0 auto; border: 1px solid #e7e5e4; background: #fff; }
+      .plan-view-figure { text-align: center; }
+      .plan-view-figure img, .plan-view-figure svg { width: min(100%, 7.2in); }
       .drawing-source-frame { position: fixed; left: -10000px; top: 0; width: 1200px; height: 900px; visibility: hidden; pointer-events: none; }
       @media (max-width: 680px) {
         .page { width: 100%; margin: 0; padding: 20px; box-shadow: none; }
@@ -424,6 +500,9 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
         .page { width: auto; margin: 0; padding: 0; box-shadow: none; }
         .screen-only { display: none !important; }
         h2, .summary-item, .details div, tr { break-inside: avoid; }
+        figure { break-inside: avoid-page; page-break-inside: avoid; }
+        .drawings figure + figure { break-before: page; page-break-before: always; }
+        figure img, figure svg { max-height: 8.65in; }
       }
     </style>
   </head>

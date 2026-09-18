@@ -1,8 +1,13 @@
+import { adjustableShelfCount } from './shelfCounts.js';
+import { pickListGroups, comparePickParts } from './pickList.js';
+import { buildDetailedWalkInParts } from './partList.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls } from '@react-three/drei';
 import './styles.css';
+import { getPlannerContact, hasPlannerContact, rememberPlannerContact } from './contactSession';
+import { reportUserVisibleError } from './userErrorLog';
 
 const panelThickness = 0.75;
 const closetDepth = 14;
@@ -21,10 +26,6 @@ const drawerPullLength = 5;
 const drawerPullHeight = 0.5;
 const drawerPullProjection = 1.4;
 const frontDrillLineZ = closetDepth / 2 - 1.1;
-const shelfOnlyAdjustableShelfCounts = {
-  S7: 6,
-  S8: 7,
-};
 
 function ConsultationCta({ compact = false }) {
   return (
@@ -741,13 +742,20 @@ function RoomSetup({ room, setRoom, corners, setCorners, enabledWalls, onToggleW
           ['openingWidth', 'Entrance opening'],
           ['openingLeft', 'Left return wall'],
           ['openingRight', 'Right return wall'],
-        ].map(([key, label]) => (
+        ].map(([key, label]) => {
+          const maximum = key === 'ceilingHeight'
+            ? 144
+            : ['openingWidth', 'openingLeft', 'openingRight'].includes(key)
+              ? numberValue(room.backWidth)
+              : 240;
+          return (
           <label key={key} className="block">
             <span className="mb-1 block text-xs font-bold text-stone-500">{label}</span>
             <div className="flex items-center gap-1">
               <input
                 type="number"
                 min="0"
+                max={maximum}
                 step="0.25"
                 value={room[key]}
                 onChange={(event) => updateRoom(key, event.target.value)}
@@ -756,7 +764,8 @@ function RoomSetup({ room, setRoom, corners, setCorners, enabledWalls, onToggleW
               <span className="text-xs font-bold text-stone-500">in</span>
             </div>
           </label>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -1029,7 +1038,7 @@ function RoomCaptureStep({ room, setRoom, corners, setCorners, enabledWalls, onT
         </div>
       </header>
       <section className="app-workspace w-full">
-        <div className="mx-auto grid max-w-5xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="mx-auto grid max-w-5xl gap-4 p-4">
           <div className="grid gap-4">
             <RoomSetup room={room} setRoom={setRoom} corners={corners} setCorners={setCorners} enabledWalls={enabledWalls} onToggleWall={onToggleWall} />
             <WalkInRoomDiagram room={room} corners={corners} enabledWalls={enabledWalls} roomEvaluation={roomEvaluation} />
@@ -1531,15 +1540,10 @@ function buildWalkInTowerLayout(height, code) {
   const longHangRodY = longHangShelfY - rodDropBelowShelf;
   const hsLowerShelfTopY = height >= 96 ? 52 : 43;
   const hasTallHeight = height >= 96;
-  const shelfCountByCode = {
-    S3D: hasTallHeight ? 5 : 4,
-    H3D: hasTallHeight ? 2 : 1,
-    S2D: hasTallHeight ? 5 : 4,
-    ...shelfOnlyAdjustableShelfCounts,
-  };
+  const adjustableCount = adjustableShelfCount(code, height);
   const defaultShelves = [
     { y: bottomShelf, fixed: true },
-    ...buildAdjustableShelves(height, shelfCountByCode[code] || 3),
+    ...buildAdjustableShelves(height, adjustableCount),
     { y: topShelf, fixed: true },
   ];
 
@@ -1560,7 +1564,7 @@ function buildWalkInTowerLayout(height, code) {
     return {
       shelves: [
         { y: bottomShelf, fixed: true },
-        ...buildAdjustableShelves(height, hasTallHeight ? 4 : 3, bottomShelf, hsLowerShelfTopY),
+        ...buildAdjustableShelves(height, adjustableCount, bottomShelf, hsLowerShelfTopY),
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: height - 8.5 }],
@@ -1570,13 +1574,13 @@ function buildWalkInTowerLayout(height, code) {
 
   if (code === 'H3D') {
     const lowerShelfYs = hasTallHeight
-      ? buildAdjustableShelves(height, 2, bottomShelf, getDrawerBounds(buildDrawers(code)).bottom)
+      ? buildAdjustableShelves(height, adjustableCount - 1, bottomShelf, getDrawerBounds(buildDrawers(code)).bottom)
       : [{ y: 14.35, fixed: false }];
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
+        { y: bottomShelf, fixed: false },
         ...lowerShelfYs,
-        { y: drawerDeck, fixed: false },
+        { y: drawerDeck, fixed: true },
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: height - 7.5 }],
@@ -1590,8 +1594,8 @@ function buildWalkInTowerLayout(height, code) {
 
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
-        { y: middleShelfY, fixed: false },
+        { y: bottomShelf, fixed: false },
+        { y: middleShelfY, fixed: true },
         ...(hasTallHeight ? [{ y: standardHeightTopShelf, fixed: false }] : []),
         { y: topShelf, fixed: true },
       ],
@@ -1607,13 +1611,13 @@ function buildWalkInTowerLayout(height, code) {
     const drawerTowerDrawers = buildDrawers(code);
     const drawerBounds = getDrawerBounds(drawerTowerDrawers);
     const lowerShelfY = bottomShelf + (drawerBounds.bottom - bottomShelf) / 2;
-    const upperShelfCount = hasTallHeight ? 3 : 2;
+    const upperShelfCount = adjustableCount - 2;
 
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
+        { y: bottomShelf, fixed: false },
         { y: lowerShelfY, fixed: false },
-        { y: drawerDeck, fixed: code === 'S2D' },
+        { y: drawerDeck, fixed: true },
         ...buildAdjustableShelves(height, upperShelfCount, drawerDeck, topShelf),
         { y: topShelf, fixed: true },
       ],
@@ -1658,7 +1662,7 @@ function WalkInFrontViews({ room, runs }) {
     const panelXs = [0, ...segments.slice(1).map((segment) => segment.start - panelThickness), runLength - panelThickness];
 
     return (
-      <div key={wall} data-wall-view={wall} className="min-w-0 rounded border border-stone-100 bg-white p-2">
+      <div key={wall} data-wall-view={wall} className="print-break-avoid min-w-0 rounded border border-stone-100 bg-white p-2">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-sm font-bold text-stone-950">{wallLabels[wall]} Wall Front View</h3>
           <span className="text-xs font-semibold text-stone-500">{formatInches(runLength)} wide x {formatInches(height)} high</span>
@@ -1749,17 +1753,18 @@ function WalkInFrontViews({ room, runs }) {
   };
 
   return (
-    <section className="print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
+    <section className="print-wall-views min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-base font-bold text-stone-950">Front Views</h2>
         <span className="text-xs font-semibold text-stone-500">Elevations for plan review</span>
       </div>
-      <div className="grid gap-3">{wallEntries.map(renderWall)}</div>
+      <div className="print-wall-view-list grid gap-3">{wallEntries.map(renderWall)}</div>
     </section>
   );
 }
 
 function TopDownPlan({ room, runs, corners, evaluation }) {
+  const hasConfiguredTowers = Object.values(runs).some((wallRuns) => wallRuns.length > 0);
   const backWidth = Math.max(1, numberValue(room.backWidth));
   const leftDepth = Math.max(1, numberValue(room.leftDepth));
   const rightDepth = Math.max(1, numberValue(room.rightDepth));
@@ -1822,8 +1827,8 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
     <section className="rounded border border-stone-200 bg-white p-3">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-base font-bold text-stone-950">Room Plan</h2>
-        <span className={`rounded px-2 py-1 text-xs font-bold ${evaluation.complete ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-          {evaluation.complete ? 'Valid' : 'Needs fixes'}
+        <span className={`rounded px-2 py-1 text-xs font-bold ${evaluation.complete ? 'bg-emerald-50 text-emerald-700' : hasConfiguredTowers ? 'bg-red-50 text-red-700' : 'bg-stone-100 text-stone-600'}`}>
+          {evaluation.complete ? 'Valid' : hasConfiguredTowers ? 'Needs fixes' : 'Add towers to begin'}
         </span>
       </div>
       <svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-[300px] w-full rounded bg-stone-50">
@@ -2117,6 +2122,7 @@ function WalkInOrbitHintBadge() {
 }
 
 function WalkIn3DPreview({ room, runs, corners, evaluation }) {
+  const hasConfiguredTowers = Object.values(runs).some((wallRuns) => wallRuns.length > 0);
   const orbitBackWidth = Math.max(1, numberValue(room.backWidth));
   const orbitLeftDepth = Math.max(1, numberValue(room.leftDepth));
   const orbitRightDepth = Math.max(1, numberValue(room.rightDepth));
@@ -2133,8 +2139,8 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
           <p className="text-xs font-semibold text-stone-500">Drag to orbit 360, scroll to zoom</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`rounded px-2 py-1 text-xs font-bold ${evaluation.complete ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-            {evaluation.complete ? 'Valid' : 'Needs fixes'}
+          <span className={`rounded px-2 py-1 text-xs font-bold ${evaluation.complete ? 'bg-emerald-50 text-emerald-700' : hasConfiguredTowers ? 'bg-red-50 text-red-700' : 'bg-stone-100 text-stone-600'}`}>
+            {evaluation.complete ? 'Valid' : hasConfiguredTowers ? 'Needs fixes' : 'Add towers to begin'}
           </span>
         </div>
       </div>
@@ -2408,8 +2414,8 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
               Right
             </button>
           </div>
-          <span className={`rounded px-2 py-1 text-xs font-bold ${evaluation.complete ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-            {evaluation.complete ? 'Valid' : 'Needs fixes'}
+          <span className={`rounded px-2 py-1 text-xs font-bold ${evaluation.complete ? 'bg-emerald-50 text-emerald-700' : hasConfiguredTowers ? 'bg-red-50 text-red-700' : 'bg-stone-100 text-stone-600'}`}>
+            {evaluation.complete ? 'Valid' : hasConfiguredTowers ? 'Needs fixes' : 'Add towers to begin'}
           </span>
         </div>
       </div>
@@ -2575,7 +2581,7 @@ function decodePlanPayload(encodedPlan) {
   return JSON.parse(atob(padded));
 }
 
-function buildWalkInPlanUrl(room, corners, runs, extraParts = []) {
+function buildWalkInPlanUrl(room, corners, runs, extraParts = [], savedEstimate = null) {
   if (typeof window === 'undefined') {
     return '';
   }
@@ -2583,12 +2589,12 @@ function buildWalkInPlanUrl(room, corners, runs, extraParts = []) {
   const url = new URL(window.location.href);
   url.searchParams.set('type', 'walk-in');
   url.searchParams.delete('estimate');
-  url.searchParams.set('plan', encodePlanPayload({ room, corners, runs, extraParts }));
+  url.searchParams.set('plan', encodePlanPayload({ room, corners, runs, extraParts, ...(savedEstimate ? { savedEstimate } : {}) }));
   return url.toString();
 }
 
-function buildWalkInEstimateUrl(room, corners, runs, extraParts = []) {
-  const url = new URL(buildWalkInPlanUrl(room, corners, runs, extraParts));
+function buildWalkInEstimateUrl(room, corners, runs, extraParts = [], savedEstimate = null) {
+  const url = new URL(buildWalkInPlanUrl(room, corners, runs, extraParts, savedEstimate));
   url.searchParams.set('estimate', '1');
   return url.toString();
 }
@@ -2606,71 +2612,11 @@ function shouldShowEstimatePage() {
   return new URLSearchParams(window.location.search).get('estimate') === '1';
 }
 
-function buildDetailedWalkInParts(room, runs) {
-  const parts = new Map();
-  const add = (sku, name, quantity = 1, details = '', category = 'Parts') => {
-    if (!quantity) return;
-    const key = `${category}|${sku}|${name}|${details}`;
-    const current = parts.get(key);
-    parts.set(key, {
-      category,
-      sku,
-      name,
-      details,
-      quantity: (current?.quantity || 0) + quantity,
-    });
-  };
-
-  let towerCount = 0;
-  let adjustableShelfCount = 0;
-
-  planWalls.forEach((wall) => {
-    const modules = runs[wall] || [];
-    const height = getWallHeight(room, wall);
-
-    if (!modules.length) {
-      return;
-    }
-
-    towerCount += modules.length;
-    add(`VL-14-${height}-W`, `Left vertical panel 14" x ${height}"`, 1, `${wallLabels[wall]} outer left side panel.`, 'Panels');
-    add(`VR-14-${height}-W`, `Right vertical panel 14" x ${height}"`, 1, `${wallLabels[wall]} outer right side panel.`, 'Panels');
-    add(`VD-14-${height}-W`, `Shared divider panel 14" x ${height}"`, Math.max(0, modules.length - 1), `${wallLabels[wall]} shared dividers between connected towers.`, 'Panels');
-
-    modules.forEach((module) => {
-      const code = getWalkInLayoutCode(module, height);
-      const width = numberValue(module.width);
-      const layout = buildWalkInTowerLayout(height, code);
-      const fixedShelves = layout.shelves.filter((shelf) => shelf.fixed).length;
-      const adjustableShelves = layout.shelves.length - fixedShelves;
-      const rods = layout.rods.length;
-      const smallDrawers = layout.drawers.filter((drawer) => drawer.height === 5).length;
-      const largeDrawers = layout.drawers.filter((drawer) => drawer.height === 10).length;
-
-      adjustableShelfCount += adjustableShelves;
-
-      add(`FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, fixedShelves, `${wallLabels[wall]} ${towerNames[code] || code} structural shelves.`, 'Shelves');
-      add(`SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, adjustableShelves, `${wallLabels[wall]} ${towerNames[code] || code} movable shelves.`, 'Shelves');
-      add(`TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `Toe-kick kit for the ${wallLabels[wall].toLowerCase()} run.`, 'Kits');
-      add(`RK-${width}-S`, `Rod kit ${width}"`, rods, `${wallLabels[wall]} complete hanging rod kit with one rod and one pair of rod brackets.`, 'Kits');
-      add(`DRK-${width}-5-13-W`, `Small drawer kit ${width}" x 5" x 13"`, smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
-      add(`DRK-${width}-10-13-W`, `Large drawer kit ${width}" x 10" x 13"`, largeDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
-    });
-  });
-
-  const wallBracketCount = towerCount * 2;
-  add('WLB-S-1', 'Wall bracket kit', wallBracketCount, 'Includes one L-bracket, one wood screw for the fixed shelf, and one wall/stud screw. Two kits per tower section.', 'Kits');
-  add('PIN-20-S', 'Shelf pin pack, 20 pins', Math.ceil((adjustableShelfCount * 4) / 20), `${adjustableShelfCount * 4} shelf pins required for ${adjustableShelfCount} adjustable shelves.`, 'Hardware');
-  add('CAMKIT-10-W', 'Rafix/cam lock and screw kit, 10 pieces', towerCount, `${towerCount * 8} Rafix/bolt connector positions required; one 10-piece kit packed per tower.`, 'Hardware');
-
-  return [...parts.values()].filter((part) => part.quantity > 0);
-}
-
 function aggregatePartsBySku(parts) {
   const aggregated = new Map();
 
   parts.forEach((part) => {
-    const key = `${part.category}|${part.sku}`;
+    const key = `${part.category}|${part.sku || part.name}`;
     const current = aggregated.get(key) || {
       category: part.category,
       sku: part.sku,
@@ -2696,17 +2642,17 @@ function aggregatePartsBySku(parts) {
 }
 
 function PartsList({ parts }) {
-  const groups = ['Panels', 'Shelves', 'Kits', 'Hardware', 'Added Parts'];
+  const groups = pickListGroups;
   const aggregatedParts = aggregatePartsBySku(parts);
 
   return (
     <section className="min-w-0 rounded border border-stone-200 bg-white p-4">
-      <h2 className="text-lg font-bold text-stone-950">Exact Part List</h2>
+      <h2 className="text-lg font-bold text-stone-950">Pick List</h2>
       <div className="mt-3 grid gap-4">
         {groups.map((group) => {
           const items = aggregatedParts
             .filter((part) => part.category === group)
-            .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }));
+            .sort(comparePickParts);
 
           if (!items.length) return null;
 
@@ -2751,13 +2697,18 @@ function AddedPartsSection({ items, plannedWidths }) {
       <p className="mt-1 text-sm font-semibold text-stone-600">Loose parts selected in addition to the closet kit.</p>
       <div className="mt-3 grid gap-2">
         {items.map((item) => <div key={`${item.sku}-${item.width}`} className="rounded border border-orange-200 bg-white px-3 py-2 text-sm">
-          <div className="flex flex-wrap justify-between gap-2"><span className="font-bold text-stone-950">{item.name || item.sku} · {item.width}&quot;</span><span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span></div>
+          <div className="flex flex-wrap justify-between gap-2"><span className="font-bold text-stone-950">{item.name || item.sku}{item.width ? ` · ${item.width}\"` : ''}</span><span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span></div>
           <div className="mt-1 text-xs font-semibold text-stone-600">{item.sku} · {money(item.price)} each</div>
-          {!plannedWidths.includes(Number(item.width)) && <div className="mt-2 text-xs font-bold text-amber-800">Warning: no matching {item.width}&quot; tower bay exists in this plan.</div>}
+          {item.width > 0 && !plannedWidths.includes(Number(item.width)) && <div className="mt-2 text-xs font-bold text-amber-800">Warning: no matching {item.width}&quot; tower bay exists in this plan.</div>}
         </div>)}
       </div>
     </section>
   );
+}
+
+function getSavedQuoteIdFromUrl() {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get('quote') || '';
 }
 
 function serializeSvgWithInlineStyles(svg) {
@@ -2793,17 +2744,25 @@ function getRequestedWalkInPlan() {
   }
 }
 
-function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraParts }) {
+function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraParts, savedEstimate }) {
   const [previewMode, setPreviewMode] = useState('plan');
   const planDrawingRef = useRef(null);
   const frontDrawingsRef = useRef(null);
-  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
-  const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+  const [customer, setCustomer] = useState(getPlannerContact);
+  const [hasKnownContact, setHasKnownContact] = useState(hasPlannerContact);
+  const [submitStatus, setSubmitStatus] = useState(() => {
+    const quoteId = getSavedQuoteIdFromUrl();
+    return quoteId ? { state: 'success', message: '', quoteId } : { state: 'idle', message: '', quoteId: '' };
+  });
   const parts = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
-  const addedPartRows = useMemo(() => extraParts.map((item) => ({ category: 'Added Parts', sku: item.sku, name: item.name || item.sku, quantity: item.quantity, details: `${item.width}\" selection · ${money(item.price)} each · ${money(item.price * item.quantity)} total` })), [extraParts]);
+  const addedPartRows = useMemo(() => extraParts.map((item) => ({ category: 'Added Parts', sku: item.sku, name: item.name || item.sku, quantity: item.quantity, details: `${item.width ? `${item.width}\" selection · ` : ''}${money(item.price)} each · ${money(item.price * item.quantity)} total` })), [extraParts]);
   const plannedWidths = useMemo(() => [...new Set(Object.values(runs).flat().map((module) => Number(module.width)))], [runs]);
   const planUrl = useMemo(() => buildWalkInPlanUrl(room, corners, runs, extraParts), [room, corners, runs, extraParts]);
   const catalogMessages = pricing.catalogWarnings || [];
+  const displayedPrice = Number(savedEstimate?.estimatedPrice) || pricing.estimatedPrice;
+  useEffect(() => {
+    catalogMessages.forEach((message) => reportUserVisibleError({ message, planner: 'walk-in', action: 'catalog availability' }));
+  }, [catalogMessages]);
   const submitForVerification = async (event) => {
     event.preventDefault();
     if (!pricing.catalogSupported) {
@@ -2842,7 +2801,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
           room,
           corners,
           runs,
-          materials: [...parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })), ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width}\" · ${money(item.price)} each` }))],
+          materials: [...parts.map(({ category, sku, name, quantity, details }) => ({ category, sku, name, quantity, details })), ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width ? `${item.width}\" · ` : ''}${money(item.price)} each` }))],
           extraParts,
           drawings: savedDrawings,
           modules,
@@ -2864,7 +2823,10 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
         message: '',
         quoteId: payload.quoteId,
       });
+      rememberPlannerContact(customer);
+      setHasKnownContact(true);
     } catch (error) {
+      reportUserVisibleError({ message: error.message, planner: 'walk-in', action: 'save estimate detail' });
       setSubmitStatus({
         state: 'error',
         message: error.message,
@@ -2885,13 +2847,15 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
             </div>
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
-              <div className="text-2xl font-bold text-stone-950">{pricing.catalogSupported && money(pricing.estimatedPrice) ? money(pricing.estimatedPrice) : 'Not available yet'}</div>
+              <div className="text-2xl font-bold text-stone-950">{money(displayedPrice) || 'Not available yet'}</div>
+              {savedEstimate?.customerName && <div className="mt-1 text-sm font-bold text-stone-700">{savedEstimate.customerName}</div>}
+              {savedEstimate?.phoneLast4 && <div className="text-xs font-semibold text-stone-500">Phone ending in {savedEstimate.phoneLast4}</div>}
             </div>
           </div>
           {catalogMessages.length > 0 && (
             <div className="mt-3 grid gap-2">
-              {catalogMessages.map((warning) => (
-                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              {catalogMessages.map((warning, index) => (
+                <div key={`${warning}-${index}`} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
                   {warning}
                 </div>
               ))}
@@ -2904,8 +2868,8 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
           </div>
         </header>
 
-        <section className="grid min-w-0 gap-4">
-          <div className="grid min-w-0 gap-4">
+        <section className="print-estimate-layout grid min-w-0 gap-4">
+          <div className="print-estimate-content grid min-w-0 gap-4">
             <section className="min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="print-hide mb-3 flex justify-end">
                 <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
@@ -3008,14 +2972,18 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
 function getExtraPartSku(type, width) {
   if (type === 'shelf') return `SH-${width}-14-W`;
   if (type === 'rod') return `RK-${width}-S`;
+  if (type === 'shelfPins') return 'PIN-20-S';
+  if (type === 'rafix') return 'CAMKIT-10-W';
   if (type === 'smallDrawer') return 'DRK-24-5-13-W';
   return 'DRK-24-10-13-W';
 }
 
-function AddPartsCard({ items, onChange, plannedWidths }) {
+function AddPartsCard({ items, onChange, plannedWidths, priceUnlocked }) {
   const options = {
     shelf: { label: 'Adjustable shelf', widths: [18, 24, 30] },
     rod: { label: 'Rod kit', widths: [18, 24, 30] },
+    shelfPins: { label: 'Shelf pins — pack of 20', widths: [0] },
+    rafix: { label: 'Rafix/cam-lock kit — pack of 10', widths: [0] },
     smallDrawer: { label: 'Small drawer kit', widths: [24, 30] },
     largeDrawer: { label: 'Large drawer kit', widths: [24, 30] },
   };
@@ -3046,12 +3014,14 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
     onChange((current) => {
     const existing = current.find((item) => item.type === type && item.width === width);
     if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
-      return [...current, { type, width, quantity, sku, name: product.name || selected.label, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
+      const displayName = product.name && product.name.toUpperCase() !== product.sku.toUpperCase() ? product.name : selected.label;
+      return [...current, { type, width, quantity, sku, name: displayName, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
     });
   };
   const selectedSku = getExtraPartSku(type, width);
   const selectedProduct = catalog.find((record) => record.sku.toUpperCase() === selectedSku);
-  const widthMatchesPlan = plannedWidths.includes(width);
+  const usesWidth = selected.widths[0] !== 0;
+  const widthMatchesPlan = !usesWidth || plannedWidths.includes(width);
 
   return (
     <section className="mt-3 rounded border border-stone-200 bg-white p-3">
@@ -3059,31 +3029,31 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
         <span>Add Parts</span><span>{open ? '−' : '+'}</span>
       </button>
       {open && <div className="mt-3 grid gap-3">
-        <p className="text-xs font-semibold text-stone-600">Add loose shelves, rod kits, or drawer kits without changing the tower layout.</p>
+        <p className="text-xs font-semibold text-stone-600">Add loose shelves, rod kits, shelf pins, Rafix hardware, or drawer kits without changing the tower layout.</p>
         <label className="grid gap-1 text-xs font-bold text-stone-600">Part
           <select value={type} onChange={(event) => changeType(event.target.value)} className="rounded border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900">
             {Object.entries(options).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
           </select>
         </label>
         <div className="grid grid-cols-2 gap-2">
-          <label className="grid gap-1 text-xs font-bold text-stone-600">Width
+          {usesWidth ? <label className="grid gap-1 text-xs font-bold text-stone-600">Width
             <select value={width} onChange={(event) => setWidth(Number(event.target.value))} className="rounded border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900">
               {selected.widths.map((value) => <option key={value} value={value}>{value}&quot;</option>)}
             </select>
-          </label>
+          </label> : <div className="grid content-end text-xs font-bold text-stone-600"><span className="rounded border border-stone-200 bg-stone-50 px-2 py-2">Standard pack</span></div>}
           <label className="grid gap-1 text-xs font-bold text-stone-600">Quantity
             <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
           </label>
         </div>
-        <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? `${money(selectedProduct.price)} each` : catalogReady ? 'Not available' : 'Checking price...'}</span></div>
+        <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? (priceUnlocked ? `${money(selectedProduct.price)} each` : 'Price included after contact') : catalogReady ? 'Not available' : 'Checking availability...'}</span></div>
         {!widthMatchesPlan && <p className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-bold text-amber-800">Warning: this plan has no {width}&quot; tower bay. This part may not fit the planned closet; confirm the installation location before purchasing.</p>}
         <button type="button" onClick={addItem} disabled={!selectedProduct} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
         {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
           {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
-            <span className="font-semibold text-stone-700">{options[item.type].label} — {item.width}&quot;</span>
-            <span className="font-bold text-stone-950">Qty {item.quantity} · {money(item.price * item.quantity)}</span>
+            <span className="font-semibold text-stone-700">{options[item.type].label}{item.width ? ` — ${item.width}\"` : ''}</span>
+            <span className="font-bold text-stone-950">Qty {item.quantity}{priceUnlocked ? ` · ${money(item.price * item.quantity)}` : ''}</span>
             <button type="button" onClick={() => onChange((current) => current.filter((candidate) => candidate !== item))} className="font-bold text-red-700">Remove</button>
-            {!plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
+            {item.width > 0 && !plannedWidths.includes(item.width) && <span className="w-full text-[11px] font-bold text-amber-800">No matching {item.width}&quot; tower bay in this plan.</span>}
           </div>)}
         </div>}
       </div>}
@@ -3092,14 +3062,23 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
 }
 
 function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, setExtraParts, isCatalogReady }) {
-  const [showForm, setShowForm] = useState(false);
-  const [customer, setCustomer] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState(getPlannerContact);
+  const [hasKnownContact, setHasKnownContact] = useState(hasPlannerContact);
+  const [priceUnlocked, setPriceUnlocked] = useState(hasPlannerContact);
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const materials = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
   const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
   const shouldShowProductLinks = evaluation.complete && pricing.allConfiguredWallsMatched;
   const catalogMessages = pricing.catalogWarnings || [];
   const canVerifyEstimate = Boolean(evaluation.complete && isCatalogReady && pricing.catalogSupported);
+  const savedEstimate = {
+    estimatedPrice: pricing.estimatedPrice,
+    customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim(),
+    phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
+  };
+  useEffect(() => {
+    catalogMessages.forEach((message) => reportUserVisibleError({ message, planner: 'walk-in', action: 'catalog availability' }));
+  }, [catalogMessages]);
 
   const submitForVerification = async (event) => {
     event.preventDefault();
@@ -3131,12 +3110,12 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
           room,
           corners,
           runs,
-          materials: [...materials, ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width}\" · ${money(item.price)} each` }))],
+          materials: [...materials, ...extraParts.map((item) => ({ category: 'Added parts', sku: item.sku, name: item.name, quantity: item.quantity, details: `${item.width ? `${item.width}\" · ` : ''}${money(item.price)} each` }))],
           extraParts,
           modules,
           estimatedPrice: pricing.estimatedPrice,
           signature: pricing.signature,
-          planUrl: buildWalkInPlanUrl(room, corners, runs, extraParts),
+          planUrl: buildWalkInEstimateUrl(room, corners, runs, extraParts, savedEstimate),
           wallSummaries: pricing.wallSummaries,
           internalType: 'walk-in estimate verification',
         }),
@@ -3152,7 +3131,11 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
         message: '',
         quoteId: payload.quoteId,
       });
+      rememberPlannerContact(customer);
+      setHasKnownContact(true);
+      setPriceUnlocked(true);
     } catch (error) {
+      reportUserVisibleError({ message: error.message, planner: 'walk-in', action: 'submit verification request' });
       setSubmitStatus({
         state: 'error',
         message: error.message,
@@ -3164,7 +3147,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
     <section className="rounded border border-stone-200 bg-white p-3">
       <h2 className="text-base font-bold text-stone-950">Price & Next Step</h2>
 
-      {shouldShowProductLinks && (
+      {priceUnlocked && shouldShowProductLinks && (
         <div className="mt-3 rounded border border-emerald-200 bg-emerald-50 p-3">
           <div className="text-xs font-bold uppercase text-emerald-700">Existing products found</div>
           <p className="mt-1 text-sm font-semibold text-stone-700">Each configured wall run matches a standard product. Purchase the kit and any added parts separately below.</p>
@@ -3192,7 +3175,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
         </div>
       )}
 
-      {!shouldShowProductLinks && (
+      {priceUnlocked && !shouldShowProductLinks && (
         <div className="mt-3 rounded border border-stone-200 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -3218,39 +3201,33 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
           </div>
           {catalogMessages.length > 0 && (
             <div className="mt-3 grid gap-2">
-              {catalogMessages.map((warning) => (
-                <div key={warning} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              {catalogMessages.map((warning, index) => (
+                <div key={`${warning}-${index}`} className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
                   {warning}
                 </div>
               ))}
             </div>
           )}
 
-          {showForm && (
-            <form className="mt-3 grid gap-2" onSubmit={submitForVerification}>
-              {submitStatus.state === 'success' ? (
-                <SavedPlanActions quoteId={submitStatus.quoteId} />
-              ) : (
-                <>
-                  <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                  <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                  <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                  <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                  <button type="submit" disabled={submitStatus.state === 'loading'} className="rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white disabled:opacity-50">
-                    Verify estimate
-                  </button>
-                </>
-              )}
-              {submitStatus.state === 'error' && submitStatus.message && (
-                <p className={`rounded px-2 py-1.5 text-xs font-bold ${submitStatus.state === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                  {submitStatus.message}
-                </p>
-              )}
-            </form>
-          )}
         </div>
       )}
-      <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(Object.values(runs).flat().map((module) => Number(module.width)))]} />
+      {!priceUnlocked && (
+        <form className="mt-3 rounded border border-stone-200 bg-white p-3" onSubmit={submitForVerification}>
+          <h3 className="text-sm font-bold text-stone-950">Save your plan and see the price</h3>
+          <p className="mt-1 text-xs font-semibold text-stone-600">Enter your details once. Prices will remain available for this browser session.</p>
+                  {!hasKnownContact && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <input type="text" autoComplete="given-name" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+            <input type="text" autoComplete="family-name" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+            <input type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+            <input type="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
+                  </div>}
+          <button type="submit" disabled={submitStatus.state === 'loading' || !canVerifyEstimate} className="mt-3 w-full rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
+            {submitStatus.state === 'loading' ? 'Saving plan...' : 'Save plan & see price'}
+          </button>
+          {submitStatus.state === 'error' && <p className="mt-2 rounded bg-red-100 px-2 py-1.5 text-xs font-bold text-red-700">{submitStatus.message}</p>}
+        </form>
+      )}
+      <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(Object.values(runs).flat().map((module) => Number(module.width)))]} priceUnlocked={priceUnlocked} />
     </section>
   );
 }
@@ -3371,6 +3348,7 @@ function WalkInPlanner() {
         }
       } catch {
         if (!cancelled) {
+          reportUserVisibleError({ message: 'Unable to load product catalog', planner: 'walk-in', action: 'load product catalog' });
           setProductCatalog([]);
           setCatalogReady(true);
         }
@@ -3393,6 +3371,7 @@ function WalkInPlanner() {
         evaluation={evaluation}
         pricing={pricing}
         extraParts={extraParts}
+        savedEstimate={requestedPlan?.savedEstimate}
       />
     );
   }
@@ -3492,8 +3471,8 @@ function WalkInPlanner() {
           <ConsultationCta compact />
         </div>
       </header>
-      <section className="app-workspace grid min-w-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="min-w-0 bg-white p-3 pr-6 sm:p-4 sm:pr-6 lg:pr-4">
+      <section className="app-workspace mx-auto grid w-full max-w-7xl min-w-0 gap-0">
+        <section className="min-w-0 bg-white p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-end gap-2">
             {[
               ['plan', 'Plan view'],
@@ -3583,7 +3562,7 @@ function WalkInPlanner() {
             </div>
           </section>
         </section>
-        <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3 pr-6 lg:border-l lg:border-t-0 lg:pr-3">
+        <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3">
           <div className="space-y-3">
             <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <WallRunsSummary room={room} evaluation={evaluation} />

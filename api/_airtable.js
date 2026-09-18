@@ -1,7 +1,15 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
 
 export function parseStoredQuote(value) {
-  const quote = JSON.parse(value || 'null');
+  const source = value || 'null';
+  let quote;
+
+  try {
+    quote = JSON.parse(source);
+  } catch {
+    quote = JSON.parse(String(source).replace(/(\d)\\*"(?!\s*[,}\]:])/g, '$1\\"'));
+  }
+
   return quote?.encoding === 'gzip-base64'
     ? JSON.parse(gunzipSync(Buffer.from(quote.data, 'base64'), { maxOutputLength: 5000000 }).toString('utf8'))
     : quote;

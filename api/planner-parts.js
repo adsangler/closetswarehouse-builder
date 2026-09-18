@@ -4,6 +4,8 @@ import { buildResolvedParts } from './_part-pricing.js';
 const allowedPatterns = [
   /^SH-(18|24|30)-14-W$/i,
   /^RK-(18|24|30)-S$/i,
+  /^PIN-20-S$/i,
+  /^CAMKIT-10-W$/i,
   /^DRK-24-5-13-W$/i,
   /^DRK-24-10-13-W$/i,
 ];

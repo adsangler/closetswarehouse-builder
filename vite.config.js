@@ -1,10 +1,11 @@
+import { createAirtableQuoteWithDiagnostics, updateAirtableQuoteShopifyCustomer as linkAirtableCustomer, parseStoredQuote } from './api/_airtable.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { buildResolvedParts } from './api/_part-pricing.js';
-import { normalizeQuoteSubmission, validateNormalizedQuote } from './api/_quote-normalize.js';
+import { attachQuoteReferenceToPlanUrl, normalizeQuoteSubmission, validateNormalizedQuote } from './api/_quote-normalize.js';
 import { isInternalAirtableApiEnabled, sanitizePublicKitRecords } from './api/_public-records.js';
 import { fetchShopifyCustomerContact, upsertShopifyCustomerPlan } from './api/_shopify.js';
 import { renderPrintablePlan } from './api/quote-print.js';
@@ -165,7 +166,7 @@ function resolvedPartsProxy(env) {
 }
 
 function plannerPartsProxy(env) {
-  const allowedPatterns = [/^SH-(18|24|30)-14-W$/i, /^RK-(18|24|30)-S$/i, /^DRK-24-(5|10)-13-W$/i];
+  const allowedPatterns = [/^SH-(18|24|30)-14-W$/i, /^RK-(18|24|30)-S$/i, /^PIN-20-S$/i, /^CAMKIT-10-W$/i, /^DRK-24-(5|10)-13-W$/i];
   return {
     name: 'planner-parts-proxy',
     configureServer(server) {
@@ -221,12 +222,6 @@ function createQuoteId(date = new Date()) {
   return `CWQ-${timestamp}-${suffix}`;
 }
 
-function compactFields(fields) {
-  return Object.fromEntries(
-    Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ''),
-  );
-}
-
 function getQuoteFieldNames(env) {
   return {
     quoteId: env.AIRTABLE_QUOTES_ID_FIELD || 'Quote ID',
@@ -262,79 +257,6 @@ function phoneMatches(left, right) {
 
 function emailMatches(left, right) {
   return normalizeEmail(left) === normalizeEmail(right);
-}
-
-function buildLegacyQuoteFields(quote) {
-  const customerName = [quote.customer?.firstName, quote.customer?.lastName].filter(Boolean).join(' ').trim() || quote.customer?.name || '';
-  const formatModuleDisplay = (module) => {
-    const wall = module.wall ? `${module.wall}: ` : '';
-    const width = module.width ? `${module.width}"` : '';
-    const label = String(module.label || module.name || module.displayName || '')
-      .replace(/\s*\/\s*\d+(?:\.\d+)?\"?\s*bay$/i, '')
-      .replace(/\s+\d+(?:\.\d+)?\"?$/g, '')
-      .trim();
-    const displayName = [label || 'Closet tower', width ? `${width} bay` : ''].filter(Boolean).join(' / ');
-    return `${wall}${displayName}`;
-  };
-
-  return compactFields({
-    Name: customerName,
-    'First Name': quote.customer?.firstName || '',
-    'Last Name': quote.customer?.lastName || '',
-    Email: quote.customer?.email || '',
-    Phone: quote.customer?.phone || '',
-    Status: 'New',
-    Source: 'Closet planner',
-    'Wall Width': quote.wallWidth,
-    Height: quote.height,
-    'Assembled Width': quote.assembledWidth,
-    'Required Width': quote.requiredWidth,
-    'Estimated Price': quote.estimatedPrice,
-    Signature: quote.signature,
-    Modules: quote.modules?.map(formatModuleDisplay).join(', '),
-    'Quote JSON': JSON.stringify(quote),
-  });
-}
-
-function buildEnrichedQuoteFields(env, quote) {
-  const fieldNames = getQuoteFieldNames(env);
-
-  return {
-    ...buildLegacyQuoteFields(quote),
-    ...compactFields({
-      [fieldNames.quoteId]: quote.quoteId,
-      [fieldNames.planUrl]: quote.planUrl,
-      [fieldNames.planType]: quote.planType || quote.internalType || 'closet plan',
-      [fieldNames.submittedAt]: quote.submittedAt,
-      [fieldNames.shopifyCustomerId]: quote.shopifyCustomer?.customerId,
-      [fieldNames.shopifyCustomerEmail]: quote.shopifyCustomer?.customerEmail,
-    }),
-  };
-}
-
-function buildCoreQuoteFields(env, quote) {
-  const fieldNames = getQuoteFieldNames(env);
-
-  return {
-    ...buildLegacyQuoteFields(quote),
-    ...compactFields({
-      [fieldNames.quoteId]: quote.quoteId,
-      [fieldNames.planUrl]: quote.planUrl,
-      [fieldNames.planType]: quote.planType || quote.internalType || 'closet plan',
-      [fieldNames.submittedAt]: quote.submittedAt,
-    }),
-  };
-}
-
-function buildRequiredQuoteFields(env, quote) {
-  const fieldNames = getQuoteFieldNames(env);
-
-  return compactFields({
-    [fieldNames.quoteId]: quote.quoteId,
-    Email: quote.customer?.email || '',
-    Phone: quote.customer?.phone || '',
-    'Quote JSON': JSON.stringify(quote),
-  });
 }
 
 async function fetchAirtableQuoteRecords(env, configureUrl = () => {}) {
@@ -380,128 +302,13 @@ function applyServerEnv(env, keys) {
 }
 
 async function createAirtableQuote(env, quote) {
-  const token = env.AIRTABLE_TOKEN;
-  const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
-
-  if (!token || !baseId || !tableName) {
-    return { record: null, error: 'missing_airtable_quote_env' };
-  }
-
-  const tableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`;
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-  const parseResult = async (response) => {
-    const text = await response.text();
-    let payload = null;
-
-    try {
-      payload = text ? JSON.parse(text) : null;
-    } catch {
-      payload = null;
-    }
-
-    return { response, text, payload };
-  };
-  const getMessage = (result) => String(result.payload?.error?.message || result.payload?.error?.type || result.text || '').replace(/\s+/g, ' ').slice(0, 220);
-  const shouldFallback = (result) => /UNKNOWN_FIELD_NAME|Unknown field name|INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(getMessage(result));
-  const getFailureReason = (result, mode) => {
-    const message = getMessage(result);
-
-    if (result.response.status === 401 || result.response.status === 403) {
-      return `${mode}: airtable_auth_${result.response.status}`;
-    }
-
-    if (result.response.status === 404) {
-      return `${mode}: airtable_table_not_found`;
-    }
-
-    if (/UNKNOWN_FIELD_NAME|Unknown field name/i.test(message)) {
-      return `${mode}: airtable_unknown_field (${message})`;
-    }
-
-    if (/INVALID_MULTIPLE_CHOICE_OPTIONS/i.test(message)) {
-      return `${mode}: airtable_invalid_select_option (${message})`;
-    }
-
-    return `${mode}: airtable_${result.response.status}${message ? ` (${message})` : ''}`;
-  };
-
-  try {
-    const response = await fetch(tableUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        fields: buildEnrichedQuoteFields(env, quote),
-      }),
-    });
-    const enrichedResult = await parseResult(response);
-
-    if (enrichedResult.response.ok) {
-      return { record: enrichedResult.payload, mode: 'enriched' };
-    }
-
-    if (!shouldFallback(enrichedResult)) {
-      return { record: null, error: getFailureReason(enrichedResult, 'enriched') };
-    }
-
-    const coreFallback = await parseResult(await fetch(tableUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ fields: buildCoreQuoteFields(env, quote) }),
-    }));
-
-    if (coreFallback.response.ok) {
-      return { record: coreFallback.payload, mode: 'core' };
-    }
-
-    if (!shouldFallback(coreFallback)) {
-      return { record: null, error: getFailureReason(coreFallback, 'core') };
-    }
-
-    const requiredFallback = await parseResult(await fetch(tableUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ fields: buildRequiredQuoteFields(env, quote) }),
-    }));
-
-    if (!requiredFallback.response.ok) {
-      return { record: null, error: getFailureReason(requiredFallback, 'minimal') };
-    }
-
-    return { record: requiredFallback.payload, mode: 'minimal' };
-  } catch (error) {
-    return { record: null, error: `airtable_request_failed (${String(error?.message || error).slice(0, 160)})` };
-  }
+  applyServerEnv(env, Object.keys(env).filter((key) => key.startsWith('AIRTABLE_')));
+  return createAirtableQuoteWithDiagnostics(quote);
 }
 
 async function updateAirtableQuoteShopifyCustomer(env, recordId, quote, shopifyCustomer) {
-  const token = env.AIRTABLE_TOKEN;
-  const baseId = env.AIRTABLE_BASE_ID;
-  const tableName = env.AIRTABLE_QUOTES_TABLE || 'Quotes';
-
-  if (!token || !baseId || !tableName || !recordId || !shopifyCustomer?.customerId) {
-    return null;
-  }
-
-  const response = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}/${recordId}`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      fields: buildEnrichedQuoteFields(env, { ...quote, shopifyCustomer }),
-    }),
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
+  applyServerEnv(env, Object.keys(env).filter((key) => key.startsWith('AIRTABLE_')));
+  return linkAirtableCustomer(recordId, quote, shopifyCustomer);
 }
 
 async function fetchAirtableQuoteByReference(env, { quoteId, email }) {
@@ -545,7 +352,7 @@ async function fetchAirtableQuoteByReference(env, { quoteId, email }) {
 
   let quoteJson = null;
   try {
-    quoteJson = JSON.parse(record.fields?.['Quote JSON'] || 'null');
+    quoteJson = parseStoredQuote(record.fields?.['Quote JSON']);
   } catch {
     quoteJson = null;
   }
@@ -570,7 +377,7 @@ function parseQuoteRecord(env, record, fallbackQuoteId = '') {
   let quoteJson = null;
 
   try {
-    quoteJson = JSON.parse(record.fields?.['Quote JSON'] || 'null');
+    quoteJson = parseStoredQuote(record.fields?.['Quote JSON']);
   } catch {
     quoteJson = null;
   }
@@ -1004,6 +811,7 @@ function quoteRequestProxy(env) {
           const submittedAt = submittedDate.toISOString();
           const quoteId = createQuoteId(submittedDate);
           const capturedQuote = normalizeQuoteSubmission(quote, { quoteId, submittedAt });
+          capturedQuote.planUrl = attachQuoteReferenceToPlanUrl(capturedQuote.planUrl, quoteId);
           const validationError = validateNormalizedQuote(capturedQuote);
 
           if (validationError) {
@@ -1517,6 +1325,69 @@ function removeProductionInternalAssets(enabled) {
   };
 }
 
+function userErrorLogProxy() {
+  const spaceLimitationPatterns = [
+    /dimension/i,
+    /does not fit|doesn't fit|too wide|not enough (?:wall|space)|space limitation/i,
+    /wall (?:space|width|capacity)|usable (?:wall|length)|run is .* usable length/i,
+    /opening (?:wall math|should be|must be|is only|clear)/i,
+    /return wall is only|return-wall closet/i,
+    /ceiling (?:height|must be|clearance)|closet height must/i,
+    /drawer.*(?:blocked|clear|opening|open all the way)/i,
+    /corner.*(?:clear|reach|space)/i,
+  ];
+  const cleanText = (value, maxLength) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+
+  return {
+    name: 'user-error-log-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/user-error-log', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          let body = '';
+          for await (const chunk of req) {
+            body += chunk;
+            if (body.length > 10000) throw new Error('Payload too large');
+          }
+          const payload = JSON.parse(body || '{}');
+          const message = cleanText(payload.message, 500);
+
+          if (!message || spaceLimitationPatterns.some((pattern) => pattern.test(message))) {
+            res.statusCode = 204;
+            res.end();
+            return;
+          }
+
+          const record = {
+            event: 'planner_user_visible_error',
+            timestamp: /^\d{4}-\d{2}-\d{2}T/.test(payload.timestamp) ? payload.timestamp : new Date().toISOString(),
+            message,
+            planner: cleanText(payload.planner, 40),
+            action: cleanText(payload.action, 80),
+            path: cleanText(payload.path, 180),
+            details: payload.details && typeof payload.details === 'object' ? payload.details : undefined,
+          };
+          const logPath = path.resolve(__dirname, 'logs/user-errors.jsonl');
+          await fs.mkdir(path.dirname(logPath), { recursive: true });
+          await fs.appendFile(logPath, `${JSON.stringify(record)}\n`, 'utf8');
+          res.statusCode = 202;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Invalid error log payload' }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const includeInternalRenderer = true;
@@ -1532,6 +1403,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      userErrorLogProxy(),
       quoteRequestProxy(env),
       photoDraftsProxy(),
       photoGenerationProxy(env),

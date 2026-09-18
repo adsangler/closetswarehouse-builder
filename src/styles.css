@@ -159,6 +159,50 @@ html[data-embedded-planner="true"] .h-screen {
     grid-template-columns: 1fr !important;
   }
 
+  /* Chromium can fragment children of a CSS grid even when the child asks to
+     avoid page breaks. Use normal block flow for printed wall elevations so a
+     complete closet view moves to the next page instead of being clipped. */
+  .print-wall-view-list {
+    display: block !important;
+  }
+
+  .print-estimate-layout,
+  .print-estimate-content,
+  .print-wall-views {
+    display: block !important;
+  }
+
+  .print-estimate-content > * {
+    margin-bottom: 1rem;
+  }
+
+  .print-wall-view-list > [data-wall-view] {
+    display: block !important;
+    break-inside: avoid-page !important;
+    page-break-inside: avoid !important;
+    margin-bottom: 0.75rem;
+  }
+
+  /* A wall drawing is more useful intact than sharing a sheet. Explicit page
+     starts avoid Chromium's unreliable break-inside handling for SVG cards. */
+  .print-wall-view-list > [data-wall-view] + [data-wall-view] {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  .print-wall-view-list > [data-wall-view]:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Keep the reach-in elevation on one dedicated sheet as well. */
+  .print-reachin-front-view {
+    display: block !important;
+    break-before: page !important;
+    page-break-before: always !important;
+    break-inside: avoid-page !important;
+    page-break-inside: avoid !important;
+  }
+
   a {
     color: inherit !important;
     text-decoration: none !important;

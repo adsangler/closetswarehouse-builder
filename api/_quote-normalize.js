@@ -40,7 +40,7 @@ function cleanEmail(value) {
 }
 
 function cleanUrl(value) {
-  const text = cleanText(value, 12000);
+  const text = cleanText(value, 90000);
 
   if (!/^https?:\/\//i.test(text)) {
     return '';
@@ -107,6 +107,23 @@ function cleanDrawings(drawings) {
   }).filter(Boolean);
 }
 
+function cleanMaterials(materials) {
+  if (!Array.isArray(materials)) return [];
+
+  return materials.slice(0, 200).map((part) => {
+    const quantity = cleanNumber(part?.quantity);
+    if (!(quantity > 0)) return null;
+
+    return {
+      category: cleanText(part?.category || 'Parts', 40),
+      sku: cleanText(part?.sku, 80),
+      name: cleanText(part?.name || part?.label || 'Part', 140),
+      quantity,
+      details: cleanText(part?.details, 300),
+    };
+  }).filter(Boolean);
+}
+
 function estimateModules(modules) {
   const groups = new Map();
 
@@ -152,6 +169,7 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     planUrl: cleanUrl(rawQuote.planUrl),
     drawings: cleanDrawings(rawQuote.drawings),
     modules,
+    materials: cleanMaterials(rawQuote.materials),
     estimatedPrice,
     clientEstimatedPrice,
     serverEstimatedPrice,
@@ -174,4 +192,17 @@ export function validateNormalizedQuote(quote) {
   }
 
   return '';
+}
+
+export function attachQuoteReferenceToPlanUrl(planUrl, quoteId) {
+  if (!planUrl || !quoteId) return planUrl || '';
+
+  try {
+    const url = new URL(planUrl);
+    url.searchParams.set('estimate', '1');
+    url.searchParams.set('quote', quoteId);
+    return cleanUrl(url.toString());
+  } catch {
+    return planUrl;
+  }
 }
