@@ -2,6 +2,7 @@ import { adjustableShelfCount } from './shelfCounts.js';
 import { buildPickList } from './pickList.js';
 
 export const towerNames = {
+  FR: 'Frame Only',
   LH: 'Long Hang',
   DH: 'Double Hang',
   HS: 'Hang & Shelves',

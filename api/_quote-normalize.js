@@ -9,8 +9,9 @@ const fallbackByCode = {
   S8: 315,
 };
 
-const allowedCodes = new Set(Object.keys(fallbackByCode));
+const allowedCodes = new Set([...Object.keys(fallbackByCode), 'FR']);
 const allowedWidthsByCode = {
+  FR: new Set([18, 24, 30]),
   LH: new Set([18, 24, 30]),
   DH: new Set([18, 24, 30]),
   HS: new Set([18, 24, 30]),
@@ -21,6 +22,7 @@ const allowedWidthsByCode = {
   S8: new Set([18, 24, 30]),
 };
 const towerNames = {
+  FR: 'Frame Only',
   LH: 'Long Hang',
   DH: 'Double Hang',
   HS: 'Hang & Shelves',
@@ -125,6 +127,8 @@ function cleanMaterials(materials) {
 }
 
 function estimateModules(modules) {
+  // Frame Only must use its live Airtable price, never a storage-tower fallback.
+  if (modules.some((module) => module.code === 'FR')) return 0;
   const groups = new Map();
 
   modules.forEach((module) => {

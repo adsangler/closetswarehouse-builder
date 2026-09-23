@@ -1,8 +1,10 @@
 import { adjustableShelfCount } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedReachInParts } from './partList.js';
+import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
+import { fitReachInCamera } from './reachInCamera.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls, RoundedBox } from '@react-three/drei';
 import { Pathtracer } from '@react-three/gpu-pathtracer';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from 'three';
@@ -136,6 +138,7 @@ const photoDrawerMaterial = {
 };
 
 const towerNames = {
+  FR: 'Frame Only',
   LH: 'Long Hang',
   DH: 'Double Hang',
   HS: 'Hang & Shelves',
@@ -155,6 +158,7 @@ const plannerConfigs = [
   { code: 'H3D', title: 'Hang + 3 Drawers', note: 'Short hang over drawers' },
   { code: 'S2D', title: 'Shelves + 2 Drawers', note: 'Two drawers with shelves' },
   { code: 'SHELF', title: 'Shelf Tower', note: 'Even shelf levels' },
+  { code: 'FR', title: 'Frame Only', note: 'Top, bottom, toe kick and verticals' },
 ];
 
 const reachInDoorTypes = [
@@ -163,7 +167,7 @@ const reachInDoorTypes = [
   { value: 'sliding', label: 'Sliding' },
 ];
 
-const towerCodePattern = /^(LH|DH|HS|S3D|3DS|H3D|3DH|S2D|2DS|S7|S8|S9)$/;
+const towerCodePattern = /^(FR|LH|DH|HS|S3D|3DS|H3D|3DH|S2D|2DS|S7|S8|S9)$/;
 const widthTokenPattern = /^(18|24|30)$/;
 const singleTowerWidthTokenMap = {
   20: 18,
@@ -218,7 +222,7 @@ function getPlannerCode(configCode, height) {
 }
 
 function getWidthOptions(configCode) {
-  return ['SHELF', 'LH', 'DH', 'HS'].includes(configCode) ? [18, 24, 30] : [24, 30];
+  return ['SHELF', 'FR'].includes(configCode) ? [18, 24, 30] : [24, 30];
 }
 
 function createPlannerModule(configCode, height, width = null) {
@@ -357,7 +361,8 @@ function kitRecordToDrawing(record) {
     assembledWidth,
     requiredWidth: Number(fields['Width Requirement']) || getRequiredWidth(assembledWidth),
     price: normalizePrice(fields.retail_price),
-    productUrl: shopifyActive ? getProductUrl(shopifyHandle) : '',
+    productUrl: shopifyActive && !towerSpecs.some((tower) => tower.code === 'FR') ? getProductUrl(shopifyHandle) : '',
+    plannerOnly: towerSpecs.some((tower) => tower.code === 'FR'),
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: String(fields.Status || 'active').toLowerCase(),
     towerSpecs,
@@ -384,7 +389,7 @@ function kitHandleToDrawing(handle) {
     assembledWidth,
     requiredWidth: getRequiredWidth(assembledWidth),
     price: 0,
-    productUrl: getProductUrl(sku),
+    productUrl: towerSpecs.some((tower) => tower.code === 'FR') ? '' : getProductUrl(sku),
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: 'active',
     towerSpecs,
@@ -423,21 +428,6 @@ function getRequestedMode() {
   return new URLSearchParams(window.location.search).get('mode') === 'renderer' ? 'renderer' : 'planner';
 }
 
-function encodePlanPayload(payload) {
-  return btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function decodePlanPayload(encodedPlan) {
-  const normalized = String(encodedPlan || '')
-    .trim()
-    .replace(/\s/g, '+')
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-
-  return JSON.parse(atob(padded));
-}
-
 function getRequestedReachInPlan() {
   if (typeof window === 'undefined') {
     return null;
@@ -464,6 +454,7 @@ function buildReachInPlanUrl(planDetails, modules, extraParts = [], savedEstimat
   const url = new URL(window.location.href);
   url.searchParams.delete('kit');
   url.searchParams.delete('estimate');
+  url.searchParams.delete('quote');
   url.searchParams.set('plan', encodePlanPayload({ planDetails, modules, extraParts, ...(savedEstimate ? { savedEstimate } : {}) }));
   return url.toString();
 }
@@ -863,10 +854,10 @@ function PartMaterial({ material, physical = false }) {
   return physical ? <meshPhysicalMaterial {...material} /> : <meshStandardMaterial {...material} />;
 }
 
-function BoxPart({ position, scale, material = panelMaterial, edge = true, bevel = 0, physical = false }) {
+function BoxPart({ position, scale, material = panelMaterial, edge = true, bevel = 0, physical = false, castShadow = true }) {
   if (bevel > 0) {
     return (
-      <RoundedBox position={position} args={scale} radius={bevel} smoothness={3} castShadow receiveShadow>
+      <RoundedBox position={position} args={scale} radius={bevel} smoothness={3} castShadow={castShadow} receiveShadow>
         <PartMaterial material={material} physical={physical} />
         {edge && <Edges color="#deded6" threshold={18} />}
       </RoundedBox>
@@ -874,7 +865,7 @@ function BoxPart({ position, scale, material = panelMaterial, edge = true, bevel
   }
 
   return (
-    <mesh position={position} castShadow receiveShadow>
+    <mesh position={position} castShadow={castShadow} receiveShadow>
       <boxGeometry args={scale} />
       <PartMaterial material={material} physical={physical} />
       {edge && <Edges color="#deded6" threshold={18} />}
@@ -1146,8 +1137,8 @@ function Room({ drawing, photoMode = false, wallWidth = null, reachInRoom = null
   const rightReturnWidth = Math.max(0, reachInWidth - openingEnd);
   const leftEdgeX = -reachInWidth / 2;
   const rightEdgeX = reachInWidth / 2;
-  const wallShellMaterial = { color: wallColor, roughness: 0.98, metalness: 0, transparent: true, opacity: photoMode ? 0.82 : 0.68 };
-  const frontReturnMaterial = { color: photoMode ? '#e5ded4' : '#e8e5de', roughness: 0.96, metalness: 0, transparent: true, opacity: photoMode ? 0.8 : 0.7 };
+  const wallShellMaterial = { color: wallColor, roughness: 0.98, metalness: 0, transparent: true, opacity: photoMode ? 0.82 : 0.12, depthWrite: photoMode };
+  const frontReturnMaterial = { color: photoMode ? '#e5ded4' : '#e8e5de', roughness: 0.96, metalness: 0, transparent: true, opacity: photoMode ? 0.8 : 0.12, depthWrite: photoMode };
   const hasReachInShell = Boolean(reachInRoom && reachInWidth > 0);
   const shellBackWallWidth = hasReachInShell ? reachInWidth : roomWidth;
   const shellFloorWidth = hasReachInShell ? reachInWidth + wallThickness : Math.max(photoMode ? 196 : 128, roomWidth);
@@ -1161,13 +1152,14 @@ function Room({ drawing, photoMode = false, wallWidth = null, reachInRoom = null
       </mesh>
       {hasReachInShell && (
         <>
-          <BoxPart position={[leftEdgeX, wallHeight / 2, roomCenterZ]} scale={[wallThickness, wallHeight, reachInDepth]} material={wallShellMaterial} edge={false} />
-          <BoxPart position={[rightEdgeX, wallHeight / 2, roomCenterZ]} scale={[wallThickness, wallHeight, reachInDepth]} material={wallShellMaterial} edge={false} />
+          <BoxPart position={[leftEdgeX, wallHeight / 2, roomCenterZ]} scale={[wallThickness, wallHeight, reachInDepth]} material={wallShellMaterial} edge={false} castShadow={photoMode} />
+          <BoxPart position={[rightEdgeX, wallHeight / 2, roomCenterZ]} scale={[wallThickness, wallHeight, reachInDepth]} material={wallShellMaterial} edge={false} castShadow={photoMode} />
           {leftReturnWidth > 0 && (
             <BoxPart
               position={[leftEdgeX + leftReturnWidth / 2, wallHeight / 2, roomFrontZ]}
               scale={[leftReturnWidth, wallHeight, wallThickness]}
               material={frontReturnMaterial}
+              castShadow={photoMode}
               edge={false}
             />
           )}
@@ -1176,6 +1168,7 @@ function Room({ drawing, photoMode = false, wallWidth = null, reachInRoom = null
               position={[leftEdgeX + openingEnd + rightReturnWidth / 2, wallHeight / 2, roomFrontZ]}
               scale={[rightReturnWidth, wallHeight, wallThickness]}
               material={frontReturnMaterial}
+              castShadow={photoMode}
               edge={false}
             />
           )}
@@ -1230,7 +1223,7 @@ function Room({ drawing, photoMode = false, wallWidth = null, reachInRoom = null
 
 function ClosetSystem({ drawing, photoMode = false }) {
   return (
-    <group position={[0, 0, 0]}>
+    <group>
       {drawing.panelXs.map((atX, index) => (
         <VerticalPanel key={`panel-${index}-${atX}`} drawing={drawing} atX={atX} photoMode={photoMode} />
       ))}
@@ -1260,6 +1253,28 @@ function ClosetSystem({ drawing, photoMode = false }) {
   );
 }
 
+function ReachInCameraFit({ drawing, room }) {
+  const { camera, controls, size, invalidate } = useThree();
+  const width = Math.max(drawing.assembledWidth, Number(room.wallWidth) || 0);
+  const roomDepth = Math.max(depth, Number(room.roomDepth) || depth);
+  useEffect(() => {
+    if (!size.width || !size.height) return;
+    const fit = fitReachInCamera({ width, height: drawing.height, roomDepth, aspect: size.width / size.height });
+    camera.position.set(...fit.position);
+    camera.fov = fit.fov;
+    camera.far = Math.max(1000, fit.distance * 4);
+    camera.lookAt(...fit.target);
+    camera.updateProjectionMatrix();
+    if (controls) {
+      controls.target.set(...fit.target);
+      controls.maxDistance = Math.max(320, fit.distance * 3);
+      controls.update();
+    }
+    invalidate();
+  }, [camera, controls, size.width, size.height, width, drawing.height, roomDepth, invalidate]);
+  return null;
+}
+
 function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom = null, pathTraced = false }) {
   return (
     <>
@@ -1283,6 +1298,7 @@ function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom
       <ClosetSystem drawing={drawing} photoMode={photoMode} />
       {!pathTraced && <ContactShadows position={[0, 0.02, 4]} opacity={photoMode ? 0.28 : 0.24} scale={88} blur={photoMode ? 5.2 : 2.8} far={14} />}
       <OrbitControls makeDefault enableDamping target={[0, drawing.height / 2, 0]} minDistance={120} maxDistance={320} />
+      {reachInRoom && !photoMode && <ReachInCameraFit drawing={drawing} room={reachInRoom} />}
     </>
   );
 }
@@ -1733,6 +1749,7 @@ function ConfigMiniIcon({ code }) {
     <span className="relative grid h-8 w-6 shrink-0 grid-rows-[repeat(6,1fr)] overflow-hidden rounded border border-stone-300 bg-white px-1 py-1 shadow-inner" aria-hidden="true">
       <span className="absolute inset-y-1 left-1 w-px bg-stone-300" />
       <span className="absolute inset-y-1 right-1 w-px bg-stone-300" />
+      {code === 'FR' && <><span className="absolute inset-x-1 top-1 h-px bg-stone-500" /><span className="absolute inset-x-1 bottom-1.5 h-px bg-stone-500" /></>}
       {Array.from({ length: 6 }, (_, index) => {
         const showShelf = shelfRows.includes(index);
         const showDrawer = drawerRows.includes(index);
@@ -2031,10 +2048,10 @@ function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingL
         <text x={toX(backWidth / 2)} y={toY(0) - 10} textAnchor="middle" className="fill-stone-700 text-[11px] font-bold">
           Back wall {formatInches(backWidth)}
         </text>
-        <text x={toX(backWidth) + 10} y={toY(depth / 2)} className="fill-orange-800 text-[10px] font-bold">
+        <text x={toX(backWidth) - 8} y={toY(depth / 2)} textAnchor="end" className="fill-orange-800 text-[10px] font-bold">
           14" unit
         </text>
-        <text x={toX(backWidth) + 10} y={toY(reachDepth / 2)} className="fill-stone-600 text-[10px] font-bold">
+        <text x={toX(backWidth) - 8} y={toY(reachDepth / 2)} textAnchor="end" className="fill-stone-600 text-[10px] font-bold">
           Depth {formatInches(reachDepth)}
         </text>
         <text x={toX(leftReturn + doorWidth / 2)} y={toY(reachDepth) + 18} textAnchor="middle" className="fill-emerald-700 text-[10px] font-bold">
@@ -2816,10 +2833,12 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
   if (evaluation.match) {
     return (
       <section className="rounded border border-emerald-200 bg-emerald-50 p-3">
-        <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Existing product found</div>
+        <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">{evaluation.match.plannerOnly ? 'Available through the planner' : 'Existing product found'}</div>
         <h2 className="mt-1 text-base font-bold text-stone-950">{evaluation.match.title}</h2>
         <p className="mt-2 text-sm text-stone-700">
-          This layout matches a standard product. Tower order is modular, so the page can be used even if the preview order is different.
+          {evaluation.match.plannerOnly
+            ? 'Frame Only includes the top and bottom fixed shelves, toe kick, vertical panels and assembly hardware. Save your plan for pricing and ordering assistance.'
+            : 'This layout matches a standard product. Tower order is modular, so the page can be used even if the preview order is different.'}
         </p>
         {!priceUnlocked ? priceCapture : <div className="mt-3 flex flex-wrap items-center gap-2">
           {evaluation.displayPrice > 0 && (
@@ -2837,8 +2856,8 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
               Buy This System
             </a>
           ) : (
-            <span className="rounded bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
-              Product page is not connected yet.
+            <span className={`rounded px-3 py-2 text-sm font-bold ${evaluation.match.plannerOnly ? 'bg-stone-100 text-stone-700' : 'bg-red-50 text-red-700'}`}>
+              {evaluation.match.plannerOnly ? 'Contact us to order this saved plan.' : 'Product page is not connected yet.'}
             </span>
           )}
           {evaluation.extraPartsPrice > 0 && (
@@ -3149,6 +3168,11 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
       });
       rememberPlannerContact(customer);
       setHasKnownContact(true);
+      persistSavedPlanReference(buildReachInEstimateUrl(planDetails, modules, extraParts, payload.quoteId, {
+        estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
+        customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' '),
+        phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
+      }), payload.quoteId);
     } catch (error) {
       reportUserVisibleError({ message: error.message, planner: 'reach-in', action: 'save estimate detail' });
       setSubmitStatus({

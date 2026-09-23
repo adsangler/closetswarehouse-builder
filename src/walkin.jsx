@@ -1,6 +1,7 @@
 import { adjustableShelfCount } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedWalkInParts } from './partList.js';
+import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
@@ -195,9 +196,11 @@ const moduleConfigs = [
   { code: 'H3D', label: 'Hang + 3 Drawers', defaultWidth: 24 },
   { code: 'S2D', label: 'Shelves + 2 Drawers', defaultWidth: 24 },
   { code: 'SHELF', label: 'Shelf Tower', defaultWidth: 24 },
+  { code: 'FR', label: 'Frame Only', defaultWidth: 24 },
 ];
 
 const towerNames = {
+  FR: 'Frame Only',
   LH: 'Long Hang',
   DH: 'Double Hang',
   HS: 'Hang & Shelves',
@@ -209,7 +212,7 @@ const towerNames = {
   S9: '8-Shelf',
 };
 
-const towerCodePattern = /^(LH|DH|HS|S3D|3DS|H3D|3DH|S2D|2DS|S7|S8|S9)$/;
+const towerCodePattern = /^(FR|LH|DH|HS|S3D|3DS|H3D|3DH|S2D|2DS|S7|S8|S9)$/;
 const widthTokenPattern = /^(18|24|30)$/;
 const singleTowerWidthTokenMap = {
   20: 18,
@@ -294,7 +297,7 @@ function getWalkInProductCode(module, height) {
 }
 
 function getWalkInWidthOptions(code) {
-  return ['SHELF', 'LH', 'DH', 'HS'].includes(code) ? allowedModuleWidths : [24, 30];
+  return ['SHELF', 'FR'].includes(code) ? allowedModuleWidths : [24, 30];
 }
 
 function getNominalWidthFromSkuToken(token) {
@@ -383,7 +386,7 @@ function kitRecordToProduct(record) {
     assembledWidth,
     requiredWidth: Number(fields['Width Requirement']) || assembledWidth + 2,
     price: normalizePrice(fields.retail_price),
-    productUrl: shopifyActive ? getProductUrl(shopifyHandle) : '',
+    productUrl: shopifyActive && !towerSpecs.some((tower) => tower.code === 'FR') ? getProductUrl(shopifyHandle) : '',
     matchSignature: buildMatchSignature(height, towerSpecs),
     status: String(fields.Status || 'active').toLowerCase(),
     towerSpecs,
@@ -1252,6 +1255,7 @@ function ClosetTypeStart({ onWalkIn }) {
 
 function TowerConfigIcon({ code, compact = false }) {
   const shelves = {
+    FR: [92],
     LH: [64],
     DH: [38, 72],
     HS: [42, 58, 74],
@@ -2566,21 +2570,6 @@ function buildWalkInMaterials(runs) {
   ];
 }
 
-function encodePlanPayload(payload) {
-  return btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function decodePlanPayload(encodedPlan) {
-  const normalized = String(encodedPlan || '')
-    .trim()
-    .replace(/\s/g, '+')
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-
-  return JSON.parse(atob(padded));
-}
-
 function buildWalkInPlanUrl(room, corners, runs, extraParts = [], savedEstimate = null) {
   if (typeof window === 'undefined') {
     return '';
@@ -2589,6 +2578,7 @@ function buildWalkInPlanUrl(room, corners, runs, extraParts = [], savedEstimate 
   const url = new URL(window.location.href);
   url.searchParams.set('type', 'walk-in');
   url.searchParams.delete('estimate');
+  url.searchParams.delete('quote');
   url.searchParams.set('plan', encodePlanPayload({ room, corners, runs, extraParts, ...(savedEstimate ? { savedEstimate } : {}) }));
   return url.toString();
 }
@@ -2825,6 +2815,11 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
       });
       rememberPlannerContact(customer);
       setHasKnownContact(true);
+      persistSavedPlanReference(buildWalkInEstimateUrl(room, corners, runs, extraParts, {
+        estimatedPrice: pricing.estimatedPrice,
+        customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' '),
+        phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
+      }), payload.quoteId);
     } catch (error) {
       reportUserVisibleError({ message: error.message, planner: 'walk-in', action: 'save estimate detail' });
       setSubmitStatus({
