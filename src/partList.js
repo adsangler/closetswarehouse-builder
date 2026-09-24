@@ -88,8 +88,8 @@ export function buildDetailedReachInParts(modules = [], height = 84) {
     const counts = getTowerPartCounts(code, towerHeight);
     towerCount += 1;
 
-    addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, `${towerNames[code] || code} ${width}" bay structural shelves.`, 'Shelves');
-    addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, `${towerNames[code] || code} ${width}" bay movable shelves.`, 'Shelves');
+    addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, `Fixed shelves for ${width}" bays.`, 'Shelves');
+    addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, `Adjustable shelves for ${width}" bays.`, 'Shelves');
     addPart(parts, `TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, 'Toe-kick kit for this tower bay.', 'Kits');
     addPart(parts, `RK-${width}-S`, `Rod kit ${width}"`, counts.rods, 'Complete hanging rod kit with one rod and one pair of rod brackets.', 'Kits');
     addPart(parts, `DRK-${width}-5-13-W`, `Small drawer kit ${width}" x 5" x 13"`, counts.smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
@@ -97,7 +97,7 @@ export function buildDetailedReachInParts(modules = [], height = 84) {
   });
 
   addPart(parts, 'WLB-S-1', 'Wall bracket kit', towerCount * 2, 'Includes one L-bracket and one closet-connection screw. Wall fastener or anchor is not included; use the appropriate fastener for the wall type. Two kits per tower section.', 'Kits');
-  addPart(parts, 'CAMKIT-10-W', 'Camfix and cam-screw kit, 10 pairs', Math.ceil((towerCount * 2 * 4) / 10), `${towerCount * 2 * 4} connector pairs required for ${towerCount * 2} fixed shelves at four pairs per shelf.`, 'Hardware');
+  addPart(parts, 'CAMKIT-10-W', 'Camfix and cam-screw kit, 10 pairs', Math.ceil((towerCount * 9) / 10), `${towerCount * 2 * 4} connector pairs required for ${towerCount * 2} fixed shelves, plus ${towerCount} spare pairs (one per tower).`, 'Hardware');
 
   return buildPickList([...parts.values()], towerCount);
 }
@@ -124,8 +124,8 @@ export function buildDetailedWalkInParts(room = {}, runs = {}) {
       const width = numberValue(module.width);
       const counts = getTowerPartCounts(code, towerHeight);
 
-      addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, `${wallLabels[wall]} ${towerNames[code] || code} structural shelves.`, 'Shelves');
-      addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, `${wallLabels[wall]} ${towerNames[code] || code} movable shelves.`, 'Shelves');
+      addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, `Fixed shelves for ${width}" bays.`, 'Shelves');
+      addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, `Adjustable shelves for ${width}" bays.`, 'Shelves');
       addPart(parts, `TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `Toe-kick kit for the ${wallLabels[wall].toLowerCase()} run.`, 'Kits');
       addPart(parts, `RK-${width}-S`, `Rod kit ${width}"`, counts.rods, `${wallLabels[wall]} complete hanging rod kit with one rod and one pair of rod brackets.`, 'Kits');
       addPart(parts, `DRK-${width}-5-13-W`, `Small drawer kit ${width}" x 5" x 13"`, counts.smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
@@ -134,7 +134,7 @@ export function buildDetailedWalkInParts(room = {}, runs = {}) {
   });
 
   addPart(parts, 'WLB-S-1', 'Wall bracket kit', towerCount * 2, 'Includes one L-bracket and one closet-connection screw. Wall fastener or anchor is not included; use the appropriate fastener for the wall type. Two kits per tower section.', 'Kits');
-  addPart(parts, 'CAMKIT-10-W', 'Camfix and cam-screw kit, 10 pairs', Math.ceil((towerCount * 2 * 4) / 10), `${towerCount * 2 * 4} connector pairs required for ${towerCount * 2} fixed shelves at four pairs per shelf.`, 'Hardware');
+  addPart(parts, 'CAMKIT-10-W', 'Camfix and cam-screw kit, 10 pairs', Math.ceil((towerCount * 9) / 10), `${towerCount * 2 * 4} connector pairs required for ${towerCount * 2} fixed shelves, plus ${towerCount} spare pairs (one per tower).`, 'Hardware');
 
   return buildPickList([...parts.values()], towerCount);
 }

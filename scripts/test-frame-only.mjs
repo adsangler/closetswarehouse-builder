@@ -46,10 +46,14 @@ for (const file of ['src/App.jsx', 'src/walkin.jsx']) {
   for (const height of [84, 96]) for (const width of [18, 24, 30]) {
     test(`${file}: Frame Only ${width}/${height} renders and prices without Shopify`, () => {
       const result = walk ? context[layout](height, 'FR') : context[layout]({ height }, { code: 'FR', width, bayX: 0 });
-      assert.equal(result.shelves.length, 2);
-      assert.ok(result.shelves.every(s => s.fixed));
+      assert.equal(result.shelves.length, 3);
+      assert.equal(result.shelves.filter(s => s.fixed).length, 2);
+      assert.equal(result.shelves[0].fixed, false);
+      assert.equal(result.shelves[1].fixed, true);
+      assert.equal(result.shelves[2].fixed, true);
       assert.equal(result.shelves[0].y, 5);
-      assert.equal(result.shelves[1].y, height - 0.75);
+      assert.equal(result.shelves[1].y, (5 + height - 0.75) / 2);
+      assert.equal(result.shelves[2].y, height - 0.75);
       assert.equal(result.rods.length, 0);
       assert.equal(result.drawers.length, 0);
       assert.deepEqual(Array.from(context[widthOptions]('FR')), [18, 24, 30]);
@@ -70,7 +74,7 @@ for (const file of ['src/App.jsx', 'src/walkin.jsx']) {
   }
 }
 
-test('frame-only pick lists contain no pins or storage parts; mixed runs share panels', () => {
+test('frame-only pick lists include adjustable shelves and pins; mixed runs share panels', () => {
   for (const height of [84, 96]) {
     const modules = [18, 24, 30].map(width => ({ code: 'FR', width }));
     for (const parts of [buildDetailedReachInParts(modules, height), buildDetailedWalkInParts({ backHeight: height }, { back: modules })]) {
@@ -78,9 +82,12 @@ test('frame-only pick lists contain no pins or storage parts; mixed runs share p
       assert.equal(quantity(`VL-14-${height}-W`), 1);
       assert.equal(quantity(`VR-14-${height}-W`), 1);
       assert.equal(quantity(`VD-14-${height}-W`), 2);
-      assert.ok(!parts.some(p => /^(SH-|PIN-|RK-|DRK-)/.test(p.sku)));
+      assert.ok(!parts.some(p => /^(RK-|DRK-)/.test(p.sku)));
+      assert.equal(quantity('PIN-20-S'), 1);
+      assert.match(parts.find(p => p.sku === 'PIN-20-S').details, /12 shelf pins required/);
       for (const width of [18, 24, 30]) {
         assert.equal(quantity(`FS-${width}-14-W`), 2);
+        assert.equal(quantity(`SH-${width}-14-W`), 1);
         assert.equal(quantity(`TKK-${width}-5-W`), 1);
       }
       assert.equal(parts.find(p => p.category === 'Tower hardware kits').quantity, 3);
@@ -88,7 +95,7 @@ test('frame-only pick lists contain no pins or storage parts; mixed runs share p
     const mixed = buildDetailedReachInParts([{ code: 'FR', width: 18 }, { code: 'DH', width: 24 }], height);
     assert.equal(mixed.find(p => p.sku === `VD-14-${height}-W`).quantity, 1);
     assert.equal(mixed.find(p => p.sku === 'SH-24-14-W').quantity, height === 96 ? 2 : 1);
-    assert.ok(!mixed.some(p => p.sku === 'SH-18-14-W'));
+    assert.equal(mixed.find(p => p.sku === 'SH-18-14-W').quantity, 1);
   }
 });
 
@@ -105,5 +112,22 @@ test('saved quote preserves Frame Only modules and print fallback builds the cor
   const html = renderPrintablePlan({ record: { quote, quoteId: 'FR-TEST' } });
   assert.match(html, /Frame Only/);
   assert.match(html, /FS-18-14-W/);
-  assert.doesNotMatch(html, /PIN-20-S|SH-18-14-W|RK-18-S|DRK-18/);
+  assert.match(html, /PIN-20-S/);
+  assert.match(html, /SH-18-14-W/);
+  assert.doesNotMatch(html, /RK-18-S|DRK-18/);
+});
+
+test('legacy saved Frame Only materials are normalized with adjustable shelves and pins', () => {
+  const quote = {
+    height: 84,
+    modules: [{ code: 'FR', width: 24, label: 'Frame Only' }],
+    materials: [
+      { category: 'Shelves', sku: 'FS-24-14-W', name: 'Fixed shelf 24" x 14"', quantity: 2, details: 'Legacy fixed shelves.' },
+    ],
+  };
+  const html = renderPrintablePlan({ record: { quote, quoteId: 'FR-LEGACY' } });
+  assert.match(html, /FS-24-14-W/);
+  assert.match(html, /SH-24-14-W/);
+  assert.match(html, /PIN-20-S/);
+  assert.match(html, /Adjustable shelves for 24&quot; bays\./);
 });

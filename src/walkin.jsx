@@ -1,4 +1,4 @@
-import { adjustableShelfCount } from './shelfCounts.js';
+import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedWalkInParts } from './partList.js';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
@@ -1255,7 +1255,7 @@ function ClosetTypeStart({ onWalkIn }) {
 
 function TowerConfigIcon({ code, compact = false }) {
   const shelves = {
-    FR: [92],
+    FR: [50, 92],
     LH: [64],
     DH: [38, 72],
     HS: [42, 58, 74],
@@ -1551,11 +1551,22 @@ function buildWalkInTowerLayout(height, code) {
     { y: topShelf, fixed: true },
   ];
 
+  if (code === 'FR') {
+    return {
+      shelves: [
+        { y: bottomShelf, fixed: false },
+        { y: (bottomShelf + topShelf) / 2, fixed: true },
+        { y: topShelf, fixed: true },
+      ],
+      rods: [], drawers: [],
+    };
+  }
+
   if (code === 'LH') {
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
-        { y: longHangShelfY, fixed: false },
+        { y: bottomShelf, fixed: false },
+        { y: longHangShelfY, fixed: true },
         ...(hasTallHeight ? [{ y: standardHeightTopShelf, fixed: false }] : []),
         { y: topShelf, fixed: true },
       ],
@@ -1631,7 +1642,7 @@ function buildWalkInTowerLayout(height, code) {
   }
 
   return {
-    shelves: defaultShelves,
+    shelves: ['S7', 'S8', 'S9'].includes(code) ? shelfTowerFixedShelves(defaultShelves) : defaultShelves,
     rods: [],
     drawers: [],
   };
@@ -1668,11 +1679,11 @@ function WalkInFrontViews({ room, runs }) {
     return (
       <div key={wall} data-wall-view={wall} className="print-break-avoid min-w-0 rounded border border-stone-100 bg-white p-2">
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-stone-950">{wallLabels[wall]} Wall Front View</h3>
+          <h3 className="text-sm font-bold text-stone-950">{wallLabels[wall]} Front View <span className="text-xs font-normal">SH = Adjustable Shelf; FS = Fixed Shelf</span></h3>
           <span className="text-xs font-semibold text-stone-500">{formatInches(runLength)} wide x {formatInches(height)} high</span>
         </div>
         <div className="mb-1 text-[11px] font-semibold text-stone-500">Room-facing elevation — left and right match the view from inside the closet.</div>
-        <svg data-drawing-title={`${wallLabels[wall]} Wall Front View`} data-module-order={elevationModules.map((module) => module.id || `${module.code}-${module.width}`).join('|')} viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-auto w-full bg-white">
+        <svg data-drawing-title={`${wallLabels[wall]} Front View`} data-module-order={elevationModules.map((module) => module.id || `${module.code}-${module.width}`).join('|')} viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-auto w-full bg-white">
           <rect x={toX(0)} y={toY(toeKickHeight)} width={inch(runLength)} height={inch(toeKickHeight)} className="fill-stone-200 stroke-stone-500" />
           {panelXs.map((x, index) => (
             <rect
@@ -1691,6 +1702,7 @@ function WalkInFrontViews({ room, runs }) {
             return (
               <g key={segment.module.id || `${wall}-segment-${segmentIndex}`}>
                 {layout.shelves.map((shelf, shelfIndex) => (
+                  <g key={`${wall}-${segmentIndex}-shelf-${shelfIndex}`}>
                   <rect
                     key={`${wall}-${segmentIndex}-shelf-${shelfIndex}`}
                     x={toX(segment.start)}
@@ -1699,6 +1711,8 @@ function WalkInFrontViews({ room, runs }) {
                     height={inch(panelThickness)}
                     className={shelf.fixed ? 'fill-stone-300 stroke-stone-900' : 'fill-white stroke-stone-600'}
                   />
+                  <text x={toX(segment.start) + 3} y={toY(shelf.y + panelThickness) - 3} fontSize="8" fontWeight="600" fill="#44403c">{shelf.fixed ? 'FS' : 'SH'}</text>
+                  </g>
                 ))}
                 {layout.rods.map((rod, rodIndex) => (
                   <g key={`${wall}-${segmentIndex}-rod-${rodIndex}`}>

@@ -1,4 +1,4 @@
-import { adjustableShelfCount } from './shelfCounts.js';
+import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedReachInParts } from './partList.js';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
@@ -158,7 +158,7 @@ const plannerConfigs = [
   { code: 'H3D', title: 'Hang + 3 Drawers', note: 'Short hang over drawers' },
   { code: 'S2D', title: 'Shelves + 2 Drawers', note: 'Two drawers with shelves' },
   { code: 'SHELF', title: 'Shelf Tower', note: 'Even shelf levels' },
-  { code: 'FR', title: 'Frame Only', note: 'Top, bottom, toe kick and verticals' },
+  { code: 'FR', title: 'Frame Only', note: 'Fixed top and center, adjustable bottom' },
 ];
 
 const reachInDoorTypes = [
@@ -758,11 +758,22 @@ function buildTowerLayout(drawing, tower) {
   const rods = [];
   const drawers = [];
 
+  if (tower.code === 'FR') {
+    return {
+      shelves: [
+        { y: bottomShelf, fixed: false },
+        { y: (bottomShelf + topShelf) / 2, fixed: true },
+        { y: topShelf, fixed: true },
+      ],
+      rods, drawers, drawerDeck,
+    };
+  }
+
   if (tower.code === 'LH') {
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
-        { y: longHangShelfY, fixed: false },
+        { y: bottomShelf, fixed: false },
+        { y: longHangShelfY, fixed: true },
         ...(hasTallHeight ? [{ y: standardHeightTopShelf, fixed: false }] : []),
         { y: topShelf, fixed: true },
       ],
@@ -843,7 +854,7 @@ function buildTowerLayout(drawing, tower) {
   }
 
   return {
-    shelves,
+    shelves: ['S7', 'S8', 'S9'].includes(tower.code) ? shelfTowerFixedShelves(shelves) : shelves,
     rods,
     drawers,
     drawerDeck,
@@ -1450,9 +1461,9 @@ function TechnicalDrawing({ drawing }) {
   const width = drawing.assembledWidth * scale;
   const height = drawing.height * scale;
   const totalWidth = width + margin * 2 + 300;
-  const totalHeight = height + margin * 2 + 54;
+  const totalHeight = height + margin * 2 + 100;
   const left = margin + 34;
-  const top = margin + 10;
+  const top = margin + 44;
   const toX = (value) => left + value * scale;
   const toY = (value) => top + (drawing.height - value) * scale;
   const inch = (value) => value * scale;
@@ -1475,6 +1486,7 @@ function TechnicalDrawing({ drawing }) {
   );
 
   const Shelf = ({ tower, y, fixed = false }) => (
+    <g>
     <rect
       x={toX(tower.bayX)}
       y={toY(y + panelThickness)}
@@ -1482,6 +1494,8 @@ function TechnicalDrawing({ drawing }) {
       height={inch(panelThickness)}
       className={fixed ? 'fill-stone-300 stroke-stone-900' : 'fill-white stroke-stone-600'}
     />
+    <text x={toX(tower.bayX) + 6} y={toY(y + panelThickness) - 4} fontSize="10" fontWeight="600" fill="#44403c">{fixed ? 'FS' : 'SH'}</text>
+    </g>
   );
 
   const Rod = ({ rod }) => (
@@ -1749,7 +1763,7 @@ function ConfigMiniIcon({ code }) {
     <span className="relative grid h-8 w-6 shrink-0 grid-rows-[repeat(6,1fr)] overflow-hidden rounded border border-stone-300 bg-white px-1 py-1 shadow-inner" aria-hidden="true">
       <span className="absolute inset-y-1 left-1 w-px bg-stone-300" />
       <span className="absolute inset-y-1 right-1 w-px bg-stone-300" />
-      {code === 'FR' && <><span className="absolute inset-x-1 top-1 h-px bg-stone-500" /><span className="absolute inset-x-1 bottom-1.5 h-px bg-stone-500" /></>}
+      {code === 'FR' && <><span className="absolute inset-x-1 top-1 h-px bg-stone-500" /><span className="absolute inset-x-1 top-1/2 h-px bg-stone-500" /><span className="absolute inset-x-1 bottom-1.5 h-px bg-stone-500" /></>}
       {Array.from({ length: 6 }, (_, index) => {
         const showShelf = shelfRows.includes(index);
         const showDrawer = drawerRows.includes(index);
@@ -2837,7 +2851,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
         <h2 className="mt-1 text-base font-bold text-stone-950">{evaluation.match.title}</h2>
         <p className="mt-2 text-sm text-stone-700">
           {evaluation.match.plannerOnly
-            ? 'Frame Only includes the top and bottom fixed shelves, toe kick, vertical panels and assembly hardware. Save your plan for pricing and ordering assistance.'
+            ? 'Frame Only includes fixed top and center shelves, one adjustable bottom shelf, toe kick, vertical panels, assembly hardware and shelf pins. Save your plan for pricing and ordering assistance.'
             : 'This layout matches a standard product. Tower order is modular, so the page can be used even if the preview order is different.'}
         </p>
         {!priceUnlocked ? priceCapture : <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -3253,7 +3267,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
             </section>
             <section className="print-reachin-front-view print-break-avoid min-w-0 rounded border border-stone-200 bg-white p-2 sm:p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-base font-bold text-stone-950">Front View</h2>
+                <h2 className="text-base font-bold text-stone-950">Front View <span className="text-xs font-normal">SH = Adjustable Shelf; FS = Fixed Shelf</span></h2>
                 <span className="text-xs font-semibold text-stone-500">Elevation for plan review</span>
               </div>
               <div ref={frontDrawingRef} data-saved-plan-drawing="Front View" className="h-[430px] min-w-0 overflow-hidden rounded border border-stone-100 bg-white">

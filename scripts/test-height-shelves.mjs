@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { test } from 'node:test';
-import { adjustableShelfCount } from '../src/shelfCounts.js';
+import { adjustableShelfCount, shelfTowerFixedShelves } from '../src/shelfCounts.js';
 import { buildPickList } from '../src/pickList.js';
 
 // Execute the actual layout functions without mounting React or exporting files.
@@ -17,7 +17,7 @@ for (const file of ['src/App.jsx', 'src/walkin.jsx', 'scripts/export-shopify-glb
   const walk = file.includes('walkin');
   const source = fs.readFileSync(file, 'utf8');
   const name = walk ? 'buildWalkInTowerLayout' : 'buildTowerLayout';
-  const context = vm.createContext({ adjustableShelfCount, panelThickness: 0.75, toeKickHeight: 5 });
+  const context = vm.createContext({ adjustableShelfCount, shelfTowerFixedShelves, panelThickness: 0.75, toeKickHeight: 5 });
   vm.runInContext(['buildAdjustableShelves', 'buildDrawers', 'getDrawerBounds', name].map(n => extract(source, n)).join('\n'), context);
   test(`${file}: connected mixed-width pick list adds one shelf per taller tower`, () => {
     const modules = [{ code: 'DH', width: 24 }, { code: 'S3D', width: 30 }, { code: 'S7', width: 18 }];

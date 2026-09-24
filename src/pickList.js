@@ -26,7 +26,7 @@ export function buildPickList(materials = [], towerCount = 0) {
   if (total) parts.push({
     category: 'Tower hardware kits', sku: '', quantity: total,
     name: 'Basic tower hardware kit (per tower)',
-    details: 'Per tower kit: 2 wall brackets, 2 wall-connection euro screws, 2 toe-kick brackets, 8 toe-kick euro screws, 9 Rafix connectors and 9 Rafix screws (includes 1 spare of each for 2 fixed shelves).',
+    details: 'Per tower kit: 2 wall brackets, 2 shelf-connection screws, 2 toe-kick brackets, 8 toe-kick euro screws, 9 Rafix connectors and 9 Rafix screws (includes 1 spare of each for 2 fixed shelves)',
   });
   const aggregated = new Map();
   for (const part of parts) {

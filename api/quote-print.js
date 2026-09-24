@@ -1,5 +1,5 @@
 import { buildPickList, pickListGroups, comparePickParts } from '../src/pickList.js';
-import { buildDetailedReachInParts, buildDetailedWalkInParts } from '../src/partList.js';
+import { buildDetailedReachInParts, buildDetailedWalkInParts, getTowerPartCounts } from '../src/partList.js';
 import { fetchAirtableQuoteByReference, sendJson } from './_airtable.js';
 
 function escapeHtml(value) {
@@ -93,49 +93,43 @@ function getPlanModules(quote = {}) {
   return runModules.length ? runModules : (Array.isArray(quote.modules) ? quote.modules : []);
 }
 
-function normalizeStructuralHardware(materials = [], modules = []) {
+function normalizeStructuralHardware(materials = [], modules = [], defaultHeight = 84) {
   if (!Array.isArray(materials) || !modules.length) return materials;
 
-  const towerCountsByWidth = modules.reduce((counts, module) => {
+  const shelfTargets = modules.reduce((targets, module) => {
     const width = Number(module.width);
-    if (Number.isFinite(width) && width > 0) counts.set(width, (counts.get(width) || 0) + 1);
-    return counts;
+    if (!Number.isFinite(width) || width <= 0) return targets;
+    const height = Number(module.height || module.planHeight || module.towerHeight || defaultHeight || 84);
+    const counts = getTowerPartCounts(module.code || module.configCode, height);
+    const current = targets.get(width) || { fixed: 0, adjustable: 0 };
+    current.fixed += counts.fixedShelves;
+    current.adjustable += counts.adjustableShelves;
+    targets.set(width, current);
+    return targets;
   }, new Map());
-  const shelfTotalsByWidth = new Map();
 
-  materials.forEach((part) => {
-    const sku = String(part.sku || '').toUpperCase();
-    const match = sku.match(/^(?:FS|SH)-(\d+)-14-W$/);
-    if (match && String(part.category || '').toLowerCase() === 'shelves') {
-      const width = Number(match[1]);
-      shelfTotalsByWidth.set(width, (shelfTotalsByWidth.get(width) || 0) + Number(part.quantity || 0));
-    }
-  });
-
-  const fixedByWidth = new Map([...towerCountsByWidth].map(([width, count]) => [width, count * 2]));
-  const adjustableByWidth = new Map([...shelfTotalsByWidth].map(([width, total]) => [width, Math.max(0, total - (fixedByWidth.get(width) || 0))]));
-  const fixedShelfCount = modules.length * 2;
+  const fixedShelfCount = [...shelfTargets.values()].reduce((sum, target) => sum + target.fixed, 0);
   const camConnectorCount = fixedShelfCount * 4;
   const normalizedShelfSkus = new Set();
 
-  return materials.map((part) => {
+  const normalized = materials.map((part) => {
     const sku = String(part.sku || '').toUpperCase();
     const category = String(part.category || '').toLowerCase();
     const fixedMatch = sku.match(/^FS-(\d+)-14-W$/);
     const adjustableMatch = sku.match(/^SH-(\d+)-14-W$/);
     if (category === 'shelves' && fixedMatch) {
-      const quantity = fixedByWidth.get(Number(fixedMatch[1]));
-      if (quantity == null) return part;
+      const quantity = shelfTargets.get(Number(fixedMatch[1]))?.fixed;
+      if (quantity == null) return { ...part, details: getCustomerFacingPartDetails(part) };
       if (normalizedShelfSkus.has(sku)) return { ...part, quantity: 0 };
       normalizedShelfSkus.add(sku);
-      return { ...part, quantity };
+      return { ...part, quantity, details: `Fixed shelves for ${fixedMatch[1]}" bays.` };
     }
     if (category === 'shelves' && adjustableMatch) {
-      const quantity = adjustableByWidth.get(Number(adjustableMatch[1]));
-      if (quantity == null) return part;
+      const quantity = shelfTargets.get(Number(adjustableMatch[1]))?.adjustable;
+      if (quantity == null) return { ...part, details: getCustomerFacingPartDetails(part) };
       if (normalizedShelfSkus.has(sku)) return { ...part, quantity: 0 };
       normalizedShelfSkus.add(sku);
-      return { ...part, quantity };
+      return { ...part, quantity, details: `Adjustable shelves for ${adjustableMatch[1]}" bays.` };
     }
     if (sku === 'CAMKIT-10-W') {
       return {
@@ -147,12 +141,47 @@ function normalizeStructuralHardware(materials = [], modules = []) {
     }
     return part;
   });
+
+  for (const [width, target] of shelfTargets) {
+    const fixedSku = `FS-${width}-14-W`;
+    const adjustableSku = `SH-${width}-14-W`;
+    if (!normalizedShelfSkus.has(fixedSku)) {
+      normalized.push({
+        category: 'Shelves',
+        sku: fixedSku,
+        name: `Fixed shelf ${width}" x 14"`,
+        quantity: target.fixed,
+        details: `Fixed shelves for ${width}" bays.`,
+      });
+    }
+    if (!normalizedShelfSkus.has(adjustableSku)) {
+      normalized.push({
+        category: 'Shelves',
+        sku: adjustableSku,
+        name: `Adjustable shelf ${width}" x 14"`,
+        quantity: target.adjustable,
+        details: `Adjustable shelves for ${width}" bays.`,
+      });
+    }
+  }
+
+  if (!normalized.some((part) => String(part.sku || '').toUpperCase() === 'CAMKIT-10-W')) {
+    normalized.push({
+      category: 'Hardware',
+      sku: 'CAMKIT-10-W',
+      name: 'Camfix and cam-screw kit, 10 pairs',
+      quantity: Math.ceil(camConnectorCount / 10),
+      details: `${camConnectorCount} connector pairs required for ${fixedShelfCount} fixed shelves at four pairs per shelf.`,
+    });
+  }
+
+  return normalized;
 }
 
 function getPrintableMaterials(quote = {}, modules = [], isWalkIn = false) {
   const savedMaterials = Array.isArray(quote.materials) ? quote.materials : [];
   if (savedMaterials.length) {
-    return buildPickList(normalizeStructuralHardware(savedMaterials, modules), modules.length);
+    return buildPickList(normalizeStructuralHardware(savedMaterials, modules, quote.height || quote.planDetails?.height || quote.room?.height), modules.length);
   }
 
   if (isWalkIn) {
@@ -253,7 +282,7 @@ function renderDrawings(drawings = []) {
       <h2>Plan Drawings</h2>
       ${drawings.map((drawing) => `
         <figure class="${drawing.title === 'Plan View' ? 'plan-view-figure' : ''}">
-          <figcaption>${escapeHtml(drawing.title || 'Plan drawing')}</figcaption>
+          <figcaption>${escapeHtml(drawing.title || 'Plan drawing')}${/front|elevation/i.test(drawing.title || '') ? ' — SH = Adjustable Shelf; FS = Fixed Shelf' : ''}</figcaption>
           <img src="${escapeHtml(drawing.dataUrl || '')}" alt="${escapeHtml(drawing.title || 'Plan drawing')}">
         </figure>
       `).join('')}
@@ -336,7 +365,7 @@ function renderLiveDrawingLoader(planPath, savedDrawings = []) {
               clone.removeAttribute('class');
               clone.setAttribute('aria-label', displayTitle);
               if (displayTitle === 'Plan View') figure.className = 'plan-view-figure';
-              caption.textContent = displayTitle;
+              caption.textContent = displayTitle + (/front|elevation/i.test(displayTitle) ? ' — SH = Adjustable Shelf; FS = Fixed Shelf' : '');
               figure.append(caption, clone);
               output.appendChild(figure);
             });
@@ -384,8 +413,7 @@ function renderModulesTable(modules = []) {
     <table>
       <thead>
         <tr>
-          <th>Position</th>
-          <th>Wall</th>
+          <th>Position (left to right)</th>
           <th>Configuration</th>
           <th>Width</th>
         </tr>
@@ -394,7 +422,6 @@ function renderModulesTable(modules = []) {
         ${modules.map((module, index) => `
           <tr>
             <td>${escapeHtml(getPosition(module, index))}</td>
-            <td>${escapeHtml(module.wall || '')}</td>
             <td>${escapeHtml(getModuleDisplayName(module))}</td>
             <td>${escapeHtml(formatInches(module.width) || module.width || '')}</td>
           </tr>
@@ -427,7 +454,7 @@ function renderWalkInDetails(quote = {}) {
         ${runEntries.map(([wall, modules]) => `
           <div class="run">
             <h3>${escapeHtml(titleCaseWords(wall))}</h3>
-            ${renderModulesTable(modules.map((module, index) => ({ ...module, wall, index: Number.isFinite(Number(module.index)) ? Number(module.index) : index })))}
+            ${renderModulesTable((wall === 'left' || wall === 'leftReturn' ? [...modules].reverse() : modules).map((module, index) => ({ ...module, index })))}
           </div>
         `).join('')}
       </section>

@@ -136,6 +136,10 @@ export function buildResolvedParts({ parts, components, partComponents }) {
     const componentCost = roundMoney(componentItems.reduce((total, item) => total + item.extendedCost, 0));
     const componentPrice = roundMoney(componentItems.reduce((total, item) => total + item.extendedPrice, 0));
     const usesComponents = componentItems.length > 0;
+    // These hardware kits are packed from components. Their supplier cost must
+    // follow that BOM even when an older direct cost remains on the part.
+    const componentCostRequired = /^(CAMKIT-10-W|WLB-S-1|TKK-(18|24|30)-5-W)$/.test(recordSku(part));
+    const useComponentCost = usesComponents && (componentCostRequired || explicitCost <= 0);
 
     return {
       ...part,
@@ -143,9 +147,9 @@ export function buildResolvedParts({ parts, components, partComponents }) {
         sku: recordSku(part),
         name: getName(part.fields, recordSku(part)),
         usesComponents,
-        costSource: usesComponents && explicitCost <= 0 ? 'components' : 'part',
+        costSource: useComponentCost ? 'components' : 'part',
         priceSource: usesComponents && explicitPrice <= 0 ? 'components' : 'part',
-        cost: explicitCost > 0 ? roundMoney(explicitCost) : componentCost,
+        cost: useComponentCost ? componentCost : (explicitCost > 0 ? roundMoney(explicitCost) : componentCost),
         price: explicitPrice > 0 ? roundMoney(explicitPrice) : componentPrice,
         componentCost,
         componentPrice,
