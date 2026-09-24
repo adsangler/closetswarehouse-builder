@@ -3977,7 +3977,7 @@ export default function App({ internalRenderer = false }) {
       remainingWidth: Number((wallNumber - requiredWidth).toFixed(2)),
       ceilingClear: (Number(ceilingHeight) || 0) > Number(plannerHeight),
       drawerAccessClear: drawerWarnings.length === 0,
-      fits: plannerModules.length > 0 && wallNumber >= requiredWidth && openingMatchesWall && openingClear && slidingDividerAligned && drawerWarnings.length === 0 && (Number(ceilingHeight) || 0) > Number(plannerHeight),
+      fits: plannerModules.length > 0 && wallNumber >= requiredWidth && openingMatchesWall && openingClear && drawerWarnings.length === 0 && (Number(ceilingHeight) || 0) > Number(plannerHeight),
       visualOrder: plannerModules.map((module) => `${module.code}${module.width}`),
     };
   }, [ceilingHeight, plannerHeight, plannerModules, reachInDepth, reachInDoorType, reachInOpeningLeft, reachInOpeningRight, reachInOpeningWidth, wallWidth]);

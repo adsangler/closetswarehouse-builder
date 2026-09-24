@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import { Vector3, PerspectiveCamera } from 'three';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from '../src/planUrls.js';
@@ -49,6 +50,22 @@ test('successful save retains reference, estimate snapshot, and history state on
     if (previous === undefined) delete globalThis.window;
     else globalThis.window = previous;
   }
+});
+
+test('off-center sliding door remains a reach-in warning without blocking estimate eligibility', () => {
+  const source = fs.readFileSync('src/App.jsx', 'utf8');
+  const validationStart = source.indexOf('function getReachInValidationMessages');
+  assert.ok(validationStart >= 0);
+  const validationEnd = source.indexOf('function getExtraPartSku', validationStart);
+  assert.ok(validationEnd > validationStart);
+  const validationSource = source.slice(validationStart, validationEnd);
+  assert.match(validationSource, /slidingDividerAligned/);
+  assert.match(validationSource, /shared divider must be centered/);
+
+  const fitsMatch = source.match(/fits:\s*plannerModules\.length[^\n]+/);
+  assert.ok(fitsMatch);
+  assert.doesNotMatch(fitsMatch[0], /slidingDividerAligned/);
+  assert.match(fitsMatch[0], /drawerWarnings\.length === 0/);
 });
 
 for (const height of [84, 96]) for (const width of [33.5, 96, 180]) for (const aspect of [1440 / 620, 390 / 460]) {
