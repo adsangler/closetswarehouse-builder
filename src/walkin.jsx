@@ -297,7 +297,7 @@ function getWalkInProductCode(module, height) {
 }
 
 function getWalkInWidthOptions(code) {
-  return ['SHELF', 'FR'].includes(code) ? allowedModuleWidths : [24, 30];
+  return ['S3D', 'H3D', 'S2D'].includes(code) ? [24, 30] : allowedModuleWidths;
 }
 
 function getNominalWidthFromSkuToken(token) {

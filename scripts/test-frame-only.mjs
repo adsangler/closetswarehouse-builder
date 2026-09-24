@@ -34,6 +34,15 @@ for (const file of ['src/App.jsx', 'src/walkin.jsx']) {
       : ['getAssembledWidth', 'getRequiredWidth', 'getLiveModuleProductCoverage', 'getModuleSegments', 'getSharedDividerCenters'])];
   vm.runInContext(functions.map(name => extract(source, name)).join('\n'), context);
 
+  test(`${file}: 18 inch width is available for every non-drawer planner configuration`, () => {
+    for (const code of ['LH', 'DH', 'HS', 'SHELF', 'FR']) {
+      assert.deepEqual(Array.from(context[widthOptions](code)), [18, 24, 30], code);
+    }
+    for (const code of ['S3D', 'H3D', 'S2D']) {
+      assert.deepEqual(Array.from(context[widthOptions](code)), [24, 30], code);
+    }
+  });
+
   for (const height of [84, 96]) for (const width of [18, 24, 30]) {
     test(`${file}: Frame Only ${width}/${height} renders and prices without Shopify`, () => {
       const result = walk ? context[layout](height, 'FR') : context[layout]({ height }, { code: 'FR', width, bayX: 0 });
