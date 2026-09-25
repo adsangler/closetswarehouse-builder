@@ -6,8 +6,8 @@ const allowedPatterns = [
   /^RK-(18|24|30)-S$/i,
   /^PIN-20-S$/i,
   /^CAMKIT-10-W$/i,
-  /^DRK-24-5-13-W$/i,
-  /^DRK-24-10-13-W$/i,
+  /^DRK-(24|30)-5-13-W$/i,
+  /^DRK-(24|30)-10-13-W$/i,
 ];
 
 function textField(fields, names) {

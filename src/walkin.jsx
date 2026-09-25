@@ -2983,8 +2983,8 @@ function getExtraPartSku(type, width) {
   if (type === 'rod') return `RK-${width}-S`;
   if (type === 'shelfPins') return 'PIN-20-S';
   if (type === 'rafix') return 'CAMKIT-10-W';
-  if (type === 'smallDrawer') return 'DRK-24-5-13-W';
-  return 'DRK-24-10-13-W';
+  if (type === 'smallDrawer') return `DRK-${width}-5-13-W`;
+  return `DRK-${width}-10-13-W`;
 }
 
 function AddPartsCard({ items, onChange, plannedWidths, priceUnlocked }) {
