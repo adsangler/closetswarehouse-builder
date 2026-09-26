@@ -1,3 +1,4 @@
+import PriceValidity from './PriceValidity.jsx';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedWalkInParts } from './partList.js';
@@ -2831,8 +2832,6 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
       setHasKnownContact(true);
       persistSavedPlanReference(buildWalkInEstimateUrl(room, corners, runs, extraParts, {
         estimatedPrice: pricing.estimatedPrice,
-        customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' '),
-        phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
       }), payload.quoteId);
     } catch (error) {
       reportUserVisibleError({ message: error.message, planner: 'walk-in', action: 'save estimate detail' });
@@ -2857,8 +2856,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
               <div className="text-2xl font-bold text-stone-950">{money(displayedPrice) || 'Not available yet'}</div>
-              {savedEstimate?.customerName && <div className="mt-1 text-sm font-bold text-stone-700">{savedEstimate.customerName}</div>}
-              {savedEstimate?.phoneLast4 && <div className="text-xs font-semibold text-stone-500">Phone ending in {savedEstimate.phoneLast4}</div>}
+              <PriceValidity estimate={savedEstimate} />
             </div>
           </div>
           {catalogMessages.length > 0 && (
@@ -3082,8 +3080,6 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
   const canVerifyEstimate = Boolean(evaluation.complete && isCatalogReady && pricing.catalogSupported);
   const savedEstimate = {
     estimatedPrice: pricing.estimatedPrice,
-    customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim(),
-    phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
   };
   useEffect(() => {
     catalogMessages.forEach((message) => reportUserVisibleError({ message, planner: 'walk-in', action: 'catalog availability' }));

@@ -1,3 +1,5 @@
+import { publicEstimate, quoteCreatedAt } from '../src/estimateValidity.js';
+import { encodePlanPayload, decodePlanPayload } from '../src/planUrls.js';
 const fallbackByCode = {
   LH: 225,
   DH: 245,
@@ -205,6 +207,14 @@ export function attachQuoteReferenceToPlanUrl(planUrl, quoteId) {
     const url = new URL(planUrl);
     url.searchParams.set('estimate', '1');
     url.searchParams.set('quote', quoteId);
+    const encoded = url.searchParams.get('plan');
+    if (encoded) {
+      const plan = decodePlanPayload(encoded);
+      if (plan.savedEstimate) {
+        plan.savedEstimate = { ...publicEstimate(plan.savedEstimate), createdAt: quoteCreatedAt(quoteId) };
+        url.searchParams.set('plan', encodePlanPayload(plan));
+      }
+    }
     return cleanUrl(url.toString());
   } catch {
     return planUrl;

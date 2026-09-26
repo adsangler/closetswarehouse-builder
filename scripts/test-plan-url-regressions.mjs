@@ -8,7 +8,7 @@ import { fitReachInCamera } from '../src/reachInCamera.js';
 test('Unicode extras and customer names round-trip in browser and server decoders', () => {
   const plan = { modules: [{ code: 'FR', width: 30 }], extraParts: [
     { name: 'Adjustable shelf — 24"', quantity: 2 }, { name: 'Shelf pins — pack of 20', quantity: 1 },
-  ], savedEstimate: { customerName: 'José 李 🏠', estimatedPrice: 178.44 } };
+  ], savedEstimate: { estimatedPrice: 178.44 } };
   const encoded = encodePlanPayload(plan);
   assert.match(encoded, /^[A-Za-z0-9_-]+$/);
   assert.deepEqual(decodePlanPayload(encoded), plan);

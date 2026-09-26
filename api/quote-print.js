@@ -1,3 +1,4 @@
+import { priceValidity } from '../src/estimateValidity.js';
 import { buildPickList, pickListGroups, comparePickParts } from '../src/pickList.js';
 import { buildDetailedReachInParts, buildDetailedWalkInParts, getTowerPartCounts } from '../src/partList.js';
 import { fetchAirtableQuoteByReference, sendJson } from './_airtable.js';
@@ -23,6 +24,8 @@ function titleCaseWords(value) {
 function sendHtml(res, statusCode, html) {
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   res.end(html);
 }
 
@@ -76,13 +79,6 @@ function getPosition(module = {}, fallbackIndex = 0) {
   return Number.isFinite(rawIndex) ? rawIndex + 1 : fallbackIndex + 1;
 }
 
-function getCustomerName(record = {}, quote = {}) {
-  const customer = quote.customer || record.customer || {};
-  return [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
-    || customer.name
-    || record.customer?.name
-    || '';
-}
 
 function getPlanModules(quote = {}) {
   const runModules = quote.runs && typeof quote.runs === 'object'
@@ -467,9 +463,6 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
   const quoteId = record.quoteId || quote.quoteId || '';
   const planType = record.planType || quote.planType || quote.internalType || 'Closet plan';
   const submittedAt = record.submittedAt || quote.submittedAt || '';
-  const customer = quote.customer || record.customer || {};
-  const email = customer.email || record.customer?.email || '';
-  const phone = customer.phone || record.customer?.phone || '';
   const price = formatMoney(record.estimatedPrice || quote.estimatedPrice);
   const modules = getPlanModules(quote);
   const isWalkIn = String(quote.internalType || record.planType || '').toLowerCase().includes('walk');
@@ -550,10 +543,8 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
       <section class="summary">
         <div class="summary-item"><span class="label">Plan type</span><span class="value">${escapeHtml(planType)}</span></div>
         <div class="summary-item"><span class="label">Saved</span><span class="value">${escapeHtml(formatDate(submittedAt) || 'Not available')}</span></div>
-        <div class="summary-item"><span class="label">Customer</span><span class="value">${escapeHtml(getCustomerName(record, quote) || 'Not available')}</span></div>
         <div class="summary-item"><span class="label">Estimated price</span><span class="value">${escapeHtml(price || 'Not available')}</span></div>
-        <div class="summary-item"><span class="label">Email</span><span class="value">${escapeHtml(email || 'Not available')}</span></div>
-        <div class="summary-item"><span class="label">Phone</span><span class="value">${escapeHtml(phone || 'Not available')}</span></div>
+        <div class="summary-item"><span class="label">Price expiration</span><span class="value">${escapeHtml(priceValidity({ createdAt: submittedAt }, quoteId))}</span></div>
       </section>
 
       <section>

@@ -1,3 +1,4 @@
+import PriceValidity from './PriceValidity.jsx';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedReachInParts } from './partList.js';
@@ -2741,8 +2742,6 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
   const priceUnlocked = leadStatus.state === 'success';
   const savedEstimate = {
     estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
-    customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim(),
-    phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
   };
   const addedPartsSignature = extraParts
     .map((item) => `${item.sku}:${item.width}:${item.quantity}`)
@@ -3184,8 +3183,6 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
       setHasKnownContact(true);
       persistSavedPlanReference(buildReachInEstimateUrl(planDetails, modules, extraParts, payload.quoteId, {
         estimatedPrice: evaluation.displayPrice || evaluation.estimatedPrice,
-        customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' '),
-        phoneLast4: String(customer.phone || '').replace(/\D/g, '').slice(-4),
       }), payload.quoteId);
     } catch (error) {
       reportUserVisibleError({ message: error.message, planner: 'reach-in', action: 'save estimate detail' });
@@ -3210,8 +3207,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold uppercase text-stone-500">Estimated price</div>
               <div className="text-2xl font-bold text-stone-950">{money(displayedPrice) || 'Not available yet'}</div>
-              {savedEstimate?.customerName && <div className="mt-1 text-sm font-bold text-stone-700">{savedEstimate.customerName}</div>}
-              {savedEstimate?.phoneLast4 && <div className="text-xs font-semibold text-stone-500">Phone ending in {savedEstimate.phoneLast4}</div>}
+              <PriceValidity estimate={savedEstimate} />
             </div>
           </div>
           {catalogMessages.length > 0 && (
