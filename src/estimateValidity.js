@@ -16,7 +16,7 @@ export function priceValidity(estimate, quoteId, now = Date.now()) {
   });
   return now >= expires
     ? `Price expired ${date}. Contact us for updated pricing.`
-    : `Price valid until ${date} (7 days from creation).`;
+    : `Price valid until ${date}`;
 }
 
 export function publicEstimate(estimate) {
