@@ -32,7 +32,12 @@ export function buildPickList(materials = [], towerCount = 0) {
   for (const part of parts) {
     const key = `${part.category}|${part.sku || part.name}`;
     const existing = aggregated.get(key);
-    if (existing) existing.quantity += Number(part.quantity) || 0;
+    if (existing) {
+      existing.quantity += Number(part.quantity) || 0;
+      if (part.details && !existing.details?.includes(part.details)) {
+        existing.details = [existing.details, part.details].filter(Boolean).join(' ');
+      }
+    }
     else aggregated.set(key, { ...part, quantity: Number(part.quantity) || 0 });
   }
   // Round once for the whole pick list, not once per tower or plan.

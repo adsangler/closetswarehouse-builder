@@ -787,8 +787,9 @@ function buildTowerLayout(drawing, tower) {
   if (tower.code === 'HS') {
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
-        ...buildAdjustableShelves(drawing, adjustableCount, bottomShelf, hsLowerShelfTopY),
+        { y: bottomShelf, fixed: false },
+        ...buildAdjustableShelves(drawing, adjustableCount, bottomShelf, hsLowerShelfTopY)
+          .map((shelf, index) => ({ ...shelf, fixed: index === adjustableCount - 1 })),
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: drawing.height - 8.5, bayX: tower.bayX, width: tower.width }],

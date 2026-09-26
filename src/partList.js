@@ -88,8 +88,8 @@ export function buildDetailedReachInParts(modules = [], height = 84) {
     const counts = getTowerPartCounts(code, towerHeight);
     towerCount += 1;
 
-    addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, `Fixed shelves for ${width}" bays.`, 'Shelves');
-    addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, `Adjustable shelves for ${width}" bays.`, 'Shelves');
+    addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, code === 'HS' ? `Fixed shelves for ${width}" HS bays: top frame and shelf directly below the hanging section.` : `Fixed shelves for ${width}" bays.`, 'Shelves');
+    addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, code === 'HS' ? `Adjustable shelves for ${width}" HS bays: lower shelves including the bottom shelf above the toe kick.` : `Adjustable shelves for ${width}" bays.`, 'Shelves');
     addPart(parts, `TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, 'Toe-kick kit for this tower bay.', 'Kits');
     addPart(parts, `RK-${width}-S`, `Rod kit ${width}"`, counts.rods, 'Complete hanging rod kit with one rod and one pair of rod brackets.', 'Kits');
     addPart(parts, `DRK-${width}-5-13-W`, `Small drawer kit ${width}" x 5" x 13"`, counts.smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');
@@ -124,8 +124,8 @@ export function buildDetailedWalkInParts(room = {}, runs = {}) {
       const width = numberValue(module.width);
       const counts = getTowerPartCounts(code, towerHeight);
 
-      addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, `Fixed shelves for ${width}" bays.`, 'Shelves');
-      addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, `Adjustable shelves for ${width}" bays.`, 'Shelves');
+      addPart(parts, `FS-${width}-14-W`, `Fixed shelf ${width}" x 14"`, counts.fixedShelves, code === 'HS' ? `Fixed shelves for ${width}" HS bays: top frame and shelf directly below the hanging section.` : `Fixed shelves for ${width}" bays.`, 'Shelves');
+      addPart(parts, `SH-${width}-14-W`, `Adjustable shelf ${width}" x 14"`, counts.adjustableShelves, code === 'HS' ? `Adjustable shelves for ${width}" HS bays: lower shelves including the bottom shelf above the toe kick.` : `Adjustable shelves for ${width}" bays.`, 'Shelves');
       addPart(parts, `TKK-${width}-5-W`, `Toe-kick kit ${width}" x 5"`, 1, `Toe-kick kit for the ${wallLabels[wall].toLowerCase()} run.`, 'Kits');
       addPart(parts, `RK-${width}-S`, `Rod kit ${width}"`, counts.rods, `${wallLabels[wall]} complete hanging rod kit with one rod and one pair of rod brackets.`, 'Kits');
       addPart(parts, `DRK-${width}-5-13-W`, `Small drawer kit ${width}" x 5" x 13"`, counts.smallDrawers, 'Complete drawer kit with panels, rails, screws, and centered bar pull.', 'Kits');

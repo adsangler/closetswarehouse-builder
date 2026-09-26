@@ -76,7 +76,7 @@ Airtable shelf-only tower naming has been updated:
 The core tower configs are:
 - `LH`: Long Hang, 1 rod, fixed top/bottom frame shelves, top adjustable shelf about 18" below the top with the rod directly below it, no mid shelf in the open long-hang bay.
 - `DH`: Double Hang, 2 rods, fixed top/bottom frame shelves, minimal adjustable shelving.
-- `HS`: Hang & Shelves, 1 rod at the top with no shelf above the rod, plus 4 lower shelf boards total including the bottom fixed shelf.
+- `HS`: Hang & Shelves, 1 rod at the top with no shelf above the rod, plus 4 lower shelf boards total including the adjustable bottom shelf; the highest lower shelf directly below the hanging section is fixed.
 - `S3D`: Shelves & 3 Drawers, 2 small drawers + 1 large drawer, no rod.
 - `H3D`: Hang & 3 Drawers, 1 rod above 2 small drawers + 1 large drawer.
 - `S2D`: Shelves & 2 Drawers, 2 small drawers, no rod.
@@ -122,7 +122,7 @@ Width calculations:
 - Adjustable shelves should divide the usable open space they belong to. For `DH`, the middle adjustable shelf divides the double-hang bay into upper and lower hanging sections; do not place rods independently from that shelf.
 - Drawer towers (`S3D`, `S2D`, `H3D`) must place adjustable shelves by zone around the drawer stack. The shelf directly above the drawers defines the drawer deck, the shelf below the drawers is centered in the lower open space, and upper adjustable shelves evenly divide the open space above the drawer deck.
 - `LH` towers must show the upper adjustable shelf about 18" below the top frame shelf, with the long-hang rod directly below that shelf. Do not place an `LH` shelf in the middle of the open long-hang bay.
-- `HS` towers must show no top shelf/cubby above the hanger rod. The rod sits at the top/front drill-line plane, and the lower section has exactly 4 shelf boards total including the bottom fixed shelf.
+- `HS` towers must show no top shelf/cubby above the hanger rod. The rod sits at the top/front drill-line plane, and the lower section has exactly 4 shelf boards total including the adjustable bottom shelf; the highest lower shelf directly below the hanging section is fixed.
 - Shopify photo mode should look like a realistic catalog/product photo: warm wall/floor environment, clean white melamine, soft lighting, realistic shadows, no technical drawing overlay.
 
 ## Non-negotiable rules for generated Shopify photos
@@ -138,7 +138,7 @@ When generating or editing photorealistic Shopify images, preserve the physical 
 - Shelf-only towers must have even vertical spacing between usable shelf levels. Do not bunch shelves near the bottom or create an extra thin toe-kick compartment.
 - For generated photos, describe `S8` as exactly 8 equal open compartments bounded by exactly 9 horizontal boards including top and bottom boards. This is clearer than saying "8 shelves" by itself.
 - For `LH`, describe the shelf/rod area as: top adjustable shelf about 18" below the top, one long-hang rod directly below that shelf, and no mid shelf in the long-hang bay.
-- For `HS`, describe the layout as: no shelf above the rod, top rod on the front drill-line plane, and exactly 4 lower shelf boards including the bottom fixed shelf.
+- For `HS`, describe the layout as: no shelf above the rod, top rod on the front drill-line plane, and exactly 4 lower shelf boards including the adjustable bottom shelf; the highest lower shelf directly below the hanging section is fixed.
 - Toe kicks are a fixed construction detail and must look the same on every tower/kit. Follow the latest Three.js render exactly: a 5" high toe-kick area below the bottom shelf, with a recessed kick board set back from the front plane and a consistent shadow line. Do not reinterpret the toe kick as exposed furniture legs, a flush plinth, an extra shelf opening, or a decorative base.
 - Match reference lighting/camera/materials from `/references`: soft warm daylight, white melamine, subtle satin sheen, realistic wall/floor shadows, and no extra props.
 - Reject or regenerate images that add extra shelves, inset the drawers, move hangers backward, use duplicate divider panels, render a flush blocky base instead of a recessed toe kick, crop off the top/back cabinet read, switch to the rejected tight/cut camera angle, or include watermarks/text.

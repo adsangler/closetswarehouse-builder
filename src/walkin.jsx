@@ -1579,8 +1579,9 @@ function buildWalkInTowerLayout(height, code) {
   if (code === 'HS') {
     return {
       shelves: [
-        { y: bottomShelf, fixed: true },
-        ...buildAdjustableShelves(height, adjustableCount, bottomShelf, hsLowerShelfTopY),
+        { y: bottomShelf, fixed: false },
+        ...buildAdjustableShelves(height, adjustableCount, bottomShelf, hsLowerShelfTopY)
+          .map((shelf, index) => ({ ...shelf, fixed: index === adjustableCount - 1 })),
         { y: topShelf, fixed: true },
       ],
       rods: [{ label: 'Hang rod', y: height - 8.5 }],
