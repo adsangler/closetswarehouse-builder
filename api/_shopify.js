@@ -170,6 +170,7 @@ function getCustomerNameParts(customer = {}) {
 function getCustomerMetafields(quote) {
   const value = {
     quoteId: quote.quoteId,
+    roomName: quote.roomName || '',
     planType: quote.planType || quote.internalType || 'closet plan',
     estimatedPrice: quote.estimatedPrice || 0,
     planUrl: quote.planUrl || '',

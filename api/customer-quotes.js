@@ -106,7 +106,7 @@ function renderQuotesHtml({ quotes = [], customerId = '', state = 'ready', messa
         <article class="plan-card">
           <div>
             <p class="eyebrow">${planType}</p>
-            <h3>${quoteId}</h3>
+            <h3>${escapeHtml(quote.roomName || quote.quoteId || 'Saved plan')}</h3>
             <p class="muted">Reference ${quoteId}</p>
             ${date ? `<p class="muted">Saved ${escapeHtml(date)}</p>` : ''}
           </div>

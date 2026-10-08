@@ -39,3 +39,11 @@ if (typeof window !== 'undefined') {
   cleanSavedEstimateUrl(url);
   if (url.toString() !== window.location.href) window.history.replaceState(window.history.state, '', url.toString());
 }
+
+// Room names are plan metadata, never part of the reusable contact session.
+export function roomNameFromPlanUrl(planUrl) {
+  try {
+    const plan = decodePlanPayload(new URL(planUrl).searchParams.get('plan'));
+    return String(plan.planDetails?.roomName || plan.room?.roomName || '').trim().slice(0, 120);
+  } catch { return ''; }
+}

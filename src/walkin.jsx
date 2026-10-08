@@ -1,4 +1,6 @@
+import PlanDetailsFields from './PlanDetailsFields';
 import PriceValidity from './PriceValidity.jsx';
+import { initAnalytics, trackPlannerEvent } from './analytics.js';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedWalkInParts } from './partList.js';
@@ -12,6 +14,7 @@ import { getPlannerContact, hasPlannerContact, rememberPlannerContact } from './
 import { reportUserVisibleError } from './userErrorLog';
 
 const panelThickness = 0.75;
+initAnalytics();
 const closetDepth = 14;
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
 const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
@@ -154,28 +157,28 @@ function useParentFrameAutoHeight() {
   }, []);
 }
 
-function SavedPlanActions({ quoteId, planType = 'Closet plan' }) {
+function SavedPlanActions({ quoteId, roomName, planType = 'Closet plan' }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
-        Saved. Plan ID {quoteId}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
+        Saved. Plan ID {quoteId}{roomName && ` — ${roomName}`}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <button type="button" onClick={() => window.print()} className="rounded bg-emerald-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-emerald-800">
           Print reference
         </button>
         <a href={phoneHref} target="_top" className="rounded bg-stone-950 px-3 py-2 text-center text-sm font-bold text-white hover:bg-stone-800">
-          Call {phoneDisplay}
+          Call To Purchase this plan {phoneDisplay}
         </a>
         <a href={buildQuoteContactUrl(quoteId, 'contact')} target="_top" className="rounded bg-brand-orange px-3 py-2 text-center text-sm font-bold text-white hover:bg-orange-700">
-          Contact
+          Contact us about this plan
         </a>
       </div>
     </div>
   );
 }
 
-function PrintablePlanReference({ quoteId, planType = 'Closet plan' }) {
+function PrintablePlanReference({ quoteId, roomName, planType = 'Closet plan' }) {
   if (!quoteId) {
     return null;
   }
@@ -184,7 +187,7 @@ function PrintablePlanReference({ quoteId, planType = 'Closet plan' }) {
     <section className="print-plan-reference rounded border border-stone-300 bg-white p-4">
       <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
       <h2 className="mt-1 text-xl font-bold text-stone-950">{planType}</h2>
-      <p className="mt-2 text-base font-bold text-stone-950">Plan ID: {quoteId}</p>
+      <p className="mt-2 text-base font-bold text-stone-950">Plan ID: {quoteId}{roomName && ` — ${roomName}`}</p>
     </section>
   );
 }
@@ -2599,9 +2602,10 @@ function buildWalkInPlanUrl(room, corners, runs, extraParts = [], savedEstimate 
   return url.toString();
 }
 
-function buildWalkInEstimateUrl(room, corners, runs, extraParts = [], savedEstimate = null) {
+function buildWalkInEstimateUrl(room, corners, runs, extraParts = [], savedEstimate = null, quoteId = '') {
   const url = new URL(buildWalkInPlanUrl(room, corners, runs, extraParts, savedEstimate));
   url.searchParams.set('estimate', '1');
+  if (quoteId) url.searchParams.set('quote', quoteId);
   return url.toString();
 }
 
@@ -2750,7 +2754,7 @@ function getRequestedWalkInPlan() {
   }
 }
 
-function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraParts, savedEstimate }) {
+function WalkInEstimatePage({ setRoomName, room, corners, runs, evaluation, pricing, extraParts, savedEstimate }) {
   const [previewMode, setPreviewMode] = useState('plan');
   const planDrawingRef = useRef(null);
   const frontDrawingsRef = useRef(null);
@@ -2804,6 +2808,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
         body: JSON.stringify({
           planType: 'walk-in',
           customer,
+          roomName: room.roomName || '',
           room,
           corners,
           runs,
@@ -2823,6 +2828,8 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to save estimate');
       }
+
+      trackPlannerEvent('plan_saved');
 
       setSubmitStatus({
         state: 'success',
@@ -2846,7 +2853,7 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
   return (
     <main className="print-flow min-h-screen bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <PrintablePlanReference quoteId={submitStatus.quoteId} planType="Walk-in saved plan" />
+        <PrintablePlanReference roomName={room.roomName} quoteId={submitStatus.quoteId} planType="Walk-in saved plan" />
         <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -2910,17 +2917,12 @@ function WalkInEstimatePage({ room, corners, runs, evaluation, pricing, extraPar
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
               {submitStatus.state === 'success' ? (
                 <div className="mt-3">
-                  <SavedPlanActions quoteId={submitStatus.quoteId} />
+                  <SavedPlanActions roomName={room.roomName} quoteId={submitStatus.quoteId} />
                 </div>
               ) : (
                 <>
-                  <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account and subscribe for follow-up.</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                    <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                    <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                    <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
-                  </div>
+                  <p className="mt-1 text-sm font-semibold text-stone-600">Save this plan to your customer account for follow-up.</p>
+                  <PlanDetailsFields customer={customer} setCustomer={setCustomer} hasKnownContact={hasKnownContact} roomName={room.roomName || ''} setRoomName={setRoomName} />
                   <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 w-full rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
                     Save to account
                   </button>
@@ -3069,11 +3071,16 @@ function AddPartsCard({ items, onChange, plannedWidths, priceUnlocked }) {
   );
 }
 
-function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, setExtraParts, isCatalogReady }) {
+function SummaryPanel({ setRoomName, room, corners, runs, evaluation, pricing, extraParts, setExtraParts, isCatalogReady }) {
   const [customer, setCustomer] = useState(getPlannerContact);
   const [hasKnownContact, setHasKnownContact] = useState(hasPlannerContact);
-  const [priceUnlocked, setPriceUnlocked] = useState(hasPlannerContact);
+  const [priceUnlocked, setPriceUnlocked] = useState(false);
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+  const planSignature = JSON.stringify({ room, corners, runs, extraParts });
+  useEffect(() => {
+    setPriceUnlocked(false);
+    setSubmitStatus({ state: 'idle', message: '' });
+  }, [planSignature]);
   const materials = useMemo(() => buildDetailedWalkInParts(room, runs), [room, runs]);
   const wallProductMatches = pricing.wallSummaries.filter((summary) => summary.match);
   const shouldShowProductLinks = evaluation.complete && pricing.allConfiguredWallsMatched;
@@ -3113,6 +3120,7 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
         body: JSON.stringify({
           planType: 'walk-in',
           customer,
+          roomName: room.roomName || '',
           room,
           corners,
           runs,
@@ -3131,6 +3139,8 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to submit verification request');
       }
+
+      trackPlannerEvent('verification_requested');
 
       setSubmitStatus({
         state: 'success',
@@ -3172,10 +3182,10 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
             ))}
             <button
               type="button"
-              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs, extraParts))}
+              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs, extraParts, savedEstimate, submitStatus.quoteId))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white"
             >
-              Verify estimate
+              View saved plan
             </button>
           </div>
         </div>
@@ -3191,10 +3201,10 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
             <button
               type="button"
               disabled={!canVerifyEstimate}
-              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs, extraParts))}
+              onClick={() => navigateInsideFrame(buildWalkInEstimateUrl(room, corners, runs, extraParts, savedEstimate, submitStatus.quoteId))}
               className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300"
             >
-              Verify estimate
+              View saved plan
             </button>
           </div>
           <div className="mt-3 grid gap-1 text-xs">
@@ -3217,23 +3227,19 @@ function SummaryPanel({ room, corners, runs, evaluation, pricing, extraParts, se
 
         </div>
       )}
+      <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(Object.values(runs).flat().map((module) => Number(module.width)))]} priceUnlocked={priceUnlocked} />
       {!priceUnlocked && (
         <form className="mt-3 rounded border border-stone-200 bg-white p-3" onSubmit={submitForVerification}>
           <h3 className="text-sm font-bold text-stone-950">Save your plan and see the price</h3>
-          <p className="mt-1 text-xs font-semibold text-stone-600">Enter your details once. Prices will remain available for this browser session.</p>
-                  {!hasKnownContact && <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <input type="text" autoComplete="given-name" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-            <input type="text" autoComplete="family-name" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-            <input type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-            <input type="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-                  </div>}
+          <p className="mt-1 text-xs font-semibold text-stone-600">Name this room and save your plan to see the price. Your contact details are reused for this browser session.</p>
+                  <PlanDetailsFields customer={customer} setCustomer={setCustomer} hasKnownContact={hasKnownContact} roomName={room.roomName || ''} setRoomName={setRoomName} />
           <button type="submit" disabled={submitStatus.state === 'loading' || !canVerifyEstimate} className="mt-3 w-full rounded bg-brand-orange px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">
             {submitStatus.state === 'loading' ? 'Saving plan...' : 'Save plan & see price'}
           </button>
           {submitStatus.state === 'error' && <p className="mt-2 rounded bg-red-100 px-2 py-1.5 text-xs font-bold text-red-700">{submitStatus.message}</p>}
         </form>
       )}
-      <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(Object.values(runs).flat().map((module) => Number(module.width)))]} priceUnlocked={priceUnlocked} />
+
     </section>
   );
 }
@@ -3254,6 +3260,7 @@ function WalkInPlanner() {
     rightHeight: 96,
   };
   const [room, setRoom] = useState({ ...defaultRoom, ...(requestedPlan?.room || {}) });
+  const setRoomName = (roomName) => setRoom((current) => ({ ...current, roomName }));
   const [corners, setCorners] = useState({ backLeft: 'back', backRight: 'back', entranceLeft: 'left', entranceRight: 'right', ...(requestedPlan?.corners || {}) });
   const [viewMode, setViewMode] = useState('plan');
   const [roomCaptured, setRoomCaptured] = useState(Boolean(requestedPlan));
@@ -3371,6 +3378,7 @@ function WalkInPlanner() {
   if (requestedEstimatePage && requestedPlan) {
     return (
       <WalkInEstimatePage
+        setRoomName={setRoomName}
         room={room}
         corners={corners}
         runs={runs}
@@ -3479,6 +3487,12 @@ function WalkInPlanner() {
       </header>
       <section className="app-workspace mx-auto grid w-full max-w-7xl min-w-0 gap-0">
         <section className="min-w-0 bg-white p-3 sm:p-4">
+          <div className="mb-3">
+            <RoomSummaryBar room={room} corners={corners} onEdit={() => {
+              setRoomCaptured(false);
+              window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+            }} />
+          </div>
           <div className="mb-3 flex items-center justify-end gap-2">
             {[
               ['plan', 'Plan view'],
@@ -3570,10 +3584,9 @@ function WalkInPlanner() {
         </section>
         <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3">
           <div className="space-y-3">
-            <RoomSummaryBar compact room={room} corners={corners} onEdit={() => setRoomCaptured(false)} />
             <WallRunsSummary room={room} evaluation={evaluation} />
             <ValidationPanel evaluation={evaluation} />
-            <SummaryPanel room={room} corners={corners} runs={runs} evaluation={evaluation} pricing={pricing} extraParts={extraParts} setExtraParts={setExtraParts} isCatalogReady={catalogReady} />
+            <SummaryPanel setRoomName={setRoomName} room={room} corners={corners} runs={runs} evaluation={evaluation} pricing={pricing} extraParts={extraParts} setExtraParts={setExtraParts} isCatalogReady={catalogReady} />
           </div>
         </aside>
       </section>

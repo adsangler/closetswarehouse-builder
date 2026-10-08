@@ -49,6 +49,12 @@ body {
   min-height: 0;
 }
 
+.internal-renderer-shell:has(> .app-workspace:not(.renderer-workspace)) {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
 .internal-renderer-shell .renderer-workspace {
   height: auto;
   min-height: 0;

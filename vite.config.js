@@ -1,3 +1,4 @@
+import { roomNameFromPlanUrl } from './src/planUrls.js';
 import { createAirtableQuoteWithDiagnostics, updateAirtableQuoteShopifyCustomer as linkAirtableCustomer, parseStoredQuote } from './api/_airtable.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -367,6 +368,7 @@ async function fetchAirtableQuoteByReference(env, { quoteId, email }) {
     },
     planUrl: record.fields?.[fieldNames.planUrl] || quoteJson?.planUrl || '',
     planType: record.fields?.[fieldNames.planType] || quoteJson?.planType || quoteJson?.internalType || '',
+    roomName: quoteJson?.roomName || roomNameFromPlanUrl(record.fields?.[fieldNames.planUrl] || quoteJson?.planUrl || ''),
     submittedAt: record.fields?.[fieldNames.submittedAt] || quoteJson?.submittedAt || '',
     quote: quoteJson,
   };

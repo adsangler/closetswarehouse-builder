@@ -1,8 +1,11 @@
 const contactSessionKey = 'closets-warehouse-planner-contact';
 
+let rememberedContact = null;
+
 const emptyContact = { firstName: '', lastName: '', email: '', phone: '' };
 
 export function getPlannerContact() {
+  if (rememberedContact) return { ...rememberedContact };
   if (typeof window === 'undefined') return { ...emptyContact };
 
   try {
@@ -21,13 +24,14 @@ export function hasPlannerContact() {
 export function rememberPlannerContact(contact) {
   if (typeof window === 'undefined' || !contact?.email) return;
 
-  try {
-    window.sessionStorage.setItem(contactSessionKey, JSON.stringify({
+  rememberedContact = {
       firstName: String(contact.firstName || '').trim(),
       lastName: String(contact.lastName || '').trim(),
       email: String(contact.email || '').trim(),
       phone: String(contact.phone || '').trim(),
-    }));
+  };
+  try {
+    window.sessionStorage.setItem(contactSessionKey, JSON.stringify(rememberedContact));
   } catch {
     // A blocked session store should not prevent a plan from being saved.
   }

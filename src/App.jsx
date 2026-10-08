@@ -1,4 +1,6 @@
+import PlanDetailsFields from './PlanDetailsFields';
 import PriceValidity from './PriceValidity.jsx';
+import { trackPlannerEvent } from './analytics.js';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
 import { pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedReachInParts } from './partList.js';
@@ -49,28 +51,28 @@ function buildQuoteContactUrl(quoteId, intent = 'contact') {
   return url.toString();
 }
 
-function SavedPlanActions({ quoteId, planType = 'Closet plan' }) {
+function SavedPlanActions({ quoteId, roomName, planType = 'Closet plan' }) {
   return (
     <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
       <p className="text-sm font-bold text-emerald-800">
-        Saved. Plan ID {quoteId}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
+        Saved. Plan ID {quoteId}{roomName && ` — ${roomName}`}. Print this page for future reference, or reopen it later from the Your plans section using the email and phone you entered.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <button type="button" onClick={() => window.print()} className="rounded bg-emerald-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-emerald-800">
           Print reference
         </button>
         <a href={phoneHref} target="_top" className="rounded bg-stone-950 px-3 py-2 text-center text-sm font-bold text-white hover:bg-stone-800">
-          Call {phoneDisplay}
+          Call To Purchase this plan {phoneDisplay}
         </a>
         <a href={buildQuoteContactUrl(quoteId, 'contact')} target="_top" className="rounded bg-brand-orange px-3 py-2 text-center text-sm font-bold text-white hover:bg-orange-700">
-          Contact
+          Contact us about this plan
         </a>
       </div>
     </div>
   );
 }
 
-function PrintablePlanReference({ quoteId, planType = 'Closet plan' }) {
+function PrintablePlanReference({ quoteId, roomName, planType = 'Closet plan' }) {
   if (!quoteId) {
     return null;
   }
@@ -79,7 +81,7 @@ function PrintablePlanReference({ quoteId, planType = 'Closet plan' }) {
     <section className="print-plan-reference rounded border border-stone-300 bg-white p-4">
       <p className="text-xs font-bold uppercase text-brand-orange">Closets Warehouse</p>
       <h2 className="mt-1 text-xl font-bold text-stone-950">{planType}</h2>
-      <p className="mt-2 text-base font-bold text-stone-950">Plan ID: {quoteId}</p>
+      <p className="mt-2 text-base font-bold text-stone-950">Plan ID: {quoteId}{roomName && ` — ${roomName}`}</p>
     </section>
   );
 }
@@ -610,7 +612,7 @@ function createPlannerDrawing(height, modules) {
   const assembledWidth = getAssembledWidth(towerSpecs);
 
   return {
-    handle: towerSpecs.length ? `CUSTOM-${height}-${buildMatchSignature(height, towerSpecs).split('|').at(-1).replaceAll('+', '-')}` : `CUSTOM-${height}`,
+    handle: towerSpecs.length ? `CUSTOM-${height}-${towerSpecs.map((tower) => `${tower.code}${tower.width}`).join('-')}` : `CUSTOM-${height}`,
     title: towerSpecs.length ? formatTowerTitle(towerSpecs) : `${height}" Closet Plan`,
     kitId: 'custom-plan',
     height,
@@ -1316,9 +1318,21 @@ function RenderScene({ drawing, photoMode = false, wallWidth = null, reachInRoom
   );
 }
 
+function PhotoCameraFit({ drawing }) {
+  const { camera, size, invalidate } = useThree();
+  useEffect(() => {
+    if (!camera.isOrthographicCamera) return;
+    camera.zoom = Math.min(size.height / (drawing.height * 1.22), size.width / ((drawing.assembledWidth + 28) * 1.22));
+    camera.updateProjectionMatrix();
+    invalidate();
+  }, [camera, size.width, size.height, drawing.height, drawing.assembledWidth, invalidate]);
+  return null;
+}
+
 function PathTracedPhotoScene({ drawing, wallWidth = null, reachInRoom = null }) {
   return (
     <Pathtracer minSamples={2} samples={72} bounces={5} tiles={2}>
+      <PhotoCameraFit drawing={drawing} />
       <RenderScene drawing={drawing} photoMode wallWidth={wallWidth} reachInRoom={reachInRoom} pathTraced />
     </Pathtracer>
   );
@@ -1400,9 +1414,15 @@ function PhotoSetRules({ drawing, installationType, onChange }) {
 function ExportButton({ drawing, installationType }) {
   const [status, setStatus] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const shots = getPhotoExportPlan(drawing, installationType);
+  const filename = `${seoSlug(drawing.handle)}-geometry-draft.png`;
 
-  const exportRender = () => {
+  useEffect(() => () => {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  }, [downloadUrl]);
+
+  const exportRender = async () => {
     const canvas = document.querySelector('canvas');
 
     if (!canvas) {
@@ -1412,7 +1432,11 @@ function ExportButton({ drawing, installationType }) {
 
     try {
       const dataUrl = canvas.toDataURL('image/png');
-      setDownloadUrl(dataUrl);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('The render could not be captured. Please try again.');
+      const url = URL.createObjectURL(blob);
+      setDownloadUrl(url);
+      setPreviewOpen(true);
       window.__closetExport = {
         handle: drawing.handle,
         dataUrl,
@@ -1426,14 +1450,14 @@ function ExportButton({ drawing, installationType }) {
       }
 
       const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = shots[0].filename;
+      link.href = url;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setStatus('PNG exported');
+      setStatus('PNG ready');
     } catch (error) {
-      setStatus('Export failed');
+      setStatus(`Export failed: ${error.message}`);
       console.error(error);
     }
   };
@@ -1445,13 +1469,23 @@ function ExportButton({ drawing, installationType }) {
         onClick={exportRender}
         className="rounded border border-brand-orange px-3 py-1 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange hover:text-white"
       >
-        Export {shots.length}-photo set
+        Export render PNG
       </button>
       {status && <span className="text-xs font-medium text-stone-500">{status}</span>}
       {downloadUrl && (
-        <a className="text-xs font-semibold text-brand-orange underline" href={downloadUrl} download={shots[0].filename}>
+        <a className="text-xs font-semibold text-brand-orange underline" href={downloadUrl} download={filename}>
           Download ready
         </a>
+      )}
+      {previewOpen && downloadUrl && (
+        <div role="dialog" aria-modal="true" aria-label="Export render preview" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 overflow-auto bg-stone-950/90 p-4" onKeyDown={(event) => { if (event.key === 'Escape') setPreviewOpen(false); }}>
+          <div className="flex flex-wrap items-center justify-center gap-4 rounded bg-white p-3 text-sm">
+            <span>Render PNG ready. If the download did not start, use the link below.</span>
+            <a className="font-bold text-brand-orange underline" href={downloadUrl} download={filename}>Download PNG</a>
+            <button autoFocus type="button" onClick={() => setPreviewOpen(false)} className="rounded border px-3 py-1">Close preview</button>
+          </div>
+          <img src={downloadUrl} alt={`Export preview of ${drawing.title || drawing.handle}`} className="min-h-0 max-h-[75dvh] max-w-full object-contain" />
+        </div>
       )}
     </div>
   );
@@ -2305,6 +2339,7 @@ function GeneratedPhotoGallery({ drawing, onSelectHandle, refreshToken }) {
                 <div className="border-t border-stone-200 p-3">
                   <p className="break-all text-xs font-bold text-stone-800">{photo.name}</p>
                   <p className="mt-1 text-[11px] font-semibold text-amber-700">Draft · awaiting approval</p>
+                  <a href={photo.url} download={photo.name} className="mt-2 inline-block text-sm font-bold text-brand-orange underline">Download photo</a>
                 </div>
               </article>
             ))}
@@ -2732,7 +2767,7 @@ function AddPartsCard({ items, onChange, plannedWidths }) {
   );
 }
 
-function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, isCatalogReady }) {
+function MatchPanel({ setRoomName, evaluation, modules, planDetails, extraParts, onContinue, isCatalogReady }) {
   const [customer, setCustomer] = useState(getPlannerContact);
   const [leadStatus, setLeadStatus] = useState({ state: 'idle', message: '', quoteId: '' });
   const [hasSavedPlan, setHasSavedPlan] = useState(hasPlannerContact);
@@ -2751,7 +2786,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
 
   useEffect(() => {
     setLeadStatus({ state: 'idle', message: '', quoteId: '' });
-  }, [addedPartsSignature, evaluation.signature]);
+  }, [addedPartsSignature, evaluation.signature, planDetails]);
 
   useEffect(() => {
     catalogMessages.forEach((message) => reportUserVisibleError({ message, planner: 'reach-in', action: 'catalog availability' }));
@@ -2805,6 +2840,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
       }
 
       setLeadStatus({ state: 'success', message: '', quoteId: payload.quoteId });
+      trackPlannerEvent('plan_saved');
       setHasSavedPlan(true);
       rememberPlannerContact(customer);
     } catch (error) {
@@ -2819,14 +2855,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
       <p className="mt-1 text-xs font-semibold text-stone-600">
         {hasSavedPlan ? 'Save this revised design as a new copy to receive its updated price.' : 'Enter your details and we’ll save this design for follow-up.'}
       </p>
-      {!hasSavedPlan && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <input type="text" autoComplete="given-name" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" aria-label="First name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-          <input type="text" autoComplete="family-name" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" aria-label="Last name" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-          <input type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" aria-label="Email" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-          <input type="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" aria-label="Phone" className="rounded border border-stone-300 px-2 py-2 text-sm font-semibold" required />
-        </div>
-      )}
+      <PlanDetailsFields customer={customer} setCustomer={setCustomer} hasKnownContact={hasSavedPlan} roomName={planDetails.roomName || ''} setRoomName={setRoomName} />
       <button type="submit" disabled={leadStatus.state === 'loading' || !canVerifyEstimate} className="mt-3 w-full rounded bg-brand-orange px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-700 disabled:bg-stone-300">
         {leadStatus.state === 'loading' ? 'Saving plan...' : hasSavedPlan ? 'Save updated copy & see new price' : 'Save plan & see price'}
       </button>
@@ -2891,7 +2920,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
             </div>
           )}
           <button type="button" onClick={() => onContinue(leadStatus.quoteId, savedEstimate)} className="rounded border border-emerald-700 bg-white px-3 py-2 text-sm font-bold text-emerald-800">View saved plan</button>
-          <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}</span>
+          <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}{planDetails.roomName && ` — ${planDetails.roomName}`}</span>
         </div>}
         {validationMessages.length > 0 && (
           <div className="mt-3 grid gap-2">
@@ -2944,7 +2973,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
           </div>
         )}
         <button type="button" onClick={() => onContinue(leadStatus.quoteId, savedEstimate)} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white">View saved plan</button>
-        <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}</span>
+        <span className="w-full text-xs font-semibold text-emerald-800">Plan saved · Reference {leadStatus.quoteId}{planDetails.roomName && ` — ${planDetails.roomName}`}</span>
       </div>}
       {validationMessages.length > 0 && (
         <div className="mt-3 grid gap-2">
@@ -2968,7 +2997,7 @@ function MatchPanel({ evaluation, modules, planDetails, extraParts, onContinue, 
   );
 }
 
-function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
+function OrderReviewPanel({ setRoomName, evaluation, modules, planDetails, onBack }) {
   const [customer, setCustomer] = useState(getPlannerContact);
   const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
   const materials = useMemo(() => buildDetailedReachInParts(modules, planDetails.height), [modules, planDetails.height]);
@@ -3010,6 +3039,8 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to submit verification request');
       }
+
+      trackPlannerEvent('verification_requested');
 
       setSubmitStatus({
         state: 'success',
@@ -3084,16 +3115,11 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
           <h3 className="text-sm font-bold text-stone-950">Contact Information</h3>
           {submitStatus.state === 'success' ? (
             <div className="mt-3">
-              <SavedPlanActions quoteId={submitStatus.quoteId} />
+              <SavedPlanActions roomName={planDetails.roomName} quoteId={submitStatus.quoteId} />
             </div>
           ) : (
             <>
-              <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-              </div>
+              <PlanDetailsFields customer={customer} setCustomer={setCustomer} hasKnownContact={hasPlannerContact()} roomName={planDetails.roomName || ''} setRoomName={setRoomName} />
               <button type="submit" disabled={submitStatus.state === 'loading'} className="mt-3 rounded bg-stone-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
                 Verify estimate
               </button>
@@ -3110,7 +3136,7 @@ function OrderReviewPanel({ evaluation, modules, planDetails, onBack }) {
   );
 }
 
-function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraParts, savedEstimate }) {
+function ReachInEstimatePage({ setRoomName, evaluation, modules, planDetails, drawing, extraParts, savedEstimate }) {
   const savedQuoteId = getSavedQuoteIdFromUrl();
   const [previewMode, setPreviewMode] = useState('plan');
   const planDrawingRef = useRef(null);
@@ -3197,7 +3223,7 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
   return (
     <main className="print-flow min-h-screen bg-brand-ui p-2 text-brand-black sm:p-4">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <PrintablePlanReference quoteId={submitStatus.quoteId} planType="Reach-in saved plan" />
+        <PrintablePlanReference roomName={planDetails.roomName} quoteId={submitStatus.quoteId} planType="Reach-in saved plan" />
         <header className="rounded border border-stone-200 bg-white p-3 sm:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -3280,17 +3306,12 @@ function ReachInEstimatePage({ evaluation, modules, planDetails, drawing, extraP
               <h2 className="text-base font-bold text-stone-950">Save Plan</h2>
               {submitStatus.state === 'success' ? (
                 <div className="mt-3">
-                  <SavedPlanActions quoteId={submitStatus.quoteId} />
+                  <SavedPlanActions roomName={planDetails.roomName} quoteId={submitStatus.quoteId} />
                 </div>
               ) : (
                 <>
-                  <p className="mt-1 text-sm font-semibold text-stone-600">Enter your info to save this plan to your customer account so we can follow up about it.</p>
-                  {!hasKnownContact && <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <input type="text" value={customer.firstName} onChange={(event) => setCustomer((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                    <input type="text" value={customer.lastName} onChange={(event) => setCustomer((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                    <input type="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" required />
-                    <input type="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="rounded border border-stone-300 px-2 py-1.5 text-sm font-semibold" />
-                  </div>}
+                  <p className="mt-1 text-sm font-semibold text-stone-600">Save this plan to your customer account so we can follow up about it.</p>
+                  <PlanDetailsFields customer={customer} setCustomer={setCustomer} hasKnownContact={hasKnownContact} roomName={planDetails.roomName || ''} setRoomName={setRoomName} />
                   {validationMessages.length > 0 && (
                     <div className="mt-3 grid gap-2">
                       {validationMessages.map((warning) => (
@@ -3774,6 +3795,7 @@ export default function App({ internalRenderer = false }) {
   const requestedReachInPlan = useMemo(getRequestedReachInPlan, []);
   const requestedEstimatePage = useMemo(shouldShowEstimatePage, []);
   const requestedPlanDetails = requestedReachInPlan?.planDetails || {};
+  const [roomName, setRoomName] = useState(requestedPlanDetails.roomName || '');
   const requestedPlanModules = Array.isArray(requestedReachInPlan?.modules) ? requestedReachInPlan.modules : null;
   const [appMode, setAppMode] = useState(internalRenderer ? requestedMode : 'planner');
   const [airtableStatus, setAirtableStatus] = useState({
@@ -3785,6 +3807,7 @@ export default function App({ internalRenderer = false }) {
   const [reachInRoomCaptured, setReachInRoomCaptured] = useState(internalRenderer || requestedMode === 'renderer' || Boolean(requestedReachInPlan));
   const [kitOptions, setKitOptions] = useState([requestedFallbackKit]);
   const [selectedHandle, setSelectedHandle] = useState(requestedFallbackKit.handle);
+  const [renderPlannerDesign, setRenderPlannerDesign] = useState(false);
   const [viewMode, setViewMode] = useState('photo');
   const [photoInstallationType, setPhotoInstallationType] = useState('reach-in');
   const [photoWorkspaceTab, setPhotoWorkspaceTab] = useState('generated');
@@ -3965,6 +3988,7 @@ export default function App({ internalRenderer = false }) {
       );
 
     return {
+      roomName,
       height: plannerHeight,
       ceilingHeight: Number(ceilingHeight) || 0,
       depth,
@@ -3991,7 +4015,7 @@ export default function App({ internalRenderer = false }) {
       fits: plannerModules.length > 0 && wallNumber >= requiredWidth && openingMatchesWall && openingClear && drawerWarnings.length === 0 && (Number(ceilingHeight) || 0) > Number(plannerHeight),
       visualOrder: plannerModules.map((module) => `${module.code}${module.width}`),
     };
-  }, [ceilingHeight, plannerHeight, plannerModules, reachInDepth, reachInDoorType, reachInOpeningLeft, reachInOpeningRight, reachInOpeningWidth, wallWidth]);
+  }, [roomName, ceilingHeight, plannerHeight, plannerModules, reachInDepth, reachInDoorType, reachInOpeningLeft, reachInOpeningRight, reachInOpeningWidth, wallWidth]);
 
   const addPlannerModule = (configCode, targetIndex = null, width = null) => {
     setPlannerStep('design');
@@ -4145,7 +4169,18 @@ export default function App({ internalRenderer = false }) {
     );
   };
 
-  const baseDrawing = appMode === 'planner' ? plannerBaseDrawing : kitOptions.find((kit) => kit.handle === selectedHandle) || kitOptions[0] || fallbackKit;
+  const selectRendererKit = (handle) => {
+    setRenderPlannerDesign(handle === plannerBaseDrawing.handle);
+    setSelectedHandle(handle);
+  };
+  const createPlannerPhoto = () => {
+    setRenderPlannerDesign(true);
+    setViewMode('photo');
+    setPhotoWorkspaceTab('geometry');
+    setPhotoInstallationType(Number(plannerHeight) >= 96 ? 'walk-in' : 'reach-in');
+    setAppMode('renderer');
+  };
+  const baseDrawing = appMode === 'planner' || renderPlannerDesign ? plannerBaseDrawing : kitOptions.find((kit) => kit.handle === selectedHandle) || kitOptions[0] || fallbackKit;
   const drawing = useMemo(() => createDrawing(baseDrawing), [baseDrawing]);
   const photoMode = viewMode === 'photo';
   const rendererPhotoMode = photoMode && appMode === 'renderer';
@@ -4209,6 +4244,7 @@ export default function App({ internalRenderer = false }) {
   if (requestedEstimatePage && requestedReachInPlan) {
     return (
       <ReachInEstimatePage
+        setRoomName={setRoomName}
         evaluation={plannerEvaluation}
         modules={plannerModules}
         planDetails={plannerPlanDetails}
@@ -4273,7 +4309,17 @@ export default function App({ internalRenderer = false }) {
               </span>
               <AppModeToggle appMode={appMode} onChange={setAppMode} />
               <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
-              {appMode === 'renderer' && <KitSelector drawings={kitOptions} selectedHandle={drawing.handle} onChange={setSelectedHandle} />}
+              {appMode === 'planner' && (
+                <button
+                  type="button"
+                  disabled={plannerModules.length === 0}
+                  onClick={createPlannerPhoto}
+                  className="rounded bg-brand-orange px-3 py-1.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Create photo from this design
+                </button>
+              )}
+              {appMode === 'renderer' && <KitSelector drawings={plannerModules.length ? [plannerBaseDrawing, ...kitOptions] : kitOptions} selectedHandle={drawing.handle} onChange={selectRendererKit} />}
               {appMode === 'renderer' && viewMode === 'photo' && (
                 <>
                   <div className="flex rounded border border-stone-300 bg-white p-0.5 text-xs font-bold">
@@ -4313,7 +4359,7 @@ export default function App({ internalRenderer = false }) {
                   }}
                 />
               )}
-              {appMode === 'renderer' && <ExportButton drawing={drawing} installationType={photoInstallationType} />}
+              {appMode === 'renderer' && !(viewMode === 'photo' && photoWorkspaceTab === 'generated') && <ExportButton key={`${drawing.handle}-${viewMode}`} drawing={drawing} installationType={photoInstallationType} />}
             </>
           )}
         </div>
@@ -4323,6 +4369,7 @@ export default function App({ internalRenderer = false }) {
           {plannerStep === 'review' ? (
             <section className="bg-white">
               <OrderReviewPanel
+        setRoomName={setRoomName}
                 evaluation={plannerEvaluation}
                 modules={plannerModules}
                 planDetails={plannerPlanDetails}
@@ -4347,6 +4394,11 @@ export default function App({ internalRenderer = false }) {
                 }}
               >
                 <div className="grid min-w-0 gap-2 border-b border-stone-200 bg-stone-100 p-2">
+                  {!internalRenderer && (
+                    <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={editReachInRoom}>
+                      <ReachInClosetDetailsSummary planDetails={plannerPlanDetails} moduleCount={plannerModules.length} embedded />
+                    </ReachInSpaceSummary>
+                  )}
                   <section className="min-w-0 rounded border border-stone-200 bg-white p-2">
                     <h2 className="text-sm font-bold text-stone-950">Configure your closet</h2>
                     <p className="mb-1 mt-0.5 text-xs text-stone-500">Click or drag a configuration.</p>
@@ -4430,16 +4482,14 @@ export default function App({ internalRenderer = false }) {
               </section>
               <aside className="min-w-0 border-t border-stone-200 bg-stone-50 p-3">
                 <div className="space-y-3">
-                  {!internalRenderer ? (
-                    <ReachInSpaceSummary planDetails={plannerPlanDetails} onEdit={editReachInRoom}>
-                      <ReachInClosetDetailsSummary planDetails={plannerPlanDetails} moduleCount={plannerModules.length} embedded />
-                    </ReachInSpaceSummary>
-                  ) : (
+                  {internalRenderer && (
                     <section className="rounded border border-stone-200 bg-white p-3">
                       <ReachInClosetDetailsSummary planDetails={plannerPlanDetails} moduleCount={plannerModules.length} embedded />
                     </section>
                   )}
+                  <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(plannerModules.map((module) => Number(module.width)))]} />
                   <MatchPanel
+        setRoomName={setRoomName}
                     evaluation={plannerEvaluation}
                     modules={plannerModules}
                     planDetails={plannerPlanDetails}
@@ -4447,7 +4497,7 @@ export default function App({ internalRenderer = false }) {
                     onContinue={(quoteId, savedEstimate) => navigateInsideFrame(buildReachInEstimateUrl(plannerPlanDetails, plannerModules, extraParts, quoteId, savedEstimate))}
                     isCatalogReady={airtableStatus.state !== 'loading'}
                   />
-                  <AddPartsCard items={extraParts} onChange={setExtraParts} plannedWidths={[...new Set(plannerModules.map((module) => Number(module.width)))]} />
+
                 </div>
               </aside>
             </>
@@ -4458,7 +4508,7 @@ export default function App({ internalRenderer = false }) {
           className={`app-workspace renderer-workspace mx-auto w-full max-w-7xl ${photoMode ? '' : 'grid grid-cols-1'}`}
         >
           {photoMode && photoWorkspaceTab === 'generated' ? (
-            <GeneratedPhotoGallery drawing={drawing} onSelectHandle={setSelectedHandle} refreshToken={photoGalleryVersion} />
+            <GeneratedPhotoGallery drawing={drawing} onSelectHandle={selectRendererKit} refreshToken={photoGalleryVersion} />
           ) : (
             <section className="renderer-viewport relative h-full min-h-0 bg-white">
               {photoMode && (

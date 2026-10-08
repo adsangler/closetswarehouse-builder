@@ -532,6 +532,7 @@ export function renderPrintablePlan({ record, autoPrint = false }) {
         <div>
           <p class="brand">Closets Warehouse</p>
           <h1>Saved Plan Reference</h1>
+          ${record.roomName || quote.roomName ? `<p class="muted">Room: ${escapeHtml(record.roomName || quote.roomName)}</p>` : ''}
           <p class="muted">Plan ID: ${escapeHtml(quoteId || 'Not available')}</p>
         </div>
         <div class="actions screen-only">

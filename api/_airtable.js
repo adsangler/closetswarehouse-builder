@@ -1,3 +1,4 @@
+import { roomNameFromPlanUrl } from '../src/planUrls.js';
 import { gzipSync, gunzipSync } from 'node:zlib';
 
 export function parseStoredQuote(value) {
@@ -225,6 +226,7 @@ function parseQuoteRecord(record, fallbackQuoteId = '') {
     },
     planUrl: record.fields?.[fieldNames.planUrl] || quoteJson?.planUrl || '',
     planType: record.fields?.[fieldNames.planType] || quoteJson?.planType || quoteJson?.internalType || '',
+    roomName: quoteJson?.roomName || roomNameFromPlanUrl(record.fields?.[fieldNames.planUrl] || quoteJson?.planUrl || ''),
     submittedAt: record.fields?.[fieldNames.submittedAt] || quoteJson?.submittedAt || '',
     status: record.fields?.Status || '',
     estimatedPrice: record.fields?.['Estimated Price'] || quoteJson?.estimatedPrice || 0,
