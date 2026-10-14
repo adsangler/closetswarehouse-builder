@@ -1970,7 +1970,7 @@ function PlannerWall({ modules, height, wallWidth, onDropModule, onRemove, onMov
 
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-xs">
         <div className="rounded bg-stone-50 px-2 py-1.5">
-          <div className="font-semibold text-stone-500">Assembled</div>
+          <div className="font-semibold text-stone-500">Total system size</div>
           <div className="text-sm font-bold text-stone-950">{modules.length ? `${assembledWidth.toFixed(2)}"` : '-'}</div>
         </div>
         <div className="rounded bg-stone-50 px-2 py-1.5">
@@ -2487,6 +2487,7 @@ function ReachInSpaceSummary({ planDetails, onEdit, children }) {
     { label: 'Opening', value: formatInches(planDetails.openingWidth || 0), tone: planDetails.openingClear ? 'text-stone-950' : 'text-red-700' },
     { label: 'Return walls', value: `${formatInches(planDetails.openingLeft || 0)} / ${formatInches(planDetails.openingRight || 0)}` },
     { label: 'Open total', value: formatInches(planDetails.openingTotal || 0), tone: planDetails.openingMatchesWall ? 'text-emerald-700' : 'text-red-700' },
+    { label: 'Total system size', value: planDetails.assembledWidth ? `${planDetails.assembledWidth.toFixed(2)}"` : 'Add towers to calculate' },
     { label: 'Door type', value: doorLabel },
     {
       label: 'Drawer access',
