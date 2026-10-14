@@ -14,6 +14,14 @@ test('price expires exactly seven days after original creation, including legacy
   assert.match(priceValidity({}, quoteId, expires + 86400000), /^Price expired/);
   assert.match(priceValidity({}, '', expires), /Creation date unavailable/);
 });
+
+test('compact daily plan references provide a valid creation date', () => {
+  const quoteId = '20261014-007';
+  const expires = Date.parse('2026-10-21T00:00:00Z');
+  assert.equal(quoteCreatedAt(quoteId), '2026-10-14T00:00:00Z');
+  assert.match(priceValidity({}, quoteId, expires - 1), /^Price valid until/);
+  assert.match(priceValidity({}, quoteId, expires), /^Price expired/);
+});
 test('new public URLs preserve price and exclude personal fields', () => {
   const savedEstimate = { estimatedPrice: 521.8, customerName: 'Private Person', phoneLast4: '1234', email: 'private@example.com' };
   assert.deepEqual(decodePlanPayload(encodePlanPayload({ savedEstimate })).savedEstimate, { estimatedPrice: 521.8 });

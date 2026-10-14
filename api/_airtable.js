@@ -493,6 +493,15 @@ export async function fetchAirtableQuoteByReference({ quoteId, email }) {
   return parseQuoteRecord(record, normalizedQuoteId);
 }
 
+export async function fetchAirtableQuoteIdsByDate(dateKey) {
+  const config = getQuoteConfig();
+  if (!config) return [];
+  const fieldNames = getQuoteFieldNames();
+  const formula = `LEFT({${fieldNames.quoteId}}, 8) = '${escapeAirtableString(dateKey)}'`;
+  const records = await fetchQuoteRecords(config, (url) => url.searchParams.set('filterByFormula', formula));
+  return records.map((record) => String(record.fields?.[fieldNames.quoteId] || '').trim()).filter(Boolean);
+}
+
 export async function fetchAirtableQuotesByShopifyCustomerId(shopifyCustomerId) {
   const config = getQuoteConfig();
 

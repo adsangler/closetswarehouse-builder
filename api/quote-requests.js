@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createAirtableQuoteWithDiagnostics, fetchAirtableQuoteByReference, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
+import { createAirtableQuoteWithDiagnostics, fetchAirtableQuoteByReference, fetchAirtableQuoteIdsByDate, sendJson, updateAirtableQuoteShopifyCustomer } from './_airtable.js';
 import { attachQuoteReferenceToPlanUrl, normalizeQuoteSubmission, validateNormalizedQuote } from './_quote-normalize.js';
 import { upsertShopifyCustomerPlan } from './_shopify.js';
 
@@ -15,11 +15,19 @@ async function readRequestBody(req) {
   });
 }
 
-function createQuoteId(date = new Date()) {
-  const timestamp = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-  const suffix = randomBytes(3).toString('hex').toUpperCase();
+function dateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date).replaceAll('-', '');
+}
 
-  return `CWQ-${timestamp}-${suffix}`;
+async function createQuoteId(date = new Date()) {
+  const key = dateKey(date);
+  const used = new Set(await fetchAirtableQuoteIdsByDate(key));
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const suffix = String(randomBytes(2).readUInt16BE(0) % 1000).padStart(3, '0');
+    const candidate = `${key}-${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error('Unable to allocate a unique plan reference for today. Please try again.');
 }
 
 export default async function handler(req, res) {
@@ -53,7 +61,7 @@ export default async function handler(req, res) {
     const quote = JSON.parse(body || '{}');
     const submittedDate = new Date();
     const submittedAt = submittedDate.toISOString();
-    const quoteId = createQuoteId(submittedDate);
+    const quoteId = await createQuoteId(submittedDate);
     const capturedQuote = normalizeQuoteSubmission(quote, { quoteId, submittedAt });
     capturedQuote.planUrl = attachQuoteReferenceToPlanUrl(capturedQuote.planUrl, quoteId);
     const validationError = validateNormalizedQuote(capturedQuote);

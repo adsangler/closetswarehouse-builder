@@ -1,7 +1,8 @@
 export function quoteCreatedAt(quoteId = '') {
-  const match = /^CWQ-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-/.exec(quoteId);
-  if (!match) return '';
-  const [, y, m, d, h, min, s] = match;
+  const legacy = /^CWQ-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-/.exec(quoteId);
+  const compact = /^(\d{4})(\d{2})(\d{2})-\d{3}$/.exec(quoteId);
+  if (!legacy && !compact) return '';
+  const [, y, m, d, h = '00', min = '00', s = '00'] = legacy || compact;
   const value = `${y}-${m}-${d}T${h}:${min}:${s}Z`;
   return Number.isFinite(Date.parse(value)) ? value : '';
 }
