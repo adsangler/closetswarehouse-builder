@@ -79,7 +79,7 @@ export function buildDetailedReachInParts(modules = [], height = 84) {
 
   addPart(parts, `VL-14-${towerHeight}-W`, `Left vertical panel 14" x ${towerHeight}"`, 1, 'Outer left side panel.', 'Panels');
   addPart(parts, `VR-14-${towerHeight}-W`, `Right vertical panel 14" x ${towerHeight}"`, 1, 'Outer right side panel.', 'Panels');
-  addPart(parts, `VD-14-${towerHeight}-W`, `Shared divider panel 14" x ${towerHeight}"`, Math.max(0, modules.length - 1), 'One shared divider at each tower joint; no doubled side panels.', 'Panels');
+  addPart(parts, `VD-14-${towerHeight}-W`, `Shared divider panel 14" x ${towerHeight}"`, Math.max(0, modules.length - 1), 'One shared divider at each tower joint.', 'Panels');
 
   let towerCount = 0;
   modules.forEach((module) => {

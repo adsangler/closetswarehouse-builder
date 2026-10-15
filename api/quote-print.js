@@ -223,6 +223,7 @@ function getModuleDisplayName(module = {}) {
 
 function getCustomerFacingPartDetails(part = {}) {
   return String(part.details || '')
+    .replace(/;\s*no doubled side panels\.?/gi, '.')
     .replace(/\s*Round up to the next bag of 20 only when needed\.?/gi, '')
     .trim();
 }
