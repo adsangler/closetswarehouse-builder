@@ -27,7 +27,7 @@ async function request(table,path,method,body){
  const data=await r.json();if(!r.ok)throw new Error(JSON.stringify(data));return data;
 }
 let kit=kits.find(k=>k.fields.shopify_sku===sku);
-if(!kit)kit=await request(process.env.AIRTABLE_KITS_TABLE,'','POST',{fields:{...fields,Status:'Draft'}});
+if(!kit){ const {Status,...pendingFields}=fields; kit=await request(process.env.AIRTABLE_KITS_TABLE,'','POST',{fields:{...pendingFields,retail_price:0}}); }
 const existing=rows.filter(r=>r.fields.Kits?.includes(kit.id));
 const missing=bom.filter(b=>!existing.some(r=>r.fields.Part?.includes(b.part.id)));
 for(let i=0;i<missing.length;i+=10){await request(process.env.AIRTABLE_KIT_PARTS_TABLE,'','POST',{records:missing.slice(i,i+10).map(b=>({fields:{Kits:[kit.id],Part:[b.part.id],'Quantity Needed Per Kit':b.qty,Notes:`${b.code} × ${b.qty} for ${sku}`}}))});}

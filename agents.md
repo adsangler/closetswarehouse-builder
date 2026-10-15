@@ -58,11 +58,13 @@ On Windows, if PowerShell blocks `npm.ps1`, use `npm.cmd run dev`.
 - Tower nominal width is the bay/shelf/rod/toe-kick width: 18", 24", or 30".
 - Connected systems share a single divider panel at every tower joint; never render two butted panels.
 - Number of vertical panels in a connected system = tower count + 1.
-- Drawers are always 24" wide. Drawer tower configs (`S3D`, `H3D`, `S2D`) exist only at 24" nominal width.
+- Drawer tower configs (`S3D`, `H3D`, `S2D`) are available at 24" and 30" nominal widths. Use matching-width drawer parts and live Airtable BOMs.
 - Image export uses `canvas.toDataURL()`; preserveDrawingBuffer must be true on the renderer.
 - Output filenames must match the Shopify handle exactly, e.g. `DH-S8-51-96-14-W.png`.
 
 ## Shelf tower naming
+Confirmed adjustable-shelf counts (2026-09-18): every 96" tower has exactly one more adjustable shelf than its 84" equivalent, at every supported width. Counts include adjustable bottom shelves and exclude the two fixed shelves: LH 1/2, DH 1/2, HS 3/4, S3D 4/5, H3D 2/3, S2D 4/5, shelf-only S7/S8 6/7 (84"/96"). HS has four lower boards at 84" and five at 96", including the adjustable bottom board; the highest lower shelf is fixed. Use `src/shelfCounts.js` for counts and `scripts/audit-airtable-shelf-counts.mjs` to verify live BOMs and cost totals.
+
 Airtable shelf-only tower naming has been updated:
 - `S7` = 7-foot / 84" shelf-only tower with 7 usable shelf levels, excluding the top fixed frame shelf.
 - `S8` = 8-foot / 96" shelf-only tower with 8 usable shelf levels, excluding the top fixed frame shelf.
@@ -73,9 +75,11 @@ Airtable shelf-only tower naming has been updated:
 - Legacy `S9` / `S93` naming may appear in older exports or render assets; treat it as old naming and prefer live Airtable `S7` / `S8` values for new work.
 
 ## Tower configurations
+Frame Only (`FR`) is a planner-only configuration with 18", 24", and 30" nominal bays at 84" and 96" heights. It has two fixed shelves (top and center), one adjustable bottom shelf, one recessed toe kick per bay, required vertical panels, and standard assembly/wall-bracket hardware. Both heights require 8 Rafix connectors and 8 matching screws (covered by CAMKIT-10-W) and 4 shelf pins (covered by PIN-20-S). It has no rods or drawers and exactly one adjustable shelf at both heights; it is the exception to the extra-adjustable-shelf rule for 96" towers. Connected runs share dividers normally. The six Airtable kits use `FR-20/26/32-84/96-14-W` SKUs, blank Shopify handles, and `planner-only` tags. Do not publish these kits to Shopify. `scripts/create-airtable-frame-kits.mjs` defaults to a read-only preview; `--apply` creates missing kits/BOM rows and verifies them. Run `node --test scripts/test-frame-only.mjs` for the configuration regression checks.
+
 The core tower configs are:
-- `LH`: Long Hang, 1 rod, fixed top/bottom frame shelves, top adjustable shelf about 18" below the top with the rod directly below it, no mid shelf in the open long-hang bay.
-- `DH`: Double Hang, 2 rods, fixed top/bottom frame shelves, minimal adjustable shelving.
+- `LH`: Long Hang, 1 rod, 2 fixed shelves, top adjustable shelf about 18" below the top with the rod directly below it, no mid shelf in the open long-hang bay.
+- `DH`: Double Hang, 2 rods, exactly 2 fixed shelves: the top frame shelf and the middle shelf directly above the lower hanging section. The bottom shelf is adjustable.
 - `HS`: Hang & Shelves, 1 rod at the top with no shelf above the rod, plus 4 lower shelf boards total including the adjustable bottom shelf; the highest lower shelf directly below the hanging section is fixed.
 - `S3D`: Shelves & 3 Drawers, 2 small drawers + 1 large drawer, no rod.
 - `H3D`: Hang & 3 Drawers, 1 rod above 2 small drawers + 1 large drawer.
@@ -83,9 +87,9 @@ The core tower configs are:
 - `S7`: 84" shelf-only tower with 7 usable shelf levels excluding the top frame shelf.
 - `S8`: 96" shelf-only tower with 8 usable shelf levels excluding the top frame shelf.
 
-30" towers are available only for `LH`, `DH`, `HS`, `S7`, and `S8`.
+30" towers are available for `LH`, `DH`, `HS`, `S3D`, `H3D`, `S2D`, `S7`, and `S8`.
 18" towers are available only for `S7` and `S8`.
-Drawer towers remain 24" only.
+Drawer towers are available at 24" and 30" nominal widths (confirmed by the user and live Airtable on 2026-09-16).
 
 ## BOM and part logic
 Use the BOM rules from Airtable/business spec when deriving kit geometry or part counts:
@@ -96,6 +100,9 @@ Use the BOM rules from Airtable/business spec when deriving kit geometry or part
 - Rods use `RK-[width]-S`; rod brackets use `RDB-S-1`.
 - Small drawer kits use `DRK-24-5-13-W`; large drawer kits use `DRK-24-10-13-W`.
 - Cam lock kits use `CAMKIT-10-W`.
+- Every tower has exactly 2 fixed shelves. The top frame shelf is always fixed. In `DH`, the second fixed shelf is the middle shelf above the lower hanging section. In `S3D`, `H3D`, and `S2D`, the second fixed shelf is the drawer deck directly above the drawers. In `HS`, the second fixed shelf is the highest lower shelf directly below the hanging section. In the remaining configurations, the bottom frame shelf is the second fixed shelf.
+- Bottom shelves in `DH`, `HS`, `S3D`, `H3D`, and `S2D` are adjustable, not fixed.
+- Camfix requirement is 4 camfix/cam-screw pairs per fixed shelf. `CAMKIT-10-W` contains 10 pairs; calculate pack quantity as `ceil(fixed shelf count * 4 / 10)`.
 - Shelf pins use `PIN-20-S`; calculate 4 pins per adjustable shelf.
 - Shelf pin pack quantity: 1 pack for up to 5 adjustable shelves, 2 packs for 6-8 adjustable shelves (`S7` / `S8` towers).
 - Airtable has `Components` and `Part Components` tables for nested part composition.
@@ -118,8 +125,8 @@ Width calculations:
 - Drawer hardware is now a brushed-nickel straight bar pull, not a round knob. Reference dimensions: 5" hole center-to-center / mounting span, approximately 5-1/2" overall length, 1/2" square bar profile, and approximately 1-2/5" projection.
 - Every drawer pull must be centered horizontally and vertically on its drawer front, including both small and large drawer fronts.
 - Hanging rods and hangers must sit on the front drill-line plane, not deep/set back in the bay.
-- Hanging rods and hangers must be vertically tied to the shelf above them. In `LH` and `H3D`, the rod sits directly below the upper shelf. In `DH`, the upper rod sits directly below the top fixed shelf and the lower rod sits directly below the middle adjustable shelf.
-- Adjustable shelves should divide the usable open space they belong to. For `DH`, the middle adjustable shelf divides the double-hang bay into upper and lower hanging sections; do not place rods independently from that shelf.
+- Hanging rods and hangers must be vertically tied to the shelf above them. In `LH` and `H3D`, the rod sits directly below the upper shelf. In `DH`, the upper rod sits directly below the top fixed shelf and the lower rod sits directly below the middle fixed shelf.
+- Adjustable shelves should divide the usable open space they belong to. For `DH`, the middle fixed shelf divides the double-hang bay into upper and lower hanging sections; do not place rods independently from that shelf.
 - Drawer towers (`S3D`, `S2D`, `H3D`) must place adjustable shelves by zone around the drawer stack. The shelf directly above the drawers defines the drawer deck, the shelf below the drawers is centered in the lower open space, and upper adjustable shelves evenly divide the open space above the drawer deck.
 - `LH` towers must show the upper adjustable shelf about 18" below the top frame shelf, with the long-hang rod directly below that shelf. Do not place an `LH` shelf in the middle of the open long-hang bay.
 - `HS` towers must show no top shelf/cubby above the hanger rod. The rod sits at the top/front drill-line plane, and the lower section has exactly 4 shelf boards total including the adjustable bottom shelf; the highest lower shelf directly below the hanging section is fixed.

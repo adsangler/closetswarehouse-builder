@@ -140,7 +140,7 @@ When towers are connected, internal side panels are replaced by a single divider
 - 13" depth fits inside 14" tower depth with track clearance
 
 **Hardware pack sizes:**
-- Cam lock kits: 10 pieces per kit (8 used per tower for fixed shelf connections)
+- Cam lock kits: 10 camfix/cam-screw pairs per kit. Every tower has exactly 2 fixed shelves and uses 4 pairs per fixed shelf (8 pairs per tower). For combined picking, calculate `ceil(total fixed shelves * 4 / 10)` packs.
 - Shelf pins: 20 per pack at $5.00 — 4 pins per adjustable shelf
 - Shelf pin pack quantity per tower: 1 pack for up to 5 adj shelves, 2 packs for 6–8 adj shelves (S7/S8 towers)
 
