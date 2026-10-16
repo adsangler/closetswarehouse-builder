@@ -71,3 +71,30 @@ test('old unnamed plans remain readable and normalized names are bounded', () =>
   assert.equal(normalizeQuoteSubmission({}).roomName, '');
   assert.equal(normalizeQuoteSubmission({ roomName: 'x'.repeat(200) }).roomName.length, 120);
 });
+
+test('reach-in printable reference keeps top-level saved room details and door type', () => {
+  const quote = {
+    planType: 'reach-in',
+    internalType: 'reach-in estimate verification',
+    height: 96,
+    ceilingHeight: 108,
+    wallWidth: 130,
+    roomDepthInput: 30,
+    clearDepth: 16,
+    openingWidth: 100,
+    openingLeft: 15,
+    openingRight: 15,
+    doorType: 'bifold',
+    assembledWidth: 25.5,
+    requiredWidth: 27.5,
+    remainingWidth: 102.5,
+    modules,
+    estimatedPrice: 245,
+  };
+  const html = renderPrintablePlan({ record: { quote, quoteId: 'QA-door' } });
+
+  assert.match(html, /<dt>Door<\/dt>\s*<dd>Bi-fold<\/dd>/);
+  assert.match(html, /<dt>Room depth<\/dt>\s*<dd>30&quot;<\/dd>/);
+  assert.match(html, /<dt>Opening<\/dt>\s*<dd>100&quot;<\/dd>/);
+  assert.match(html, /<dt>Return walls<\/dt>\s*<dd>15&quot; \/ 15&quot;<\/dd>/);
+});

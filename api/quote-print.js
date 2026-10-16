@@ -79,11 +79,21 @@ function getPosition(module = {}, fallbackIndex = 0) {
   return Number.isFinite(rawIndex) ? rawIndex + 1 : fallbackIndex + 1;
 }
 
+function getWalkInWallHeight(room = {}, wall = '') {
+  const wallName = String(wall).replace(/Return$/, '');
+  const height = Number(room[`${wallName}Height`] || room.height);
+  return [84, 96].includes(height) ? height : undefined;
+}
 
 function getPlanModules(quote = {}) {
   const runModules = quote.runs && typeof quote.runs === 'object'
     ? Object.entries(quote.runs).flatMap(([wall, modules]) => (
-      Array.isArray(modules) ? modules.map((module, index) => ({ ...module, wall, index })) : []
+      Array.isArray(modules) ? modules.map((module, index) => ({
+        ...module,
+        wall,
+        index,
+        height: module.height || module.planHeight || module.towerHeight || getWalkInWallHeight(quote.room, wall),
+      })) : []
     ))
     : [];
   return runModules.length ? runModules : (Array.isArray(quote.modules) ? quote.modules : []);
@@ -188,7 +198,7 @@ function getPrintableMaterials(quote = {}, modules = [], isWalkIn = false) {
 }
 
 function getReachInDetails(quote = {}) {
-  const details = quote.planDetails || {};
+  const details = { ...quote, ...(quote.planDetails || {}) };
   const doorLabels = {
     regular: 'No door / regular',
     bifold: 'Bi-fold',

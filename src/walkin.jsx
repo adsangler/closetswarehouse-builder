@@ -1916,8 +1916,18 @@ function TopDownPlan({ room, runs, corners, evaluation }) {
               className="fill-stone-400/50 stroke-stone-600"
               strokeDasharray="4 3"
             />
-            <text x={toX(zone.labelX)} y={toY(zone.labelY) + 4} textAnchor="middle" className="fill-stone-700 text-[11px] font-bold">
-              14x12 reach
+            <text
+              x={toX(zone.labelX)}
+              y={toY(zone.labelY) - 1}
+              textAnchor="middle"
+              className="fill-stone-700 text-[8px] font-bold"
+              paintOrder="stroke"
+              stroke="#f5f5f4"
+              strokeWidth="3"
+              strokeLinejoin="round"
+            >
+              <tspan x={toX(zone.labelX)}>14×12</tspan>
+              <tspan x={toX(zone.labelX)} dy="9">reach</tspan>
             </text>
           </g>
         ))}
