@@ -1,3 +1,4 @@
+import { validateExtraPartQuantities } from '../src/extraPartQuantities.js';
 import { publicEstimate, quoteCreatedAt } from '../src/estimateValidity.js';
 import { encodePlanPayload, decodePlanPayload } from '../src/planUrls.js';
 const fallbackByCode = {
@@ -177,6 +178,7 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
     drawings: cleanDrawings(rawQuote.drawings),
     modules,
     materials: cleanMaterials(rawQuote.materials),
+    extraPartQuantityValidationError: validateQuoteExtraParts(rawQuote),
     estimatedPrice,
     clientEstimatedPrice,
     serverEstimatedPrice,
@@ -185,7 +187,21 @@ export function normalizeQuoteSubmission(rawQuote = {}, { quoteId, submittedAt }
   };
 }
 
+function validateQuoteExtraParts(quote) {
+  const directError = validateExtraPartQuantities(quote.extraParts);
+  if (directError) return directError;
+  const materialError = validateExtraPartQuantities((Array.isArray(quote.materials) ? quote.materials : []).filter(part => /^added\s*parts$/i.test(String(part?.category || '').trim())));
+  if (materialError) return materialError;
+  try {
+    const encoded = new URL(quote.planUrl).searchParams.get('plan');
+    if (encoded) return validateExtraPartQuantities(decodePlanPayload(encoded).extraParts);
+  } catch { /* Existing URL validation handles absent or malformed URLs. */ }
+  return '';
+}
+
 export function validateNormalizedQuote(quote) {
+  const quantityError = quote.extraPartQuantityValidationError || validateQuoteExtraParts(quote);
+  if (quantityError) return quantityError;
   if (!quote.customer?.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(quote.customer.email)) {
     return 'A valid email is required.';
   }

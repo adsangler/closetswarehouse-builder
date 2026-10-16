@@ -1,3 +1,4 @@
+import { isPositiveWholeQuantity, validateExtraPartQuantities } from './extraPartQuantities.js';
 import PlanDetailsFields from './PlanDetailsFields';
 import PriceValidity from './PriceValidity.jsx';
 import { initAnalytics, trackPlannerEvent } from './analytics.js';
@@ -2775,6 +2776,11 @@ function WalkInEstimatePage({ setRoomName, room, corners, runs, evaluation, pric
   }, [catalogMessages]);
   const submitForVerification = async (event) => {
     event.preventDefault();
+    const quantityError = validateExtraPartQuantities(extraParts);
+    if (quantityError) {
+      setSubmitStatus({ state: 'error', message: quantityError });
+      return;
+    }
     if (!pricing.catalogSupported) {
       setSubmitStatus({ state: 'error', message: 'This layout is not available for online saving yet.' });
       return;
@@ -3018,14 +3024,15 @@ function AddPartsCard({ items, onChange, plannedWidths, priceUnlocked }) {
     setWidth(options[nextType].widths.includes(width) ? width : options[nextType].widths[0]);
   };
   const addItem = () => {
+    if (!isPositiveWholeQuantity(quantity)) return;
     const sku = getExtraPartSku(type, width);
     const product = catalog.find((record) => record.sku.toUpperCase() === sku);
     if (!product) return;
     onChange((current) => {
     const existing = current.find((item) => item.type === type && item.width === width);
-    if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
+    if (existing) return current.map((item) => item === existing ? { ...item, quantity: Number(item.quantity) + Number(quantity) } : item);
       const displayName = product.name && product.name.toUpperCase() !== product.sku.toUpperCase() ? product.name : selected.label;
-      return [...current, { type, width, quantity, sku, name: displayName, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
+      return [...current, { type, width, quantity: Number(quantity), sku, name: displayName, price: Number(product.price) || 0, productUrl: getProductUrl(product.shopifyHandle || sku) }];
     });
   };
   const selectedSku = getExtraPartSku(type, width);
@@ -3052,12 +3059,13 @@ function AddPartsCard({ items, onChange, plannedWidths, priceUnlocked }) {
             </select>
           </label> : <div className="grid content-end text-xs font-bold text-stone-600"><span className="rounded border border-stone-200 bg-stone-50 px-2 py-2">Standard pack</span></div>}
           <label className="grid gap-1 text-xs font-bold text-stone-600">Quantity
-            <input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
+            <input type="number" min="1" max="99" step="1" required aria-invalid={!isPositiveWholeQuantity(quantity)} value={quantity} onChange={(event) => setQuantity(event.target.value)} className="rounded border border-stone-300 px-2 py-2 text-sm text-stone-900" />
           </label>
         </div>
         <div className="flex items-center justify-between gap-2 text-xs font-bold text-stone-600"><span>{selectedSku}</span><span>{selectedProduct ? (priceUnlocked ? `${money(selectedProduct.price)} each` : 'Price included after contact') : catalogReady ? 'Not available' : 'Checking availability...'}</span></div>
         {!widthMatchesPlan && <p className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-bold text-amber-800">Warning: this plan has no {width}&quot; tower bay. This part may not fit the planned closet; confirm the installation location before purchasing.</p>}
-        <button type="button" onClick={addItem} disabled={!selectedProduct} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
+        {!isPositiveWholeQuantity(quantity) && <p role="alert" className="text-xs font-bold text-red-700">Enter a positive whole-number quantity.</p>}
+          <button type="button" onClick={addItem} disabled={!selectedProduct || !isPositiveWholeQuantity(quantity)} className="rounded bg-stone-950 px-3 py-2 text-sm font-bold text-white disabled:bg-stone-300">Add to plan</button>
         {items.length > 0 && <div className="grid gap-1 border-t border-stone-200 pt-2">
           {items.map((item) => <div key={`${item.type}-${item.width}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-stone-50 px-2 py-1.5 text-xs">
             <span className="font-semibold text-stone-700">{options[item.type].label}{item.width ? ` — ${item.width}\"` : ''}</span>
@@ -3095,6 +3103,11 @@ function SummaryPanel({ setRoomName, room, corners, runs, evaluation, pricing, e
 
   const submitForVerification = async (event) => {
     event.preventDefault();
+    const quantityError = validateExtraPartQuantities(extraParts);
+    if (quantityError) {
+      setSubmitStatus({ state: 'error', message: quantityError });
+      return;
+    }
     if (!pricing.catalogSupported) {
       setSubmitStatus({ state: 'error', message: 'This layout is not available for online verification yet.' });
       return;
