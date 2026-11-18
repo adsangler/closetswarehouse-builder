@@ -190,11 +190,16 @@ function getPrintableMaterials(quote = {}, modules = [], isWalkIn = false) {
     return buildPickList(normalizeStructuralHardware(savedMaterials, modules, quote.height || quote.planDetails?.height || quote.room?.height), modules.length);
   }
 
-  if (isWalkIn) {
-    return buildDetailedWalkInParts(quote.room, quote.runs);
-  }
-
-  return buildDetailedReachInParts(modules, quote.height || quote.planDetails?.height || 84);
+  const materials = isWalkIn
+    ? buildDetailedWalkInParts(quote.room, quote.runs)
+    : buildDetailedReachInParts(modules, quote.height || quote.planDetails?.height || 84);
+  const extraParts = Array.isArray(quote.extraParts) ? quote.extraParts : [];
+  return buildPickList([
+    ...materials,
+    ...extraParts.map(({ sku, name, quantity }) => ({
+      category: 'Added parts', sku, name: name || sku, quantity,
+    })),
+  ]);
 }
 
 function getReachInDetails(quote = {}) {

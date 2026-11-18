@@ -1,6 +1,16 @@
 // Packing labels are internal kit identifiers, not Airtable inventory SKUs.
 export const pickListGroups = ['Panels', 'Shelves', 'Toe kicks', 'Kits', 'Tower hardware kits', 'Shelf pins', 'Hardware', 'Added Parts', 'Added parts', 'Parts'];
 
+const drawerHardware = [
+  { name: 'Left drawer track', perDrawer: 1 },
+  { name: 'Right drawer track', perDrawer: 1 },
+  { name: 'Drawer track Euro screw', perDrawer: 6, details: '3 screws per track.' },
+];
+
+function isDrawerKit(part) {
+  return /^DRK-/i.test(part.sku || '');
+}
+
 export function comparePickParts(a, b) {
   const rank = (part) => {
     const sku = String(part.sku || '').toUpperCase();
@@ -14,14 +24,22 @@ export function buildPickList(materials = [], towerCount = 0) {
   const parts = materials.filter((part) => {
     // Explicit extras still need to be picked, even when also present in a kit.
     if (/^added parts$/i.test(part.category || '')) return true;
-    return !included.has(String(part.sku || '').toUpperCase()) && !['Tower hardware bags', 'Tower hardware kits'].includes(part.category);
+    if (!part.sku && part.category === 'Hardware' && drawerHardware.some(({ name }) => part.name === name)) return false;
+    return !included.has(String(part.sku || '').toUpperCase()) && (!towerCount || !['Tower hardware bags', 'Tower hardware kits'].includes(part.category));
   }).map((part) => {
     if (/^added parts$/i.test(part.category || '')) return { ...part };
     const sku = String(part.sku || '').toUpperCase();
+    if (isDrawerKit(part)) return { ...part, details: 'Assembled drawer. Pick both tracks and their Euro screws separately.' };
     if (sku.startsWith('TKK-')) return { ...part, category: 'Toe kicks', name: String(part.name || sku).replace(/toe-kick kit/i, 'Toe-kick board'), details: 'Board only. Brackets and euro screws are included in the tower hardware kits.' };
     if (sku.startsWith('PIN-')) return { ...part, category: 'Shelf pins' };
     return { ...part };
   });
+  const drawerCount = parts.filter(isDrawerKit).reduce((sum, part) => sum + (Number(part.quantity) || 0), 0);
+  if (drawerCount > 0) {
+    for (const { name, perDrawer, details = '' } of drawerHardware) {
+      parts.push({ name, category: 'Hardware', sku: '', quantity: drawerCount * perDrawer, details });
+    }
+  }
   const total = Math.max(0, Math.floor(Number(towerCount) || 0));
   if (total) parts.push({
     category: 'Tower hardware kits', sku: '', quantity: total,

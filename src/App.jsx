@@ -3,7 +3,7 @@ import PlanDetailsFields from './PlanDetailsFields';
 import PriceValidity from './PriceValidity.jsx';
 import { trackPlannerEvent } from './analytics.js';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
-import { pickListGroups, comparePickParts } from './pickList.js';
+import { buildPickList, pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedReachInParts } from './partList.js';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
 import { fitReachInCamera } from './reachInCamera.js';
@@ -3312,7 +3312,7 @@ function ReachInEstimatePage({ setRoomName, evaluation, modules, planDetails, dr
               </div>
             </section>
             <AddedPartsSection items={extraParts} plannedWidths={plannedWidths} />
-            <PartsList parts={[...parts, ...addedPartRows]} />
+            <PartsList parts={buildPickList([...parts, ...addedPartRows])} />
           </div>
 
           <aside className="order-first grid min-w-0 gap-3 self-start">

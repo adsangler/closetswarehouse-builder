@@ -3,7 +3,7 @@ import PlanDetailsFields from './PlanDetailsFields';
 import PriceValidity from './PriceValidity.jsx';
 import { initAnalytics, trackPlannerEvent } from './analytics.js';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
-import { pickListGroups, comparePickParts } from './pickList.js';
+import { buildPickList, pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedWalkInParts } from './partList.js';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -2925,7 +2925,7 @@ function WalkInEstimatePage({ setRoomName, room, corners, runs, evaluation, pric
               <WalkInFrontViews room={room} runs={runs} />
             </div>
             <AddedPartsSection items={extraParts} plannedWidths={plannedWidths} />
-            <PartsList parts={[...parts, ...addedPartRows]} />
+            <PartsList parts={buildPickList([...parts, ...addedPartRows])} />
           </div>
 
           <aside className="order-first grid min-w-0 gap-3 self-start">

@@ -36,6 +36,33 @@ function renderWithRoom(room) {
   });
 }
 
+for (const [planner, quote] of [
+  ['reach-in', { height: 84, modules: [{ code: 'S3D', width: 30 }] }],
+  ['walk-in', { internalType: 'walk-in', room: room84, runs }],
+]) {
+  test(`${planner} print fallback includes hardware for added drawers`, () => {
+    const html = renderPrintablePlan({
+      record: {
+        quote: {
+          ...quote,
+          materials: [],
+          extraParts: [{ sku: 'DRK-24-5-13-W', name: 'Small drawer kit', quantity: 2 }],
+        },
+      },
+    });
+
+    assert.equal(quantityFor(html, 'DRK-24-5-13-W'), 2);
+    for (const [name, quantity] of [
+      ['Left drawer track', 5],
+      ['Right drawer track', 5],
+      ['Drawer track Euro screw', 30],
+    ]) {
+      const rows = [...html.matchAll(new RegExp(`<td>([0-9]+)</td>\\s*<td></td>\\s*<td>${name}</td>`, 'g'))];
+      assert.deepEqual(rows.map((row) => Number(row[1])), [quantity]);
+    }
+  });
+}
+
 test('saved 96-inch walk-in print adds one adjustable shelf per tower', () => {
   const html = renderWithRoom({ backHeight: 96, leftHeight: 96, rightHeight: 96 });
 
