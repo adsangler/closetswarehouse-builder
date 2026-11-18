@@ -36,6 +36,29 @@ function renderWithRoom(room) {
   });
 }
 
+test('legacy saved packing kit expands into individual hardware totals', () => {
+  const html = renderPrintablePlan({
+    record: {
+      quote: {
+        materials: [
+          { category: 'Tower hardware kits', name: 'Basic tower hardware kit (per tower)', quantity: 2 },
+          { category: 'Hardware', name: 'Shelf-connection screw', quantity: 4 },
+        ],
+      },
+    },
+  });
+
+  assert.doesNotMatch(html, /Basic tower hardware kit|Shelf-connection screw/);
+  for (const [name, quantity] of [
+    ['Rafix connector', 18], ['Rafix screw', 18],
+    ['Wall bracket', 4], ['Wall bracket to shelf screws', 4],
+    ['Toe-kick bracket', 4], ['Toe-kick euro screw', 16],
+  ]) {
+    const rows = [...html.matchAll(new RegExp(`<td>([0-9]+)</td>\\s*<td></td>\\s*<td>${name}</td>`, 'g'))];
+    assert.deepEqual(rows.map((row) => Number(row[1])), [quantity]);
+  }
+});
+
 for (const [planner, quote] of [
   ['reach-in', { height: 84, modules: [{ code: 'S3D', width: 30 }] }],
   ['walk-in', { internalType: 'walk-in', room: room84, runs }],

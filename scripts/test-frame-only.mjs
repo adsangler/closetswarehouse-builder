@@ -90,7 +90,14 @@ test('frame-only pick lists include adjustable shelves and pins; mixed runs shar
         assert.equal(quantity(`SH-${width}-14-W`), 1);
         assert.equal(quantity(`TKK-${width}-5-W`), 1);
       }
-      assert.equal(parts.find(p => p.category === 'Tower hardware kits').quantity, 3);
+      assert.ok(!parts.some(p => p.category === 'Tower hardware kits'));
+      for (const [name, quantity] of [
+        ['Rafix connector', 27], ['Rafix screw', 27],
+        ['Wall bracket', 6], ['Wall bracket to shelf screws', 6],
+        ['Toe-kick bracket', 6], ['Toe-kick euro screw', 24],
+      ]) {
+        assert.deepEqual(parts.filter(p => p.name === name).map(p => p.quantity), [quantity]);
+      }
     }
     const mixed = buildDetailedReachInParts([{ code: 'FR', width: 18 }, { code: 'DH', width: 24 }], height);
     assert.equal(mixed.find(p => p.sku === `VD-14-${height}-W`).quantity, 1);
