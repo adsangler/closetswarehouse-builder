@@ -8,6 +8,7 @@ import { buildDetailedWalkInParts } from './partList.js';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import PlannerSiteLayout from './PlannerSiteLayout.jsx';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls } from '@react-three/drei';
 import './styles.css';
@@ -3631,6 +3632,8 @@ function ShapePlannerApp() {
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ShapePlannerApp />
+    <PlannerSiteLayout>
+      <ShapePlannerApp />
+    </PlannerSiteLayout>
   </React.StrictMode>,
 );
