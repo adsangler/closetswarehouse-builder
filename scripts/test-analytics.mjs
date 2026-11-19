@@ -8,6 +8,7 @@ function setup(host = 'closetswarehouse-builder.vercel.app', production = true, 
   const scripts = [];
   const listeners = {};
   const window = { location: { hostname: host, pathname: '/walkin.html', search, href: `https://${host}/walkin.html${search}` } };
+  window.parent = window;
   const document = {
     referrer: 'https://closetswarehouse.com/pages/planner?email=private@example.com',
     createElement: () => ({}), head: { appendChild: (script) => scripts.push(script) },
@@ -68,4 +69,51 @@ test('only storefront product links emit product click events', () => {
   }
   assert.equal(app.window.dataLayer.filter((args) => args[1] === 'product_link_clicked').length, 1);
   assert.doesNotMatch(JSON.stringify(app.window.dataLayer), /private/);
+});
+
+test('embedded planners send only allowed event names to Shopify', () => {
+  const app = setup();
+  const messages = [];
+  app.window.parent = { postMessage: (...args) => messages.push(args) };
+  app.run('initAnalytics(); trackPlannerEvent("reach_configration"); trackPlannerEvent("reach_configration"); trackPlannerEvent("purchase")');
+  assert.equal(app.scripts.length, 0);
+  assert.equal(messages.length, 4);
+  for (const [index, [payload, origin]] of messages.entries()) {
+    assert.deepEqual(JSON.parse(JSON.stringify(payload)), {
+      type: 'cw-planner-analytics',
+      event: index < 2 ? 'page_view' : 'reach_configration',
+    });
+    assert.match(origin, /^https:\/\/(www\.)?closetswarehouse\.com$/);
+  }
+});
+
+test('the Shopify listener trusts only its planner iframe and supplies clean event parameters', () => {
+  const bridge = readFileSync(new URL('../public/shopify-planner-analytics.js', import.meta.url), 'utf8');
+  const calls = [];
+  const frame = {};
+  let listener;
+  vm.runInNewContext(bridge, {
+    window: {
+      location: new URL('https://closetswarehouse.com/pages/walk-in-closet-design-tool?private=123'),
+      gtag: (...args) => calls.push(args),
+      addEventListener: (_, callback) => { listener = callback; },
+    },
+    document: { querySelector: () => ({ contentWindow: frame }) },
+  });
+  const message = {
+    origin: 'https://closetswarehouse-builder.vercel.app',
+    source: frame,
+    data: { type: 'cw-planner-analytics', event: 'reach_configration' },
+  };
+  listener({ ...message, origin: 'https://example.com' });
+  listener({ ...message, source: {} });
+  listener({ ...message, data: { ...message.data, event: 'purchase' } });
+  listener(message);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['event', 'reach_configration', {
+    send_to: 'G-5Z476V32S6',
+    planner_type: 'walk-in',
+    page_title: 'CW Walk-In Planner',
+    page_location: 'https://closetswarehouse-builder.vercel.app/walkin.html',
+    page_referrer: 'https://closetswarehouse.com/pages/walk-in-closet-design-tool',
+  }]]);
 });

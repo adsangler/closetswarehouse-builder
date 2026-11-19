@@ -41,9 +41,12 @@ state and subsequent changes before enabling the tag, including inside embedded 
    identity and `_gl` survives navigation/redirects. Do not assume it works solely
    because the measurement IDs match.
 
-Shopify embeds are cross-origin iframes. Domain configuration alone does not stitch
-their identity to the parent page. A Shopify-side consent/identity or event bridge
-is a separate integration; it is not included here. Until verified, embedded planner
-traffic may be reported as separate users/sessions, with a parent and frame page view.
+Shopify's reach-in and walk-in page templates load
+`/shopify-planner-analytics.js` from the production planner origin before
+their iframe. The iframe sends only allowlisted event names. The storefront
+listener verifies the sending iframe and origin, supplies clean page parameters,
+and forwards through Shopify's existing Google tag and consent configuration.
+Keep the script before the iframe when editing either template. The storefront
+and embedded planner each have their own page view and page location.
 
 Run `node --test scripts/test-analytics.mjs` and `npm.cmd run build` locally.
