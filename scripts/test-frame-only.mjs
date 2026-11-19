@@ -94,7 +94,7 @@ test('frame-only pick lists include adjustable shelves and pins; mixed runs shar
       for (const [name, quantity] of [
         ['Rafix connector', 27], ['Rafix screw', 27],
         ['Wall bracket', 6], ['Wall bracket to shelf screws', 6],
-        ['Toe-kick bracket', 6], ['Toe-kick euro screw', 24],
+        ['Toe-kick bracket', 6], ['Euro screw', 24],
       ]) {
         assert.deepEqual(parts.filter(p => p.name === name).map(p => p.quantity), [quantity]);
       }

@@ -3,7 +3,7 @@ import PlanDetailsFields from './PlanDetailsFields';
 import PriceValidity from './PriceValidity.jsx';
 import { trackPlannerEvent } from './analytics.js';
 import { adjustableShelfCount, shelfTowerFixedShelves } from './shelfCounts.js';
-import { buildPickList, pickListGroups, comparePickParts } from './pickList.js';
+import { aggregatePartsBySku, buildPickList, pickListGroups, comparePickParts } from './pickList.js';
 import { buildDetailedReachInParts } from './partList.js';
 import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from './planUrls.js';
 import { fitReachInCamera } from './reachInCamera.js';
@@ -2349,35 +2349,6 @@ function GeneratedPhotoGallery({ drawing, onSelectHandle, refreshToken }) {
       </div>
     </section>
   );
-}
-
-function aggregatePartsBySku(parts) {
-  const aggregated = new Map();
-
-  parts.forEach((part) => {
-    const key = `${part.category}|${part.sku || part.name}`;
-    const current = aggregated.get(key) || {
-      category: part.category,
-      sku: part.sku,
-      name: part.name,
-      quantity: 0,
-      detailSet: new Set(),
-      nameSet: new Set(),
-    };
-
-    current.quantity += part.quantity;
-    if (part.name) current.nameSet.add(part.name);
-    if (part.details) current.detailSet.add(part.details);
-    aggregated.set(key, current);
-  });
-
-  return [...aggregated.values()].map((part) => ({
-    category: part.category,
-    sku: part.sku,
-    name: [...part.nameSet][0] || part.name,
-    quantity: part.quantity,
-    details: [...part.detailSet].join(', '),
-  }));
 }
 
 function PartsList({ parts }) {

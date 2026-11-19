@@ -52,16 +52,16 @@ test('legacy saved packing kit expands into individual hardware totals', () => {
   for (const [name, quantity] of [
     ['Rafix connector', 18], ['Rafix screw', 18],
     ['Wall bracket', 4], ['Wall bracket to shelf screws', 4],
-    ['Toe-kick bracket', 4], ['Toe-kick euro screw', 16],
+    ['Toe-kick bracket', 4], ['Euro screw', 16],
   ]) {
     const rows = [...html.matchAll(new RegExp(`<td>([0-9]+)</td>\\s*<td></td>\\s*<td>${name}</td>`, 'g'))];
     assert.deepEqual(rows.map((row) => Number(row[1])), [quantity]);
   }
 });
 
-for (const [planner, quote] of [
-  ['reach-in', { height: 84, modules: [{ code: 'S3D', width: 30 }] }],
-  ['walk-in', { internalType: 'walk-in', room: room84, runs }],
+for (const [planner, quote, expectedEuroScrews] of [
+  ['reach-in', { height: 84, modules: [{ code: 'S3D', width: 30 }] }, 38],
+  ['walk-in', { internalType: 'walk-in', room: room84, runs }, 78],
 ]) {
   test(`${planner} print fallback includes hardware for added drawers`, () => {
     const html = renderPrintablePlan({
@@ -69,16 +69,17 @@ for (const [planner, quote] of [
         quote: {
           ...quote,
           materials: [],
-          extraParts: [{ sku: 'DRK-24-5-13-W', name: 'Small drawer kit', quantity: 2 }],
+          extraParts: [{ sku: 'DRK-30-5-13-W', name: 'Small drawer kit', quantity: 2 }],
         },
       },
     });
 
-    assert.equal(quantityFor(html, 'DRK-24-5-13-W'), 2);
+    assert.equal(quantityFor(html, 'DRK-30-5-13-W'), 4);
+    assert.equal((html.match(/<td>DRK-30-5-13-W<\/td>/g) || []).length, 1);
     for (const [name, quantity] of [
       ['Left drawer track', 5],
       ['Right drawer track', 5],
-      ['Drawer track Euro screw', 30],
+      ['Euro screw', expectedEuroScrews],
     ]) {
       const rows = [...html.matchAll(new RegExp(`<td>([0-9]+)</td>\\s*<td></td>\\s*<td>${name}</td>`, 'g'))];
       assert.deepEqual(rows.map((row) => Number(row[1])), [quantity]);

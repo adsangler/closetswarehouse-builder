@@ -1,5 +1,5 @@
 import { priceValidity } from '../src/estimateValidity.js';
-import { buildPickList, pickListGroups, comparePickParts } from '../src/pickList.js';
+import { aggregatePartsBySku, buildPickList, pickListGroups, comparePickParts } from '../src/pickList.js';
 import { buildDetailedReachInParts, buildDetailedWalkInParts, getTowerPartCounts } from '../src/partList.js';
 import { fetchAirtableQuoteByReference, sendJson } from './_airtable.js';
 
@@ -248,7 +248,7 @@ function renderMaterialsTable(materials = []) {
     return '';
   }
 
-  const displayMaterials = materials;
+  const displayMaterials = aggregatePartsBySku(materials);
   const categoryOrder = pickListGroups;
   const categories = [...new Set(displayMaterials.map((part) => part.category || 'Parts'))]
     .sort((left, right) => {
