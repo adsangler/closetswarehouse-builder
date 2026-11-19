@@ -147,8 +147,9 @@ export function summarizePublishedPlan(record) {
 const styles = `
   .recent-plans{max-width:75rem;margin:auto;padding:clamp(1rem,4vw,3rem)}
   .recent-plans h1,.recent-plans h2,.recent-plans p{margin:0 0 .75rem}
-  .recent-plans h1{font-size:clamp(2rem,5vw,3rem);line-height:1.15}
-  .recent-plans h2{font-size:1.25rem}
+  .recent-plans h1{font-size:clamp(2rem,5vw,3rem);line-height:1.25}
+  .recent-plans h2{font-size:1.25rem;line-height:1.4}
+  .recent-plans h2 a{line-height:inherit}
   .recent-plans a{text-underline-offset:.2em;text-decoration:underline}
   .recent-plans .plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr));gap:1rem}
   .recent-plans article{background:white;border:1px solid #dedfd7;border-radius:.65rem;overflow:hidden}
@@ -163,10 +164,14 @@ const styles = `
   .recent-plans nav{margin:1.25rem 0}
 `;
 
+function planTitle({ type, length, towerCount, price }) {
+  return `${type} closet · ${inches.format(length)} in wide · ${towerCount} ${towerCount === 1 ? 'tower' : 'towers'} · ${price === null ? 'Price unavailable' : money.format(price)}`;
+}
+
 function planCard(plan, href, detail = false) {
   const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(plan.drawingUrl)}" title="Plan drawing for ${plan.id}"${detail ? '' : ' loading="lazy"'}></iframe>`;
   return `<article${detail ? ' class="plan-detail"' : ''}>${drawing}<div class="plan-body">
-    ${detail ? '' : `<h2><a href="${escapeHtml(href)}">${plan.type} closet plan <span>${plan.id}</span></a></h2>`}
+    ${detail ? '' : `<h2><a href="${escapeHtml(href)}">${escapeHtml(planTitle(plan))}</a></h2>`}
     ${plan.createdAt ? `<time datetime="${plan.createdAt}">${date.format(new Date(plan.createdAt))}</time>` : ''}
     <dl><div><dt>Plan ID</dt><dd>${plan.id}</dd></div>
     <div><dt>Saved estimate</dt><dd>${plan.price === null ? 'Unavailable' : money.format(plan.price)}</dd></div>
@@ -246,7 +251,7 @@ export function createPublicPlansHandler(env = process.env, lookup = fetchPublis
         const plan = plans.find(({ id }) => id === planId);
         if (!plan) return notFound();
         return send(200, {
-          title: `${plan.type} closet plan ${plan.id}`, description: plan.description,
+          title: planTitle(plan), description: plan.description,
           canonical: storefront && link(plan.id),
           content: `<nav><a href="${escapeHtml(base)}">Recent Plans</a></nav>${showPlan
             ? `<iframe class="plan-view-frame" src="${escapeHtml(plan.plannerUrl)}" title="Interactive closet plan ${plan.id}"></iframe>`
