@@ -178,13 +178,31 @@ function planCard(plan, href, detail = false) {
 }
 
 function renderPage({ title, description, canonical, content }, shopify) {
-  const body = `<section class="recent-plans"><h1>${escapeHtml(title)}</h1>${content}</section>`;
-  if (shopify) return `{% capture page_title %}${escapeHtml(title)} | Closets Warehouse{% endcapture %}
-{% capture page_description %}${escapeHtml(description)}{% endcapture %}
-<style>${styles}</style>${body}`;
+  const pageTitle = `${title} | Closets Warehouse`;
+  const body = `<section class="recent-plans" data-plan-title="${escapeHtml(pageTitle)}" data-plan-description="${escapeHtml(description)}"><h1>${escapeHtml(title)}</h1>${content}</section>`;
+  if (shopify) {
+    const pageData = JSON.stringify({
+      '@context': 'https://schema.org', '@type': 'WebPage', name: pageTitle,
+      ...(description ? { description } : {}), ...(canonical ? { url: canonical } : {}),
+    }).replaceAll('<', '\\u003c').replaceAll('{{', '\\u007b{').replaceAll('{%', '\\u007b%');
+    return `<style>${styles}</style>${body}
+<script type="application/ld+json">${pageData}</script>
+<script>
+(() => {
+  const page = document.querySelector('.recent-plans');
+  if (!page) return;
+  document.title = page.dataset.planTitle;
+  if (!page.dataset.planDescription) return;
+  const description = document.head.querySelector('meta[name="description"]') || document.createElement('meta');
+  description.setAttribute('name', 'description');
+  description.setAttribute('content', page.dataset.planDescription);
+  if (!description.isConnected) document.head.append(description);
+})();
+</script>`;
+  }
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${escapeHtml(title)} | Closets Warehouse</title>
+  <title>${escapeHtml(pageTitle)}</title>
   <meta name="description" content="${escapeHtml(description)}">
   ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : '<meta name="robots" content="noindex">'}
   <style>${styles}</style></head><body><main>${body}</main></body></html>`;
@@ -200,7 +218,7 @@ export function createPublicPlansHandler(env = process.env, lookup = fetchPublis
 
     const request = new URL(req.url, 'http://localhost');
     const pathId = request.pathname.match(/\/recent-plans\/([^/]+)\/?$/)?.[1];
-    const planId = request.searchParams.get('planid') ?? pathId ?? '';
+    const planId = (request.searchParams.get('planid') ?? pathId ?? '').toUpperCase();
     const showPlan = request.searchParams.get('view') === '1';
     const shopify = /^\/apps\/[a-z0-9-]+$/.test(request.searchParams.get('path_prefix') || '')
       && /^[a-f0-9]{64}$/i.test(request.searchParams.get('signature') || '');
@@ -208,7 +226,7 @@ export function createPublicPlansHandler(env = process.env, lookup = fetchPublis
     const approvalField = env.AIRTABLE_PUBLIC_PLAN_APPROVAL_FIELD;
     const storefront = env.PUBLIC_PLANS_STOREFRONT_URL?.replace(/\/$/, '') || '';
     const base = storefront || '/recent-plans';
-    const link = (id) => `${base}/${id}`;
+    const link = (id) => `${base}/${id.toLowerCase()}`;
     const send = (status, page) => {
       res.statusCode = status;
       res.setHeader('Content-Type', shopify ? 'application/liquid' : 'text/html; charset=utf-8');
