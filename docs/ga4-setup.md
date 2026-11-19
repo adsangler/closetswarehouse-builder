@@ -42,11 +42,12 @@ state and subsequent changes before enabling the tag, including inside embedded 
    because the measurement IDs match.
 
 Shopify's reach-in and walk-in page templates load
-`/shopify-planner-analytics.js` from the production planner origin before
-their iframe. The iframe sends only allowlisted event names. The storefront
+`/shopify-planner-analytics.js` from the production planner origin with
+`defer`. The iframe queues allowlisted event names until the storefront listener
+is ready. The storefront
 listener verifies the sending iframe and origin, supplies clean page parameters,
 and forwards through Shopify's existing Google tag and consent configuration.
-Keep the script before the iframe when editing either template. The storefront
-and embedded planner each have their own page view and page location.
+Keep the script on both planner templates. The storefront and embedded planner
+each have their own page view and page location.
 
 Run `node --test scripts/test-analytics.mjs` and `npm.cmd run build` locally.

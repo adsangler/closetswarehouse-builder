@@ -8,6 +8,8 @@ const oncePerPageEvents = new Set(['reach_configration']);
 const firedEvents = new Set();
 let initialized = false;
 let embedded = false;
+let storefrontOrigin;
+const pendingEvents = [];
 
 // Never include contact details, encoded plans, or quote references in URLs.
 export function analyticsUrl(value) {
@@ -27,9 +29,8 @@ export function trackPlannerEvent(name) {
   if (!initialized || !allowedPlannerEvents.has(name) || firedEvents.has(name)) return;
   if (oncePerPageEvents.has(name)) firedEvents.add(name);
   if (embedded) {
-    for (const origin of storefrontOrigins) {
-      window.parent.postMessage({ type: 'cw-planner-analytics', event: name }, origin);
-    }
+    if (storefrontOrigin) sendToStorefront(name);
+    else pendingEvents.push(name);
     return;
   }
   window.gtag('event', name, {
@@ -49,7 +50,8 @@ export function initAnalytics() {
   if (params.get('mode') === 'renderer' || params.get('capture') === '1') return;
   initialized = true;
   embedded = window.parent !== window;
-  if (!embedded) initGoogleTag();
+  if (embedded) initStorefrontBridge();
+  else initGoogleTag();
   trackPlannerEvent('page_view');
   document.addEventListener('click', (event) => {
     const anchor = event.target.closest?.('a[href]');
@@ -59,6 +61,21 @@ export function initAnalytics() {
       trackPlannerEvent('product_link_clicked');
     }
   });
+}
+
+function initStorefrontBridge() {
+  window.addEventListener('message', ({ origin, source, data }) => {
+    if (storefrontOrigin || source !== window.parent || !storefrontOrigins.includes(origin) || data?.type !== 'cw-planner-analytics-ready') return;
+    storefrontOrigin = origin;
+    for (const name of pendingEvents.splice(0)) sendToStorefront(name);
+  });
+  for (const origin of storefrontOrigins) {
+    window.parent.postMessage({ type: 'cw-planner-analytics-ready' }, origin);
+  }
+}
+
+function sendToStorefront(name) {
+  window.parent.postMessage({ type: 'cw-planner-analytics', event: name }, storefrontOrigin);
 }
 
 function initGoogleTag() {

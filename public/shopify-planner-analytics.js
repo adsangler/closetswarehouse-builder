@@ -9,10 +9,16 @@
   const page = plannerPages[window.location.pathname];
   if (!page) return;
 
+  const iframe = document.querySelector('.cw-designer-fullwidth iframe');
+  if (!iframe) return;
+  const announce = () => iframe.contentWindow?.postMessage({ type: 'cw-planner-analytics-ready' }, plannerOrigin);
   window.addEventListener('message', ({ origin, source, data }) => {
-    if (origin !== plannerOrigin || data?.type !== 'cw-planner-analytics' || !events.has(data.event)) return;
-    const iframe = document.querySelector('.cw-designer-fullwidth iframe');
-    if (!iframe || source !== iframe.contentWindow) return;
+    if (origin !== plannerOrigin || source !== iframe.contentWindow) return;
+    if (data?.type === 'cw-planner-analytics-ready') {
+      announce();
+      return;
+    }
+    if (data?.type !== 'cw-planner-analytics' || !events.has(data.event)) return;
 
     const gtag = window.gtag || function () {
       (window.dataLayer ||= []).push(arguments);
@@ -25,4 +31,5 @@
       page_referrer: window.location.origin + window.location.pathname,
     });
   });
+  announce();
 })();

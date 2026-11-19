@@ -9,6 +9,7 @@ function setup(host = 'closetswarehouse-builder.vercel.app', production = true, 
   const listeners = {};
   const window = { location: { hostname: host, pathname: '/walkin.html', search, href: `https://${host}/walkin.html${search}` } };
   window.parent = window;
+  window.addEventListener = (name, callback) => { listeners[name] = callback; };
   const document = {
     referrer: 'https://closetswarehouse.com/pages/planner?email=private@example.com',
     createElement: () => ({}), head: { appendChild: (script) => scripts.push(script) },
@@ -77,20 +78,21 @@ test('embedded planners send only allowed event names to Shopify', () => {
   app.window.parent = { postMessage: (...args) => messages.push(args) };
   app.run('initAnalytics(); trackPlannerEvent("reach_configration"); trackPlannerEvent("reach_configration"); trackPlannerEvent("purchase")');
   assert.equal(app.scripts.length, 0);
-  assert.equal(messages.length, 4);
-  for (const [index, [payload, origin]] of messages.entries()) {
-    assert.deepEqual(JSON.parse(JSON.stringify(payload)), {
-      type: 'cw-planner-analytics',
-      event: index < 2 ? 'page_view' : 'reach_configration',
-    });
-    assert.match(origin, /^https:\/\/(www\.)?closetswarehouse\.com$/);
-  }
+  assert.equal(messages.length, 2);
+  const reply = { origin: 'https://closetswarehouse.com', data: { type: 'cw-planner-analytics-ready' } };
+  app.listeners.message({ ...reply, source: {} });
+  assert.equal(messages.length, 2);
+  app.listeners.message({ ...reply, source: app.window.parent });
+  assert.deepEqual(JSON.parse(JSON.stringify(messages.slice(2))), [
+    [{ type: 'cw-planner-analytics', event: 'page_view' }, reply.origin],
+    [{ type: 'cw-planner-analytics', event: 'reach_configration' }, reply.origin],
+  ]);
 });
 
 test('the Shopify listener trusts only its planner iframe and supplies clean event parameters', () => {
   const bridge = readFileSync(new URL('../public/shopify-planner-analytics.js', import.meta.url), 'utf8');
   const calls = [];
-  const frame = {};
+  const frame = { postMessage() {} };
   let listener;
   vm.runInNewContext(bridge, {
     window: {
