@@ -1,12 +1,15 @@
 # Planner GA4
 
 Measurement ID: `G-5Z476V32S6`, shared with the Shopify Google & YouTube app.
+Load and configure Google tag `GT-TNH4QL3Q` and route events to the measurement
+ID above. The direct script URL for the measurement ID returned HTTP 404.
 
 The planner loads GA only in production builds on `closetswarehouse-builder.vercel.app`.
 Local development, deployment preview hosts, renderer and capture modes are excluded.
 Add any future custom production hostname to `src/analytics.js` deliberately.
 
-Events: `page_view`, `plan_saved` (successful estimate/plan save),
+Events: `page_view`, `reach_configration` (first entry to the configuration
+step per page load, using the existing event spelling), `plan_saved` (successful estimate/plan save),
 `verification_requested` (successful request), and `product_link_clicked`.
 Each includes `planner_type`. Purchase and checkout events remain Shopify's responsibility.
 Manual events strip all query strings and fragments from page and referrer URLs;
@@ -28,8 +31,11 @@ state and subsequent changes before enabling the tag, including inside embedded 
    The module's sanitization applies to its own events; it cannot sanitize
    independently collected automatic events. Coordinate changes with Shopify tracking.
 3. Register `planner_type` as an event-scoped custom dimension if needed for reports.
-4. After deployment, verify with Tag Assistant and GA4 Realtime: one planner page
-   view per load, a successful save/request event, and a product click. Confirm
+4. After deployment, smoke-test both production planners standalone and in their
+   Shopify embeds. Check for a successful tag script response and GA collection
+   requests targeting the measurement ID above. In Tag Assistant and GA4
+   DebugView, confirm one planner page view per load, one configuration event
+   per load, a successful save/request event, and a product click. Confirm
    contact values and plan payloads are absent from network collection requests.
 5. Verify a store > standalone planner > store journey retains client/session
    identity and `_gl` survives navigation/redirects. Do not assume it works solely

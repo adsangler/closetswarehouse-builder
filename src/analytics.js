@@ -1,5 +1,10 @@
 const measurementId = 'G-5Z476V32S6';
+// Load the connected Google tag; send planner events to the GA4 destination.
+const googleTagId = 'GT-TNH4QL3Q';
 const productionHosts = new Set(['closetswarehouse-builder.vercel.app']);
+const allowedPlannerEvents = new Set(['reach_configration', 'plan_saved', 'verification_requested', 'product_link_clicked']);
+const oncePerPageEvents = new Set(['reach_configration']);
+const firedEvents = new Set();
 let initialized = false;
 
 // Never include contact details, encoded plans, or quote references in URLs.
@@ -17,7 +22,8 @@ function plannerType() {
 }
 
 export function trackPlannerEvent(name) {
-  if (!initialized || !['plan_saved', 'verification_requested', 'product_link_clicked'].includes(name)) return;
+  if (!initialized || !allowedPlannerEvents.has(name) || firedEvents.has(name)) return;
+  if (oncePerPageEvents.has(name)) firedEvents.add(name);
   window.gtag('event', name, {
     send_to: measurementId,
     planner_type: plannerType(),
@@ -42,7 +48,7 @@ export function initAnalytics() {
     ad_personalization: 'denied',
   });
   window.gtag('js', new Date());
-  window.gtag('config', measurementId, {
+  window.gtag('config', googleTagId, {
     send_page_view: false,
     page_location: analyticsUrl(window.location.href),
     page_referrer: analyticsUrl(document.referrer),
@@ -58,7 +64,7 @@ export function initAnalytics() {
   });
   const script = document.createElement('script');
   script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${googleTagId}`;
   document.head.appendChild(script);
   document.addEventListener('click', (event) => {
     const anchor = event.target.closest?.('a[href]');

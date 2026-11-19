@@ -4119,6 +4119,7 @@ export default function App({ internalRenderer = false }) {
   };
 
   const enterReachInConfiguration = () => {
+    trackPlannerEvent('reach_configration');
     setReachInRoomCaptured(true);
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });

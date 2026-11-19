@@ -29,16 +29,35 @@ test('local, preview, renderer and capture sessions never load GA', () => {
 
 test('initializes once and strips private URL data from manual events', () => {
   const app = setup(undefined, true, '?email=private@example.com&quote=secret&plan=encoded#private');
-  app.run('initAnalytics(); initAnalytics(); trackPlannerEvent("plan_saved"); trackPlannerEvent("purchase")');
+  app.run('initAnalytics(); initAnalytics(); trackPlannerEvent("plan_saved"); trackPlannerEvent("verification_requested"); trackPlannerEvent("purchase")');
   const commands = app.window.dataLayer.map((args) => Array.from(args));
   assert.equal(app.scripts.length, 1);
+  assert.equal(app.scripts[0].src, 'https://www.googletagmanager.com/gtag/js?id=GT-TNH4QL3Q');
   assert.equal(commands.filter((args) => args[1] === 'page_view').length, 1);
   assert.equal(commands.filter((args) => args[1] === 'plan_saved').length, 1);
+  assert.equal(commands.filter((args) => args[1] === 'verification_requested').length, 1);
   assert.equal(commands.filter((args) => args[1] === 'purchase').length, 0);
   assert.equal(commands[0][2].ad_storage, 'denied');
   assert.equal(commands[2][2].send_page_view, false);
+  assert.equal(commands[2][1], 'GT-TNH4QL3Q');
+  for (const command of commands.filter(([type]) => type === 'event')) {
+    assert.equal(command[2].send_to, 'G-5Z476V32S6');
+  }
   assert.equal(commands[3][2].planner_type, 'walk-in');
   assert.doesNotMatch(JSON.stringify(commands), /private|secret|encoded/);
+});
+
+test('configuration event uses the requested GA4 name and fires once for both planners', () => {
+  for (const [pathname, plannerType] of [['/', 'reach-in'], ['/walkin.html', 'walk-in']]) {
+    const app = setup();
+    app.window.location.pathname = pathname;
+    app.run('initAnalytics(); trackPlannerEvent("reach_configration"); trackPlannerEvent("reach_configration"); trackPlannerEvent("reach_configuration"); trackPlannerEvent("reach-configuration")');
+    const events = app.window.dataLayer.map((args) => Array.from(args)).filter((args) => args[0] === 'event');
+    assert.equal(events.filter((args) => args[1] === 'reach_configration').length, 1);
+    assert.equal(events.filter((args) => args[1] === 'reach_configuration').length, 0);
+    assert.equal(events.filter((args) => args[1] === 'reach-configuration').length, 0);
+    assert.equal(events.find((args) => args[1] === 'reach_configration')[2].planner_type, plannerType);
+  }
 });
 
 test('only storefront product links emit product click events', () => {

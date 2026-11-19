@@ -3459,6 +3459,7 @@ function WalkInPlanner() {
         onToggleWall={toggleReturnWall}
         roomEvaluation={roomEvaluation}
         onContinue={() => {
+          trackPlannerEvent('reach_configration');
           setRoomCaptured(true);
           window.requestAnimationFrame(() => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
