@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/recent-plans", "destination": "/api/public-plans" },
+    { "source": "/recent-plans/:planId", "destination": "/api/public-plans?planid=:planId" },
+    { "source": "/api/customer-quotes/recent-plans", "destination": "/api/public-plans" },
+    { "source": "/api/customer-quotes/recent-plans/:planId", "destination": "/api/public-plans?planid=:planId" }
+  ]
 }

@@ -502,6 +502,44 @@ export async function fetchAirtableQuoteIdsByDate(dateKey) {
   return records.map((record) => String(record.fields?.[fieldNames.quoteId] || '').trim()).filter(Boolean);
 }
 
+export async function fetchPublishedPlanRecords({ approvalField, imageField, planId, offset }) {
+  const config = getQuoteConfig();
+  if (!config) throw new Error('Missing Airtable quote configuration');
+
+  const fields = getQuoteFieldNames();
+  const url = new URL(`https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`);
+  const published = `{${approvalField}} = 1`;
+  url.searchParams.set('filterByFormula', planId
+    ? `AND(${published}, {${fields.quoteId}} = '${escapeAirtableString(planId)}')`
+    : published);
+  url.searchParams.set('pageSize', planId ? '1' : '24');
+  url.searchParams.set('sort[0][field]', fields.submittedAt);
+  url.searchParams.set('sort[0][direction]', 'desc');
+  url.searchParams.set('sort[1][field]', fields.quoteId);
+  url.searchParams.set('sort[1][direction]', 'desc');
+  if (offset) url.searchParams.set('offset', offset);
+
+  for (const field of [fields.quoteId, fields.planUrl, fields.planType, fields.submittedAt, 'Quote JSON', 'Estimated Price', imageField].filter(Boolean)) {
+    url.searchParams.append('fields[]', field);
+  }
+
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${config.token}` } });
+  if (!response.ok) throw new Error(`Published plan lookup returned ${response.status}`);
+  const payload = await response.json();
+  return {
+    offset: payload.offset,
+    records: (payload.records || []).map(({ fields: values }) => ({
+      id: values[fields.quoteId],
+      createdAt: values[fields.submittedAt],
+      type: values[fields.planType],
+      planUrl: values[fields.planUrl],
+      price: values['Estimated Price'],
+      storedQuote: values['Quote JSON'],
+      images: imageField ? values[imageField] : undefined,
+    })),
+  };
+}
+
 export async function fetchAirtableQuotesByShopifyCustomerId(shopifyCustomerId) {
   const config = getQuoteConfig();
 

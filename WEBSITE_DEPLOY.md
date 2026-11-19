@@ -91,6 +91,19 @@ These are implemented in the `api/` folder for Vercel serverless functions.
 
 ## Shopify website embed
 
+### Recent Plans
+
+Recent Plans uses the existing Shopify app proxy at `/apps/closet-quotes` with a dedicated child route. Shopify forwards `/apps/closet-quotes/recent-plans` and its plan detail paths to the Vercel gallery. The gallery serves complete HTML with crawlable links and separate titles and descriptions for each plan.
+
+1. In Airtable's Quotes table, add a checkbox named `Publish to Recent Plans` and an attachment field named `Public 3D Image`.
+2. Set `AIRTABLE_PUBLIC_PLAN_APPROVAL_FIELD=Publish to Recent Plans` and `AIRTABLE_PUBLIC_PLAN_IMAGE_FIELD=Public 3D Image` in Vercel. Set `PUBLIC_PLANS_STOREFRONT_URL=https://closetswarehouse.com/apps/closet-quotes/recent-plans` to the exact storefront proxy URL. An unset approval field leaves the gallery empty. The storefront URL enables canonical URLs.
+3. Deploy and verify the Shopify proxy forwards the existing root to Vercel's `/api/customer-quotes`. If the store customized that proxy path, use the customized path in the canonical URL and menu link. Add **Recent Plans** to the Shopify storefront navigation with the gallery URL.
+4. Check **Publish to Recent Plans** to publish a saved plan, including older plans. The gallery generates a 3D illustration from the saved bay configurations and dimensions on demand. Walk-in previews show each populated wall or return separately. A reviewed raster attachment in **Public 3D Image** can override the illustration. Unchecking the box removes the plan from the index and makes its detail and generated image URLs return 404.
+
+The direct Vercel routes are `/recent-plans` and `/recent-plans/{planId}`. The Vercel handler also accepts `/api/public-plans?planid={planId}`. The price represents the saved estimate. The total length sums the assembled tower runs, including one shared divider between adjoining towers.
+
+### Planner embed
+
 After deployment, create a Shopify page and embed the hosted planner URL:
 
 ```html
