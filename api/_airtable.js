@@ -512,7 +512,7 @@ export async function fetchPublishedPlanRecords({ approvalField, planId, offset 
   url.searchParams.set('filterByFormula', planId
     ? `AND(${published}, {${fields.quoteId}} = '${escapeAirtableString(planId)}')`
     : published);
-  url.searchParams.set('pageSize', planId ? '1' : '24');
+  url.searchParams.set('pageSize', planId ? '1' : '9');
   url.searchParams.set('sort[0][field]', fields.submittedAt);
   url.searchParams.set('sort[0][direction]', 'desc');
   url.searchParams.set('sort[1][field]', fields.quoteId);

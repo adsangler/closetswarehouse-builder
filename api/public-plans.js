@@ -162,6 +162,7 @@ const styles = `
   .recent-plans dt,.recent-plans time{font-size:.875rem}
   .recent-plans dd{margin:0;font-weight:650;overflow-wrap:anywhere}
   .recent-plans nav{margin:1.25rem 0}
+  .recent-plans .plan-pagination{display:flex;flex-wrap:wrap;gap:1.25rem}
 `;
 
 function planTitle({ type, length, towerCount, price }) {
@@ -260,12 +261,16 @@ export function createPublicPlansHandler(env = process.env, lookup = fetchPublis
       }
       const description = 'Browse recent reach-in and walk-in closet designs from Closets Warehouse, with layout features, dimensions and saved price estimates.';
       const next = result.offset ? `${base}?after=${encodeURIComponent(result.offset)}` : '';
+      const pagination = [
+        offset ? `<a href="${escapeHtml(base)}">Newest plans</a>` : '',
+        next ? `<a href="${escapeHtml(next)}" rel="next">Older plans</a>` : '',
+      ].filter(Boolean).join(' ');
       return send(200, {
         title: 'Recent Plans', description,
         canonical: storefront && `${base}${offset ? `?after=${encodeURIComponent(offset)}` : ''}`,
         content: `<p>${description}</p>
           ${plans.length ? `<div class="plan-grid">${plans.map((plan) => planCard(plan, link(plan.id))).join('')}</div>` : '<p>No published plans on this page.</p>'}
-          ${next ? `<nav><a href="${escapeHtml(next)}">Older plans</a></nav>` : ''}`,
+          ${pagination ? `<nav class="plan-pagination" aria-label="Recent Plans pagination">${pagination}</nav>` : ''}`,
       });
     } catch (error) {
       console.error('Recent Plans lookup failed', error.message);
