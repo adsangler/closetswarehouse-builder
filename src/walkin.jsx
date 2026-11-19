@@ -9,6 +9,7 @@ import { encodePlanPayload, decodePlanPayload, persistSavedPlanReference } from 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import PlannerSiteLayout from './PlannerSiteLayout.jsx';
+import PublicPlanDrawing from './PublicPlanDrawing.jsx';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Edges, OrbitControls } from '@react-three/drei';
 import './styles.css';
@@ -16,7 +17,6 @@ import { getPlannerContact, hasPlannerContact, rememberPlannerContact } from './
 import { reportUserVisibleError } from './userErrorLog';
 
 const panelThickness = 0.75;
-initAnalytics();
 const closetDepth = 14;
 const storefrontBaseUrl = 'https://www.closetswarehouse.com';
 const consultationUrl = `${storefrontBaseUrl}/pages/free-closets-design-consultation`;
@@ -3602,10 +3602,16 @@ function ShapePlannerApp() {
   return <WalkInPlanner />;
 }
 
-createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+const root = createRoot(document.getElementById('root'));
+if (new URLSearchParams(window.location.search).get('publicDrawing') === '1') {
+  root.render(<PublicPlanDrawing render={({ room, runs, corners }) => (
+    <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluatePlan(room, corners, runs)} />
+  )} />);
+} else {
+  initAnalytics();
+  root.render(<React.StrictMode>
     <PlannerSiteLayout>
       <ShapePlannerApp />
     </PlannerSiteLayout>
-  </React.StrictMode>,
-);
+  </React.StrictMode>);
+}

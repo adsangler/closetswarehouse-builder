@@ -502,13 +502,13 @@ export async function fetchAirtableQuoteIdsByDate(dateKey) {
   return records.map((record) => String(record.fields?.[fieldNames.quoteId] || '').trim()).filter(Boolean);
 }
 
-export async function fetchPublishedPlanRecords({ approvalField, imageField, planId, offset }) {
+export async function fetchPublishedPlanRecords({ approvalField, planId, offset }) {
   const config = getQuoteConfig();
   if (!config) throw new Error('Missing Airtable quote configuration');
 
   const fields = getQuoteFieldNames();
   const url = new URL(`https://api.airtable.com/v0/${config.baseId}/${encodeURIComponent(config.tableName)}`);
-  const published = `{${approvalField}} = 1`;
+  const published = `AND({${approvalField}} = 1, VALUE(SUBSTITUTE(LEFT({${fields.submittedAt}}, 10), "-", "")) >= 20260801)`;
   url.searchParams.set('filterByFormula', planId
     ? `AND(${published}, {${fields.quoteId}} = '${escapeAirtableString(planId)}')`
     : published);
@@ -519,7 +519,7 @@ export async function fetchPublishedPlanRecords({ approvalField, imageField, pla
   url.searchParams.set('sort[1][direction]', 'desc');
   if (offset) url.searchParams.set('offset', offset);
 
-  for (const field of [fields.quoteId, fields.planUrl, fields.planType, fields.submittedAt, 'Quote JSON', 'Estimated Price', imageField].filter(Boolean)) {
+  for (const field of [fields.quoteId, fields.planUrl, fields.planType, fields.submittedAt, 'Quote JSON', 'Estimated Price']) {
     url.searchParams.append('fields[]', field);
   }
 
@@ -535,7 +535,6 @@ export async function fetchPublishedPlanRecords({ approvalField, imageField, pla
       planUrl: values[fields.planUrl],
       price: values['Estimated Price'],
       storedQuote: values['Quote JSON'],
-      images: imageField ? values[imageField] : undefined,
     })),
   };
 }

@@ -1832,7 +1832,7 @@ function PlannerWall({ modules, height, wallWidth, onDropModule, onRemove, onMov
   );
 }
 
-function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingLeft, openingRight, doorType, height, drawerWarnings = [] }) {
+export function ReachInPlanView({ modules, wallWidth, roomDepth, openingWidth, openingLeft, openingRight, doorType, height, drawerWarnings = [] }) {
   const backWidth = Math.max(1, Number(wallWidth) || 0);
   const reachDepth = Math.max(depth, Number(roomDepth) || depth);
   const doorWidth = Math.max(0, Number(openingWidth) || 0);
