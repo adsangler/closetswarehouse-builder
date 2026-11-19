@@ -60,8 +60,8 @@ test('legacy saved packing kit expands into individual hardware totals', () => {
 });
 
 for (const [planner, quote, expectedEuroScrews] of [
-  ['reach-in', { height: 84, modules: [{ code: 'S3D', width: 30 }] }, 38],
-  ['walk-in', { internalType: 'walk-in', room: room84, runs }, 78],
+  ['reach-in', { height: 84, modules: [{ code: 'S3D', width: 30 }] }, 28],
+  ['walk-in', { internalType: 'walk-in', room: room84, runs }, 68],
 ]) {
   test(`${planner} print fallback includes hardware for added drawers`, () => {
     const html = renderPrintablePlan({
@@ -74,6 +74,7 @@ for (const [planner, quote, expectedEuroScrews] of [
       },
     });
 
+    assert.match(html, /20 for drawer tracks \(2 per track\)\./);
     assert.equal(quantityFor(html, 'DRK-30-5-13-W'), 4);
     assert.equal((html.match(/<td>DRK-30-5-13-W<\/td>/g) || []).length, 1);
     for (const [name, quantity] of [

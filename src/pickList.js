@@ -16,7 +16,7 @@ const drawerHardware = [
 
 const euroScrewNames = new Set(['Euro screw', 'Toe-kick euro screw', 'Drawer track Euro screw']);
 const euroScrewsPerToeKick = 8;
-const euroScrewsPerDrawer = 6;
+const euroScrewsPerTrack = 2;
 
 function isDrawerKit(part) {
   return /^DRK-/i.test(part.sku || '');
@@ -82,11 +82,11 @@ export function buildPickList(materials = [], towerCount = 0, { pantry = false }
     return { ...part };
   });
   const drawerCount = parts.filter(isDrawerKit).reduce((sum, part) => sum + (Number(part.quantity) || 0), 0);
-  const drawerScrews = drawerCount * euroScrewsPerDrawer;
+  const drawerScrews = drawerCount * drawerHardware.length * euroScrewsPerTrack;
   if (toeKickScrews + drawerScrews > 0) {
     const details = [
       toeKickScrews > 0 && `${toeKickScrews} for toe kicks.`,
-      drawerScrews > 0 && `${drawerScrews} for drawer tracks (3 per track).`,
+      drawerScrews > 0 && `${drawerScrews} for drawer tracks (${euroScrewsPerTrack} per track).`,
     ].filter(Boolean).join(' ');
     parts.push({ name: 'Euro screw', category: 'Hardware', sku: '', quantity: toeKickScrews + drawerScrews, details });
   }
