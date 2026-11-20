@@ -625,6 +625,18 @@ function createPlannerDrawing(height, modules) {
   };
 }
 
+export function ReachIn3DPreview({ modules, planDetails }) {
+  const drawing = useMemo(() => createDrawing(createPlannerDrawing(planDetails.height, modules)), [planDetails.height, modules]);
+  return (
+    <div className="relative h-full overflow-hidden rounded bg-white">
+      <OrbitHintBadge />
+      <Canvas className="h-full w-full" camera={{ position: [0, 50, 105], fov: 34 }} dpr={[1, 2]} shadows>
+        <RenderScene drawing={drawing} photoMode={false} wallWidth={planDetails.wallWidth} reachInRoom={planDetails} />
+      </Canvas>
+    </div>
+  );
+}
+
 function calculateCustomEstimate(modules, productCatalog, height) {
   const coverage = getLiveModuleProductCoverage(modules, productCatalog, height);
 

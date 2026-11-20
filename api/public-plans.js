@@ -173,7 +173,8 @@ function planTitle({ type, length, towerCount, price }) {
 }
 
 function planCard(plan, href, detail = false) {
-  const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(plan.drawingUrl)}" title="Plan drawing for ${plan.id}"${detail ? '' : ' loading="lazy"'}></iframe>`;
+  const drawingUrl = detail ? plan.drawingUrl.replace('?publicDrawing=1#', '?publicDrawing=1&interactive=1#') : plan.drawingUrl;
+  const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(drawingUrl)}" title="Plan drawing for ${plan.id}"${detail ? '' : ' loading="lazy"'}></iframe>`;
   const validity = plan.price === null ? '' : priceValidity(plan, plan.id);
   return `<article${detail ? ' class="plan-detail"' : ''}>${drawing}<div class="plan-body">
     ${detail ? '' : `<h2><a href="${escapeHtml(href)}">${escapeHtml(planTitle(plan))}</a></h2>`}

@@ -2158,7 +2158,7 @@ function WalkInOrbitHintBadge() {
   );
 }
 
-function WalkIn3DPreview({ room, runs, corners, evaluation }) {
+function WalkIn3DPreview({ room, runs, corners, evaluation, compact = false }) {
   const hasConfiguredTowers = Object.values(runs).some((wallRuns) => wallRuns.length > 0);
   const orbitBackWidth = Math.max(1, numberValue(room.backWidth));
   const orbitLeftDepth = Math.max(1, numberValue(room.leftDepth));
@@ -2169,8 +2169,8 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
   const orbitCameraTarget = [0, orbitMaxHeight * 0.45, -orbitMaxDepth * 0.22];
 
   return (
-    <section className="rounded border border-stone-200 bg-white p-3">
-      <div className="mb-2 flex items-center justify-between">
+    <section className={compact ? 'h-full' : 'rounded border border-stone-200 bg-white p-3'}>
+      {!compact && <div className="mb-2 flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-stone-950">3D View</h2>
           <p className="text-xs font-semibold text-stone-500">Drag to orbit 360, scroll to zoom</p>
@@ -2180,8 +2180,8 @@ function WalkIn3DPreview({ room, runs, corners, evaluation }) {
             {evaluation.complete ? 'Valid' : hasConfiguredTowers ? 'Needs fixes' : 'Add towers to begin'}
           </span>
         </div>
-      </div>
-      <div className="relative h-[420px] w-full overflow-hidden rounded bg-stone-50 sm:h-[560px]">
+      </div>}
+      <div className={`relative w-full overflow-hidden rounded bg-stone-50 ${compact ? 'h-full' : 'h-[420px] sm:h-[560px]'}`}>
         <WalkInOrbitHintBadge />
         <Canvas shadows camera={{ position: [orbitRoomRadius * 0.85, orbitMaxHeight * 0.72, orbitRoomRadius * 0.95], fov: 36, near: 0.1, far: 1200 }} style={{ width: '100%', height: '100%' }}>
           <color attach="background" args={['#fbfaf6']} />
@@ -3608,7 +3608,7 @@ const root = createRoot(document.getElementById('root'));
 if (new URLSearchParams(window.location.search).get('publicDrawing') === '1') {
   root.render(<PublicPlanDrawing render={({ room, runs, corners }) => (
     <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluatePlan(room, corners, runs)} />
-  )} />);
+  )} render3D={({ room, runs, corners }) => <WalkIn3DPreview room={room} runs={runs} corners={corners} compact />} />);
 } else {
   initAnalytics();
   root.render(<React.StrictMode>
