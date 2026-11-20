@@ -168,7 +168,7 @@ const styles = `
 `;
 
 function planTitle({ type, length, towerCount, price }) {
-  return `${type} closet · ${inches.format(length)} in wide · ${towerCount} ${towerCount === 1 ? 'tower' : 'towers'} · ${price === null ? 'Price unavailable' : money.format(price)}`;
+  return `${type} closet · ${inches.format(length)} in total closet width · ${towerCount} ${towerCount === 1 ? 'tower' : 'towers'} · ${price === null ? 'Price unavailable' : money.format(price)}`;
 }
 
 function planCard(plan, href, detail = false) {
