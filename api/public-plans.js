@@ -1,5 +1,6 @@
 import { fetchPublishedPlanRecords, parseStoredQuote } from './_airtable.js';
 import { decodePlanPayload, encodePlanPayload } from '../src/planUrls.js';
+import { priceValidity } from '../src/estimateValidity.js';
 
 const plannerOrigin = 'https://closetswarehouse-builder.vercel.app';
 
@@ -161,6 +162,7 @@ const styles = `
   .recent-plans dl{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:1rem 0}
   .recent-plans dt,.recent-plans time{font-size:.875rem}
   .recent-plans dd{margin:0;font-weight:650;overflow-wrap:anywhere}
+  .recent-plans .plan-price-validity{display:block;margin-top:.25rem;font-size:.875rem;line-height:1.35;font-weight:400}
   .recent-plans nav{margin:1.25rem 0}
   .recent-plans .plan-pagination{display:flex;flex-wrap:wrap;gap:1.25rem}
 `;
@@ -171,11 +173,14 @@ function planTitle({ type, length, towerCount, price }) {
 
 function planCard(plan, href, detail = false) {
   const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(plan.drawingUrl)}" title="Plan drawing for ${plan.id}"${detail ? '' : ' loading="lazy"'}></iframe>`;
+  const validity = plan.price === null ? '' : priceValidity(plan, plan.id)
+    .replace(/^Price valid until /, 'Price valid when purchased before ');
   return `<article${detail ? ' class="plan-detail"' : ''}>${drawing}<div class="plan-body">
     ${detail ? '' : `<h2><a href="${escapeHtml(href)}">${escapeHtml(planTitle(plan))}</a></h2>`}
     ${plan.createdAt ? `<time datetime="${plan.createdAt}">${date.format(new Date(plan.createdAt))}</time>` : ''}
     <dl><div><dt>Plan ID</dt><dd>${plan.id}</dd></div>
-    <div><dt>Saved estimate</dt><dd>${plan.price === null ? 'Unavailable' : money.format(plan.price)}</dd></div>
+    <div><dt>Saved estimate</dt><dd>${plan.price === null ? 'Unavailable' : money.format(plan.price)}${validity
+      ? `<span class="plan-price-validity">${escapeHtml(validity)}</span>` : ''}</dd></div>
     <div><dt>Towers</dt><dd>${plan.towerCount}</dd></div>
     <div><dt>Total assembled length</dt><dd>${inches.format(plan.length)} in</dd></div></dl>
     <p>${escapeHtml(plan.description)}</p>
