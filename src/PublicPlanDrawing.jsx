@@ -3,7 +3,9 @@ import { decodePlanPayload } from './planUrls.js';
 
 export default function PublicPlanDrawing({ render, render3D }) {
   const [view, setView] = useState('3d');
-  const interactive = new URLSearchParams(window.location.search).get('interactive') === '1';
+  const params = new URLSearchParams(window.location.search);
+  const interactive = params.get('interactive') === '1';
+  const thumbnail = params.get('thumbnail') === '1';
   let plan;
   try {
     plan = decodePlanPayload(window.location.hash.slice(1));
@@ -11,6 +13,7 @@ export default function PublicPlanDrawing({ render, render3D }) {
     return <p>Plan drawing unavailable.</p>;
   }
   const drawing = <div className="public-plan-drawing" aria-label="Closet plan view">{render(plan)}</div>;
+  if (thumbnail) return <div className="h-dvh">{render3D(plan, thumbnail)}</div>;
   if (!interactive) return drawing;
 
   return (

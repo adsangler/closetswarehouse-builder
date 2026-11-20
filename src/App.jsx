@@ -625,12 +625,12 @@ function createPlannerDrawing(height, modules) {
   };
 }
 
-export function ReachIn3DPreview({ modules, planDetails }) {
+export function ReachIn3DPreview({ modules, planDetails, thumbnail = false }) {
   const drawing = useMemo(() => createDrawing(createPlannerDrawing(planDetails.height, modules)), [planDetails.height, modules]);
   return (
     <div className="relative h-full overflow-hidden rounded bg-white">
-      <OrbitHintBadge />
-      <Canvas className="h-full w-full" camera={{ position: [0, 50, 105], fov: 34 }} dpr={[1, 2]} shadows>
+      {!thumbnail && <OrbitHintBadge />}
+      <Canvas className="h-full w-full" camera={{ position: [0, 50, 105], fov: 34 }} dpr={thumbnail ? 1 : [1, 2]} frameloop={thumbnail ? 'demand' : 'always'} shadows>
         <RenderScene drawing={drawing} photoMode={false} wallWidth={planDetails.wallWidth} reachInRoom={planDetails} />
       </Canvas>
     </div>

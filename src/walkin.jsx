@@ -2158,7 +2158,7 @@ function WalkInOrbitHintBadge() {
   );
 }
 
-function WalkIn3DPreview({ room, runs, corners, evaluation, compact = false }) {
+function WalkIn3DPreview({ room, runs, corners, evaluation, compact = false, thumbnail = false }) {
   const hasConfiguredTowers = Object.values(runs).some((wallRuns) => wallRuns.length > 0);
   const orbitBackWidth = Math.max(1, numberValue(room.backWidth));
   const orbitLeftDepth = Math.max(1, numberValue(room.leftDepth));
@@ -2182,8 +2182,8 @@ function WalkIn3DPreview({ room, runs, corners, evaluation, compact = false }) {
         </div>
       </div>}
       <div className={`relative w-full overflow-hidden rounded bg-stone-50 ${compact ? 'h-full' : 'h-[420px] sm:h-[560px]'}`}>
-        <WalkInOrbitHintBadge />
-        <Canvas shadows camera={{ position: [orbitRoomRadius * 0.85, orbitMaxHeight * 0.72, orbitRoomRadius * 0.95], fov: 36, near: 0.1, far: 1200 }} style={{ width: '100%', height: '100%' }}>
+        {!thumbnail && <WalkInOrbitHintBadge />}
+        <Canvas shadows frameloop={thumbnail ? 'demand' : 'always'} dpr={thumbnail ? 1 : [1, 2]} camera={{ position: [orbitRoomRadius * 0.85, orbitMaxHeight * 0.72, orbitRoomRadius * 0.95], fov: 36, near: 0.1, far: 1200 }} style={{ width: '100%', height: '100%' }}>
           <color attach="background" args={['#fbfaf6']} />
           <hemisphereLight args={['#fff8ea', '#d3c2a1', 0.5]} />
           <ambientLight intensity={0.78} />
@@ -3608,7 +3608,7 @@ const root = createRoot(document.getElementById('root'));
 if (new URLSearchParams(window.location.search).get('publicDrawing') === '1') {
   root.render(<PublicPlanDrawing render={({ room, runs, corners }) => (
     <TopDownPlan room={room} runs={runs} corners={corners} evaluation={evaluatePlan(room, corners, runs)} />
-  )} render3D={({ room, runs, corners }) => <WalkIn3DPreview room={room} runs={runs} corners={corners} compact />} />);
+  )} render3D={(plan, thumbnail) => <WalkIn3DPreview {...plan} compact thumbnail={thumbnail} />} />);
 } else {
   initAnalytics();
   root.render(<React.StrictMode>

@@ -157,6 +157,7 @@ const styles = `
   .recent-plans .plan-body{padding:1rem 1.25rem}
   .recent-plans iframe{display:block;width:100%;border:0;background:#faf9f5}
   .recent-plans .plan-drawing-frame{height:auto;aspect-ratio:16/10}
+  .recent-plans .plan-grid .plan-drawing-frame{pointer-events:none}
   .recent-plans .plan-view-frame{height:max(85vh,38rem)}
   .recent-plans .plan-detail{max-width:52rem;margin-top:1rem}
   .recent-plans .plan-facts{margin:1rem 0;padding:.75rem;background:#f6f6f1;border-radius:.375rem;line-height:1.4}
@@ -173,8 +174,8 @@ function planTitle({ type, length, towerCount, price }) {
 }
 
 function planCard(plan, href, detail = false) {
-  const drawingUrl = detail ? plan.drawingUrl.replace('?publicDrawing=1#', '?publicDrawing=1&interactive=1#') : plan.drawingUrl;
-  const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(drawingUrl)}" title="Plan drawing for ${plan.id}"${detail ? '' : ' loading="lazy"'}></iframe>`;
+  const drawingUrl = plan.drawingUrl.replace('#', detail ? '&interactive=1#' : '&thumbnail=1#');
+  const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(drawingUrl)}" title="3D preview for plan ${plan.id}"${detail ? '' : ' loading="lazy" tabindex="-1"'}></iframe>`;
   const validity = plan.price === null ? '' : priceValidity(plan, plan.id);
   return `<article${detail ? ' class="plan-detail"' : ''}>${drawing}<div class="plan-body">
     ${detail ? '' : `<h2><a href="${escapeHtml(href)}">${escapeHtml(planTitle(plan))}</a></h2>`}

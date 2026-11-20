@@ -10,7 +10,7 @@ const root = createRoot(document.getElementById('root'));
 if (new URLSearchParams(window.location.search).get('publicDrawing') === '1') {
   root.render(<PublicPlanDrawing
     render={(plan) => <ReachInPlanView modules={plan.modules} {...plan.planDetails} />}
-    render3D={(plan) => <ReachIn3DPreview {...plan} />}
+    render3D={(plan, thumbnail) => <ReachIn3DPreview {...plan} thumbnail={thumbnail} />}
   />);
 } else {
   initAnalytics();
