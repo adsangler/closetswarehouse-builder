@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { decodePlanPayload } from './planUrls.js';
 
 export default function PublicPlanDrawing({ render, render3D }) {
-  const [view, setView] = useState('plan');
+  const [view, setView] = useState('3d');
   const interactive = new URLSearchParams(window.location.search).get('interactive') === '1';
   let plan;
   try {
