@@ -67,22 +67,23 @@ function useParentFrameAutoHeight() {
     }
 
     document.documentElement.dataset.embeddedPlanner = 'true';
+    const recentPlanEmbed = new URLSearchParams(window.location.search).get('recentPlanEmbed') === '1';
+    const root = document.getElementById('root');
     let frameId = 0;
     let lastHeight = 0;
     const sendHeight = () => {
       cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(() => {
-        const root = document.getElementById('root');
         const height = Math.ceil(
           Math.max(
-            document.documentElement.scrollHeight,
-            document.body?.scrollHeight || 0,
+            recentPlanEmbed ? 0 : document.documentElement.scrollHeight,
+            recentPlanEmbed ? 0 : document.body?.scrollHeight || 0,
             root?.scrollHeight || 0,
             root?.getBoundingClientRect().height || 0,
           ),
         );
 
-        if (Math.abs(height - lastHeight) < 2) {
+        if (height === lastHeight || (!recentPlanEmbed && Math.abs(height - lastHeight) < 2)) {
           return;
         }
 
@@ -119,6 +120,7 @@ function useParentFrameAutoHeight() {
 
     const observer = new ResizeObserver(sendHeight);
     observer.observe(document.documentElement);
+    if (recentPlanEmbed && root) observer.observe(root);
     if (document.body) {
       observer.observe(document.body);
     }

@@ -141,7 +141,7 @@ export function summarizePublishedPlan(record) {
     price: Number.isFinite(price) && price > 0 ? price : null,
     createdAt: new Date(createdAt).toISOString(),
     drawingUrl: `${planner}?publicDrawing=1#${payload}`,
-    plannerUrl: `${planner}?estimate=1&plan=${plannerPayload}`,
+    plannerUrl: `${planner}?estimate=1&recentPlanEmbed=1&plan=${plannerPayload}`,
   };
 }
 
@@ -157,7 +157,7 @@ const styles = `
   .recent-plans .plan-body{padding:1rem 1.25rem}
   .recent-plans iframe{display:block;width:100%;border:0;background:#faf9f5}
   .recent-plans .plan-drawing-frame{height:auto;aspect-ratio:16/10}
-  .recent-plans .plan-view-frame{height:85vh;min-height:38rem}
+  .recent-plans .plan-view-frame{height:max(85vh,38rem)}
   .recent-plans .plan-detail{max-width:52rem;margin-top:1rem}
   .recent-plans .plan-facts{margin:1rem 0;padding:.75rem;background:#f6f6f1;border-radius:.375rem;line-height:1.4}
   .recent-plans .plan-facts dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem .75rem;margin:0}
@@ -192,15 +192,30 @@ function planCard(plan, href, detail = false) {
   </div></article>`;
 }
 
-function renderPage({ title, description, canonical, content }, shopify) {
+function renderPage({ title, description, canonical, content, interactive }, shopify) {
   const pageTitle = `${title} | Closets Warehouse`;
   const body = `<section class="recent-plans" data-plan-title="${escapeHtml(pageTitle)}" data-plan-description="${escapeHtml(description)}"><h1>${escapeHtml(title)}</h1>${content}</section>`;
+  const resizeScript = interactive ? `<script>
+if (window.matchMedia('(max-width: 767px)').matches) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const frame = document.querySelector('.recent-plans .plan-view-frame');
+    if (frame) window.location.replace(frame.src);
+  }, { once: true });
+}
+window.addEventListener('message', (event) => {
+  const frame = document.querySelector('.recent-plans .plan-view-frame');
+  if (!frame || event.source !== frame.contentWindow || event.origin !== new URL(frame.src).origin) return;
+  const { type, height } = event.data || {};
+  if (type !== 'closetswarehouse:frame-height' || !Number.isFinite(height) || height <= 0) return;
+  frame.style.height = Math.ceil(height) + 'px';
+});
+</script>` : '';
   if (shopify) {
     const pageData = JSON.stringify({
       '@context': 'https://schema.org', '@type': 'WebPage', name: pageTitle,
       ...(description ? { description } : {}), ...(canonical ? { url: canonical } : {}),
     }).replaceAll('<', '\\u003c').replaceAll('{{', '\\u007b{').replaceAll('{%', '\\u007b%');
-    return `<style>${styles}</style>${body}
+    return `<style>${styles}</style>${resizeScript}${body}
 <script type="application/ld+json">${pageData}</script>
 <script>
 (() => {
@@ -220,7 +235,7 @@ function renderPage({ title, description, canonical, content }, shopify) {
   <title>${escapeHtml(pageTitle)}</title>
   <meta name="description" content="${escapeHtml(description)}">
   ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : '<meta name="robots" content="noindex">'}
-  <style>${styles}</style></head><body><main>${body}</main></body></html>`;
+  <style>${styles}</style>${resizeScript}</head><body><main>${body}</main></body></html>`;
 }
 
 export function createPublicPlansHandler(env = process.env, lookup = fetchPublishedPlanRecords) {
@@ -263,8 +278,9 @@ export function createPublicPlansHandler(env = process.env, lookup = fetchPublis
         return send(200, {
           title: planTitle(plan), description: plan.description,
           canonical: storefront && link(plan.id),
+          interactive: showPlan,
           content: `<nav><a href="${escapeHtml(base)}">Recent Plans</a></nav>${showPlan
-            ? `<iframe class="plan-view-frame" src="${escapeHtml(plan.plannerUrl)}" title="Interactive closet plan ${plan.id}"></iframe>`
+            ? `<iframe class="plan-view-frame" src="${escapeHtml(plan.plannerUrl + (shopify ? '' : '&plannerFooter=1'))}" title="Interactive closet plan ${plan.id}"></iframe>`
             : planCard(plan, link(plan.id), true)}`,
         });
       }
