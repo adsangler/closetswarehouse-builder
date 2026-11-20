@@ -159,10 +159,11 @@ const styles = `
   .recent-plans .plan-drawing-frame{height:auto;aspect-ratio:16/10}
   .recent-plans .plan-view-frame{height:85vh;min-height:38rem}
   .recent-plans .plan-detail{max-width:52rem;margin-top:1rem}
-  .recent-plans dl{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:1rem 0}
+  .recent-plans .plan-facts{margin:1rem 0;padding:.75rem;background:#f6f6f1;border-radius:.375rem;line-height:1.4}
+  .recent-plans .plan-facts dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem .75rem;margin:0}
   .recent-plans dt,.recent-plans time{font-size:.875rem}
   .recent-plans dd{margin:0;font-weight:650;overflow-wrap:anywhere}
-  .recent-plans .plan-price-validity{display:block;margin-top:.25rem;font-size:.875rem;line-height:1.35;font-weight:400}
+  .recent-plans .plan-facts .plan-price-validity{margin:.625rem 0 0;padding-top:.5rem;border-top:1px solid #dedfd7;font-size:.875rem}
   .recent-plans nav{margin:1.25rem 0}
   .recent-plans .plan-pagination{display:flex;flex-wrap:wrap;gap:1.25rem}
 `;
@@ -173,16 +174,19 @@ function planTitle({ type, length, towerCount, price }) {
 
 function planCard(plan, href, detail = false) {
   const drawing = `<iframe class="plan-drawing-frame" src="${escapeHtml(plan.drawingUrl)}" title="Plan drawing for ${plan.id}"${detail ? '' : ' loading="lazy"'}></iframe>`;
-  const validity = plan.price === null ? '' : priceValidity(plan, plan.id)
-    .replace(/^Price valid until /, 'Price valid when purchased before ');
+  const validity = plan.price === null ? '' : priceValidity(plan, plan.id);
   return `<article${detail ? ' class="plan-detail"' : ''}>${drawing}<div class="plan-body">
     ${detail ? '' : `<h2><a href="${escapeHtml(href)}">${escapeHtml(planTitle(plan))}</a></h2>`}
     ${plan.createdAt ? `<time datetime="${plan.createdAt}">${date.format(new Date(plan.createdAt))}</time>` : ''}
-    <dl><div><dt>Plan ID</dt><dd>${plan.id}</dd></div>
-    <div><dt>Saved estimate</dt><dd>${plan.price === null ? 'Unavailable' : money.format(plan.price)}${validity
-      ? `<span class="plan-price-validity">${escapeHtml(validity)}</span>` : ''}</dd></div>
-    <div><dt>Towers</dt><dd>${plan.towerCount}</dd></div>
-    <div><dt>Total assembled length</dt><dd>${inches.format(plan.length)} in</dd></div></dl>
+    <div class="plan-facts">
+      <dl>
+        <div><dt>Plan ID</dt><dd>${plan.id}</dd></div>
+        <div><dt>Saved estimate</dt><dd>${plan.price === null ? 'Unavailable' : money.format(plan.price)}</dd></div>
+        <div><dt>Towers</dt><dd>${plan.towerCount}</dd></div>
+        <div><dt>Assembled length</dt><dd>${inches.format(plan.length)} in</dd></div>
+      </dl>
+      ${validity ? `<p class="plan-price-validity">${escapeHtml(validity)}</p>` : ''}
+    </div>
     <p>${escapeHtml(plan.description)}</p>
     <a href="${escapeHtml(href)}?view=1" aria-label="View plan ${plan.id}">View plan</a>
   </div></article>`;
@@ -264,7 +268,7 @@ export function createPublicPlansHandler(env = process.env, lookup = fetchPublis
             : planCard(plan, link(plan.id), true)}`,
         });
       }
-      const description = 'Browse recent reach-in and walk-in closet designs from Closets Warehouse, with layout features, dimensions and saved price estimates.';
+      const description = 'Browse reach-in and walk-in closet plans our customers created using our free closet design tool. Each plan includes layout details, dimensions, and a saved estimate when available.';
       const next = result.offset ? `${base}?after=${encodeURIComponent(result.offset)}` : '';
       const pagination = [
         offset ? `<a href="${escapeHtml(base)}">Newest plans</a>` : '',
